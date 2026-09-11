@@ -1,0 +1,52 @@
+{
+  "name": "maws",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MAWS — Market Analysis & Workflow System",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:integration": "node -r dotenv/config node_modules/.bin/jest --testPathPattern=tests/integration --runInBand --detectOpenHandles dotenv_config_path=.env.integration",
+    "test:integration:verbose": "MAWS_TEST_VERBOSE=true npm run test:integration",
+    "test:integration:setup": "node scripts/check-integration-setup.mjs",
+    "smoke:live": "tsx scripts/smoke-live.ts",
+    "smoke:live:dry": "tsx scripts/smoke-live.ts --dry-run",
+    "secret-scan": "node scripts/secret-scan.mjs",
+    "gen-operator-auth": "node scripts/gen-operator-auth.mjs"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.4.1",
+    "dotenv": "^17.4.2",
+    "lightweight-charts": "^5.2.1",
+    "lucide-react": "^1.33.0",
+    "next": "16.3.2",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "server-only": "^0.0.1",
+    "ws": "^8.21.3",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@jest/globals": "^30.5.0",
+    "@playwright/test": "^1.62.1",
+    "@tailwindcss/postcss": "^4",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/ws": "^8.18.1",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.2",
+    "jest": "^30.5.0",
+    "tailwindcss": "^4",
+    "ts-jest": "^29.4.12",
+    "tsx": "^4.23.13",
+    "typescript": "^5"
+  }
+}

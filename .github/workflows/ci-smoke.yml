@@ -1,0 +1,93 @@
+name: CI - Live Smoke Test
+
+on:
+  # Manual trigger with optional live execution
+  workflow_dispatch:
+    inputs:
+      live:
+        description: 'Run the live smoke (needs SMOKE_BASE_URL/SMOKE_SESSION secrets)'
+        required: false
+        default: 'true'
+        type: boolean
+      symbol:
+        description: 'Symbol to smoke trade'
+        required: false
+        default: 'BTCUSDT'
+      qty:
+        description: 'Order quantity'
+        required: false
+        default: '0.001'
+
+  # Nightly schedule (same cadence as integration-tests.yml)
+  schedule:
+    - cron: '30 2 * * *' # 2:30 AM UTC daily, offset from the integration run
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript typecheck
+        run: npx tsc --noEmit
+
+      # Always runs: validates the script's CLI/usage behavior with no network
+      # and no secrets. A regression here fails the workflow outright.
+      - name: Smoke CLI dry-run (no network)
+        run: npx tsx scripts/smoke-live.ts --dry-run --base-url https://dry-run.invalid
+
+      # Live smoke, gated in the shell (secrets are unreliable in if:
+      # expressions). Exits 0 with a notice when secrets are absent or the
+      # run was dispatched with live=false; a real failure exits non-zero.
+      - name: Live smoke against testnet deployment
+        env:
+          SMOKE_BASE_URL: ${{ secrets.SMOKE_BASE_URL }}
+          SMOKE_SESSION: ${{ secrets.SMOKE_SESSION }}
+          SMOKE_SYMBOL: ${{ inputs.symbol || 'BTCUSDT' }}
+          SMOKE_QTY: ${{ inputs.qty || '0.001' }}
+          SMOKE_LIVE: ${{ inputs.live == '' && 'true' || inputs.live }}
+        run: |
+          if [ "$SMOKE_LIVE" != "true" ]; then
+            echo "Dispatched with live=false — live smoke skipped."
+            exit 0
+          fi
+          if [ -z "$SMOKE_BASE_URL" ] || [ -z "$SMOKE_SESSION" ]; then
+            echo "SMOKE_BASE_URL/SMOKE_SESSION secrets not configured — live smoke skipped."
+            echo "Configure repository secrets SMOKE_BASE_URL (deployment origin) and"
+            echo "SMOKE_SESSION (64-hex operator session id) to enable the live check."
+            exit 0
+          fi
+          npx tsx scripts/smoke-live.ts
+
+      - name: Post webhook notification
+        if: always()
+        env:
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+        run: |
+          if [ -z "$WEBHOOK_URL" ]; then echo "No webhook configured; skipping."; exit 0; fi
+          PAYLOAD=$(cat <<EOF
+          {
+            "check": "smoke-live",
+            "status": "${{ job.status }}",
+            "repository": "${{ github.repository }}",
+            "branch": "${{ github.ref_name }}",
+            "commit": "${{ github.sha }}",
+            "run_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+          )
+          echo "Posting webhook notification..."
+          curl -X POST -H "Content-Type: application/json" -d "$PAYLOAD" "$WEBHOOK_URL" --fail-with-body || echo "Webhook notification failed (non-blocking)"

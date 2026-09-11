@@ -1,0 +1,43 @@
+# MAWS systemd unit.
+# The service runs as an unprivileged user; the SQLite database and backups
+# live under /opt/maws/.maws with mode 0600.
+#
+# Environment file /etc/maws/maws.env must contain (chmod 0600, owner maws):
+#   MAWS_ENV=production          (or testnet/shadow)
+#   MAWS_DEFAULT_PROFILE=paper   (Phase 1 metadata; does not switch MAWS_ENV)
+#   MAWS_DB_PATH=/opt/maws/.maws/maws.db
+#   MAWS_OPERATOR_AUTH=<salt:hash from npm run gen-operator-auth>
+#   MAWS_ALLOWED_ORIGIN=https://terminal.example.com
+#   MAWS_TRUST_PROXY=true
+#   MAWS_BACKUP_KEY=<64 hex chars>
+#   MAWS_BINANCE_PRODUCTION_API_KEY=...
+#   MAWS_BINANCE_PRODUCTION_API_SECRET=...
+#   MAWS_BINANCE_PRODUCTION_EXECUTION_ENABLED=false
+#   MAWS_EXECUTION_ENABLED=false   (existing global gate; keep false by default)
+# Legacy MAWS_BINANCE_API_KEY/SECRET remain supported during migration.
+# Never enable withdrawal permission on the Binance API key.
+
+[Unit]
+Description=MAWS trading terminal
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=maws
+Group=maws
+WorkingDirectory=/opt/maws/app
+EnvironmentFile=/etc/maws/maws.env
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=HOSTNAME=127.0.0.1
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/maws/.maws
+
+[Install]
+WantedBy=multi-user.target
