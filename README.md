@@ -67,8 +67,8 @@ MAWS is designed to fail closed rather than silently continue trading when confi
 
 ### Authentication
 
-- `local` mode is intended for anonymous Paper Trading and public market data.
-- Non-local operator pages and protected APIs require a session.
+- `local` mode provides anonymous charting and public market data; the browser-local Paper Trading profile can be attached without operator authentication.
+- Testnet, Production, and other non-local operator pages and protected APIs require a session.
 - Operator passwords are represented by a scrypt-derived credential with a salt.
 - Sessions use HTTP-only cookies and CSRF tokens.
 - Origin/host validation and login rate limiting protect authentication endpoints.
@@ -142,6 +142,7 @@ lib/                    Client and server libraries
   maws/                 Brand, feed, and market universe modules
 tests/                  Jest unit, focused, integration, and live-state tests
 e2e/                    Playwright browser workflows
+public/                 Static assets and brand resources
 docs/                   Architecture, API, developer, operations, and security guides
 deploy/                 Docker and deployment files
 scripts/                Development, smoke-test, auth, and secret-scan utilities
@@ -157,25 +158,39 @@ scripts/                Development, smoke-test, auth, and secret-scan utilities
 - Binance credentials only when using a configured Testnet or Production profile.
 - Testnet funding and credentials only when running live integration tests.
 
-## Quick start: local Paper Trading
+## Operating modes
+
+MAWS separates the server startup environment from the broker/profile attached in the browser:
+
+| Mode/profile | What it does | Authentication and credentials |
+| --- | --- | --- |
+| **Local/chart mode** (`MAWS_ENV=local`) | Public market data and charting. Authenticated Binance/live-trading APIs are refused. | No operator password or Binance credentials required. |
+| **Paper Trading** (`paper`) | Browser-local simulated orders and positions for development and practice. It never submits exchange orders. | No Binance credentials. It can be attached from local mode without operator authentication. |
+| **Binance Testnet** (`MAWS_ENV=testnet`, `binance-testnet`) | Connects to Binance USD-M Futures Testnet. Orders and positions affect the Testnet account, not Production. | Operator authentication and Testnet API credentials are required. Execution remains subject to the configured gates and risk checks. |
+| **Binance Production** (`MAWS_ENV=production`, `binance-production`) | Connects to Binance USD-M Futures Production and can submit real orders. | Operator authentication, Production credentials, explicit Production confirmation, execution gates, and risk checks are required. |
+
+`shadow` is a separate server-only mode for Production market data and read-only account monitoring; it is not a selectable browser profile and cannot submit orders.
+
+## Quick start: local development
 
 ```bash
 # Install dependencies
 npm install
 
+# Create local configuration (the file is ignored by Git)
+cp .env.example .env.local
+
 # Start the development server
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The development helper starts Next.js using `PORT` when supplied and opens the browser after the server responds.
+Open [http://localhost:3000](http://localhost:3000). The development helper starts Next.js using `PORT` when supplied and opens the browser after the server responds. The example already defaults to `MAWS_ENV=local`; leave that setting in place for chart-only development, then attach Paper Trading when you want to exercise simulated workflows.
 
-Local mode is the safe default for development:
+On Windows PowerShell, create the local file with:
 
-- `MAWS_ENV=local` uses Paper Trading and public market data.
-- No broker credentials are required.
-- No operator password is required.
-- No real orders are submitted.
-- Runtime SQLite data is stored in `.maws/maws.db` by default.
+```powershell
+Copy-Item .env.example .env.local
+```
 
 To use another port:
 
@@ -192,27 +207,36 @@ npm run dev
 
 ## Environment configuration
 
-Copy the appropriate example file and keep the resulting file outside version control. The full configuration reference is in [`docs/OPERATIONS.md`](docs/OPERATIONS.md).
+Copy an example file to the local filename used by the relevant command, keep it outside version control, and fill in only the settings needed for that mode. The full configuration reference is in [`docs/OPERATIONS.md`](docs/OPERATIONS.md).
 
-### Core modes
+### Available example files
+
+- [`.env.example`](.env.example) — the main template for local development and server configuration. It documents public market-data/debug settings, `MAWS_ENV`, authentication, persistence, separate Binance Testnet/Production credentials, execution gates, risk limits, and circuit breakers. Copy it to `.env.local` for the Next.js app; do not put real secrets in the template.
+- [`.env.integration.example`](.env.integration.example) — the separate Binance Testnet integration-test template. Copy it to `.env.integration` and provide Testnet-only credentials before running `npm run test:integration`.
+
+`.env.local`, `.env.integration`, and other `.env*` files containing values are ignored by Git. Binance keys, API secrets, operator credentials, health tokens, and backup keys must stay in server-side environment configuration and must never use a `NEXT_PUBLIC_` prefix.
+
+### Core server modes
 
 ```env
 MAWS_ENV=local
 MAWS_DEFAULT_PROFILE=paper
 ```
 
+`MAWS_ENV` controls the server startup environment. `MAWS_DEFAULT_PROFILE` names profile metadata; it does not switch the process environment or attach a broker by itself.
+
 Supported server environment modes are:
 
-- `local`: Paper Trading/public data only; no authentication required.
-- `testnet`: Binance USD-M Futures Testnet; authentication and Testnet credentials required.
-- `shadow`: Production market data/read-only monitoring; order submissions are disabled. This is an internal server mode, not a normal selectable trading profile.
-- `production`: Binance production trading; authentication, profile configuration, execution gates, and risk controls are required.
+- `local`: public data and charting only; Binance authenticated/live-trading integration is refused and authentication is not required.
+- `testnet`: Binance USD-M Futures Testnet; operator authentication and complete Testnet credentials are required.
+- `shadow`: Production market data with read-only account monitoring; it is internal server mode and cannot submit orders.
+- `production`: Binance Production; operator authentication, complete Production credentials, explicit Production confirmation, execution gates, and valid risk configuration are required.
 
 ### Main configuration groups
 
 | Group | Examples | Purpose |
 | --- | --- | --- |
-| Environment/profile | `MAWS_ENV`, `MAWS_DEFAULT_PROFILE` | Select runtime mode and profile metadata |
+| Environment/profile | `MAWS_ENV`, `MAWS_DEFAULT_PROFILE` | Select the server startup mode and profile metadata |
 | Authentication | `MAWS_OPERATOR_AUTH` | Configure the scrypt-based operator credential |
 | Binance profiles | `MAWS_BINANCE_TESTNET_*`, `MAWS_BINANCE_PRODUCTION_*` | Keep Testnet and Production credentials isolated |
 | Persistence | `MAWS_DB_PATH`, `MAWS_BACKUP_KEY` | Configure SQLite and encrypted backups |
@@ -267,6 +291,16 @@ git diff --check
 ```
 
 Do not run integration or live smoke commands against Production credentials as a substitute for unit tests. Integration tests use Binance Testnet credentials and should be run sequentially because exchange testnet rate limits are strict.
+
+## GitHub Actions checks
+
+The repository workflows run against the `master` branch:
+
+- **CI - TypeScript & Unit Tests** (`.github/workflows/ci-unit.yml`) runs on pushes and pull requests targeting `master`. It installs with `npm ci`, runs `npx tsc --noEmit`, and runs the Jest suite with `npm test`.
+- **CI - Live Smoke Test** (`.github/workflows/ci-smoke.yml`) runs nightly or manually. It type-checks the project and always runs the no-network smoke CLI dry run. The optional live smoke runs against a configured Testnet deployment only when `SMOKE_BASE_URL` and `SMOKE_SESSION` repository secrets are available; otherwise it reports that the live check was skipped.
+- **Integration Tests** (`.github/workflows/integration-tests.yml`) runs for pull requests that change server or integration-test files, nightly, or manually. It checks Binance Testnet availability, runs the integration suite with Testnet credentials from GitHub Secrets, uploads failure artifacts, and validates the workflow YAML in a follow-up job.
+
+The workflows use `actions/checkout@v5`, `actions/setup-node@v5`, and `actions/upload-artifact@v7` where applicable. The Node.js runtime configured in the workflows is Node 20.
 
 ## Integration tests
 
