@@ -11,17 +11,16 @@
 ## Step 2: Configure (30 sec)
 
 ```bash
-# Copy template
-cp .env.integration.example .env.integration
-
-# Edit with your credentials (use your favorite editor)
+# Create the local test file and edit it
+touch .env.integration
 nano .env.integration
 ```
 
-Paste your credentials:
+Add your Testnet credentials:
 ```env
 MAWS_BINANCE_TESTNET_API_KEY=abc123...
 MAWS_BINANCE_TESTNET_API_SECRET=xyz789...
+MAWS_BINANCE_TESTNET_EXECUTION_ENABLED=false
 ```
 
 ## Step 3: Fund Account (30 sec)

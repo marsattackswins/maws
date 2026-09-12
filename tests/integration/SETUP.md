@@ -21,17 +21,18 @@
 ### 3. Configure Environment
 
 ```bash
-# Copy the example file
-cp .env.integration.example .env.integration
+# Create the local test file
+touch .env.integration
 
-# Edit with your credentials
+# Edit it with your credentials
 nano .env.integration
 ```
 
-Add your testnet credentials:
+Add your Testnet credentials:
 ```env
-MAWS_BINANCE_API_KEY=your-actual-testnet-api-key
-MAWS_BINANCE_API_SECRET=your-actual-testnet-secret
+MAWS_BINANCE_TESTNET_API_KEY=your-actual-testnet-api-key
+MAWS_BINANCE_TESTNET_API_SECRET=your-actual-testnet-secret
+MAWS_BINANCE_TESTNET_EXECUTION_ENABLED=false
 ```
 
 ### 4. Run Tests

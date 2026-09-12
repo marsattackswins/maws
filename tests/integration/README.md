@@ -23,8 +23,9 @@ Create a `.env.integration` file in the project root:
 
 ```bash
 # Binance USD-M Futures Testnet credentials
-MAWS_BINANCE_API_KEY=your-testnet-api-key-here
-MAWS_BINANCE_API_SECRET=your-testnet-secret-here
+MAWS_BINANCE_TESTNET_API_KEY=your-testnet-api-key-here
+MAWS_BINANCE_TESTNET_API_SECRET=your-testnet-secret-here
+MAWS_BINANCE_TESTNET_EXECUTION_ENABLED=false
 
 # Optional: Telegram/Discord webhook for test notifications
 # MAWS_ALERT_WEBHOOK_URL=https://hooks.slack.com/services/...
@@ -135,8 +136,9 @@ jobs:
       - run: npm ci
       - name: Run Integration Tests
         env:
-          MAWS_BINANCE_API_KEY: ${{ secrets.TESTNET_API_KEY }}
-          MAWS_BINANCE_API_SECRET: ${{ secrets.TESTNET_API_SECRET }}
+          MAWS_BINANCE_TESTNET_API_KEY: ${{ secrets.TESTNET_API_KEY }}
+          MAWS_BINANCE_TESTNET_API_SECRET: ${{ secrets.TESTNET_API_SECRET }}
+          MAWS_BINANCE_TESTNET_EXECUTION_ENABLED: "false"
         run: npm run test:integration
 ```
 
