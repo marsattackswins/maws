@@ -115,7 +115,7 @@ function safeConfigResponse(cfg: ReturnType<typeof serverConfig>): unknown {
  * Returns non-secret runtime configuration as JSON.
  *
  * Authentication:
- * - Local mode: No authentication required (returns placeholder config)
+ * - Local mode: No authentication required for safe config/profile metadata
  * - Non-local mode: Requires operator authentication OR health token
  *
  * Response shape:
@@ -136,14 +136,14 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Local mode: skip authentication and return placeholder data
+  // Local mode exposes redacted startup config and safe profile metadata.
   if (cfg.env === "local") {
     return NextResponse.json({
       config: safeConfigResponse(cfg),
       profileMetadata: safeProfileMetadata(cfg.profiles),
       descriptions: FIELD_DESCRIPTIONS,
       host: HOST_MAP[cfg.env],
-      note: "Local mode - authentication not required. Start with MAWS_ENV=testnet for live config.",
+      note: "Local Chart Only - attach a configured Binance profile from the authenticated UI.",
     });
   }
 

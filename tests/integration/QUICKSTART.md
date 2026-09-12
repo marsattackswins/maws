@@ -20,8 +20,8 @@ nano .env.integration
 
 Paste your credentials:
 ```env
-MAWS_BINANCE_API_KEY=abc123...
-MAWS_BINANCE_API_SECRET=xyz789...
+MAWS_BINANCE_TESTNET_API_KEY=abc123...
+MAWS_BINANCE_TESTNET_API_SECRET=xyz789...
 ```
 
 ## Step 3: Fund Account (30 sec)
@@ -39,8 +39,8 @@ npm run test:integration:setup
 You should see:
 ```
 ✅ .env.integration file exists
-✅ MAWS_BINANCE_API_KEY is set
-✅ MAWS_BINANCE_API_SECRET is set
+✅ MAWS_BINANCE_TESTNET_API_KEY is set
+✅ MAWS_BINANCE_TESTNET_API_SECRET is set
 ✅ API key format looks valid
 ✅ Testnet API is reachable
 ✅ API credentials are valid

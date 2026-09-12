@@ -2,48 +2,42 @@
 
 **Market Analysis & Workflow System**
 
-MAWS is a browser-based market analysis terminal with multi-chart layouts, indicators, drawings, replay tools, Paper Trading, and optional Binance USD-M Futures connectivity. It is built for operator-controlled workflows: the browser provides the workspace, while the server controls live credentials, exchange communication, account state, order execution, and safety checks.
+MAWS is a browser-based workspace for studying markets and, when you choose, trading through Binance Futures. It combines charts, indicators, drawings, replay tools, market news, the Xoomar economic calendar, Paper Trading, and optional Binance Testnet or Production connections.
 
-> **Safety first:** Start with Local/chart mode or Paper Trading. Use Binance Testnet before Production, disable withdrawal permissions on exchange keys, and review every execution and risk setting before enabling real trading. MAWS is not financial advice.
+> **Safety first:** Start in Chart Only or Paper Trading. Use Testnet before Production. Binance API keys must not have withdrawal permission. MAWS is a tool, not financial advice.
 
-## How MAWS works
+## What MAWS does
+
+MAWS keeps the charting experience in the browser, but keeps trading authority on the server:
 
 ```text
-Browser workspace
-  charts, studies, drawings, settings, BottomPanel
+Your browser
+  charts, indicators, drawings, calendar, news, and Trade controls
         |
         v
-Next.js route handlers
-  authentication, profiles, orders, health, market data
+MAWS server
+  login, profile switching, Binance connection, safety checks,
+  order handling, account state, history, and local database
         |
         v
-Server-owned runtime
-  Binance connection, execution gates, risk checks,
-  reconciliation, audit history, and SQLite persistence
-        |
-        v
-Binance REST/WebSocket or local Paper Trading state
+Paper Trading or Binance
+  simulated orders, Binance Testnet, or Binance Production
 ```
 
-The browser receives safe account, order, position, health, and stream updates. Binance credentials, operator credentials, listen keys, and execution decisions remain server-side. Live state is treated as authoritative on the server and exchange rather than trusted from browser state alone.
+The browser never receives Binance secrets. The server checks account state, connection health, fresh market/account data, reconciliation, execution settings, and risk limits before accepting a live order. If something is uncertain or unhealthy, MAWS blocks the action instead of guessing.
 
-### Modes and profiles
+### The four choices you can use
 
-| Mode/profile | Use | Requirements |
-|---|---|---|
-| **Local/chart mode** (`MAWS_ENV=local`) | Public market data and Chart Only startup | No active profile; Binance profiles require server-side credentials and operator authentication |
-| **Paper Trading** (`paper`) | Browser-local simulated orders and positions | No Binance credentials; no exchange orders |
-| **Binance Testnet** (`binance-testnet`) | Practice with Binance Futures Testnet | Keep `MAWS_ENV=local`; configure Testnet credentials, operator authentication, and normal gates/risk checks |
-| **Binance Production** (`binance-production`) | Real Binance Futures trading | Keep `MAWS_ENV=local`; configure Production credentials, operator authentication, confirmation, execution gates, and risk checks |
-| **Shadow** | Internal Production read-only monitoring | Server-only; never submits orders |
+| Choice | What it means |
+|---|---|
+| **Chart Only** | Study the market without an attached trading account. This is how MAWS starts. |
+| **Paper Trading** | Simulated orders and positions. No Binance account is contacted. |
+| **Binance Testnet** | Practice with Binance's separate test account. It is not real-money trading, but Testnet orders are still real activity on that account. |
+| **Binance Production** | Real Binance Futures trading. Use only after careful testing and confirmation. |
 
-Local mode is the single normal charting/deployment context. The app starts in Chart Only, and the browser profile chooser can attach Paper Trading, Testnet, or Production without changing `MAWS_ENV` or restarting the server. Testnet and Production require operator authentication; Production also requires explicit confirmation.
+The normal setup uses `MAWS_ENV=local`. This only controls how the server starts; it does not prevent you from attaching a configured Testnet or Production profile from the Trade screen. You do not change the environment or restart MAWS when switching profiles.
 
-### Safety model
-
-MAWS is designed to fail closed. Normal live submissions are blocked when configuration, authentication, profile readiness, stream health, snapshot freshness, position mode, reconciliation, circuit breakers, or risk checks are not satisfactory. The server also provides execution gates, a kill switch, order/risk limits, idempotent client order IDs, and an emergency flatten action for supported live environments.
-
-## Installation
+## Install MAWS
 
 ### Requirements
 
@@ -52,7 +46,7 @@ MAWS is designed to fail closed. Normal live submissions are blocked when config
 - Git
 - A modern browser
 
-### Install and start locally
+### 1. Download and start
 
 ```bash
 git clone -b master https://github.com/marsattackswins/maws.git
@@ -62,167 +56,120 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The development helper starts Next.js and opens the browser after the server responds.
-
-On Windows PowerShell, copy the environment template with:
+On Windows PowerShell, use this instead of `cp`:
 
 ```powershell
 Copy-Item .env.example .env.local
 npm run dev
 ```
 
-Keep `MAWS_ENV=local` for normal local development and Chart Only startup. Add separate Binance profile credentials and `MAWS_OPERATOR_AUTH` when you want to attach Testnet or Production from the UI. The default local database is `.maws/maws.db`.
+Open [http://localhost:3000](http://localhost:3000). MAWS starts in Chart Only. You can use charts immediately; no Binance keys are needed for charting or Paper Trading.
 
-To use another port:
+Your local database is stored in `.maws/maws.db`. It is local working data and should not be committed.
 
-```bash
-PORT=3010 npm run dev
-```
+### 2. Fill in the environment file only when needed
 
-PowerShell:
+The copied `.env.local` is intentionally small. In normal use:
 
-```powershell
-$env:PORT = "3010"
-npm run dev
-```
+1. Leave `MAWS_ENV=local`.
+2. Leave the Testnet and Production fields empty until you need them.
+3. Leave both profile execution switches set to `false` while setting up.
+4. Leave `MAWS_EXECUTION_ENABLED=false` until you deliberately decide to enable live order submission.
 
-### Environment templates
+For Paper Trading, you do not need to add Binance keys or create an operator password.
 
-Two example files are included:
+### 3. Add the operator password for Binance profiles
 
-- [`.env.example`](.env.example) — the main local/server configuration template. It documents local settings, authentication, persistence, optional Binance profiles, execution gates, risk limits, and resilience settings.
-- [`.env.integration.example`](.env.integration.example) — Testnet-only configuration for integration tests. Copy it to `.env.integration` and use Testnet credentials only.
+Binance Testnet and Production require an operator login. MAWS does not store the plain password in the environment file. Instead:
 
-Keep `.env.local`, `.env.integration`, and all other value-bearing `.env*` files untracked. Binance keys, API secrets, operator credentials, health tokens, and backup keys must never use a `NEXT_PUBLIC_` prefix or appear in source code.
+1. Choose a strong password.
+2. Run:
 
-When attaching Binance profiles from local Chart Only, or when using a non-local environment, generate the operator credential with:
+   ```bash
+   npm run gen-operator-auth -- "your-password"
+   ```
 
-```bash
-npm run gen-operator-auth
-```
+3. Copy the generated value into `MAWS_OPERATOR_AUTH` in `.env.local`.
+4. Keep the original password safe; you will type it into the MAWS login dialog when attaching a Binance profile.
+5. Restart MAWS after changing `.env.local`.
 
-Configure Testnet and Production with separate complete key/secret pairs. Disable withdrawal permission on both exchange keys.
+Keep `.env.local` private. Never place Binance keys, secrets, or the operator password in source code or in a variable beginning with `NEXT_PUBLIC_`.
 
-## Usability guide
+### 4. Add Binance Testnet
 
-### 1. Analyze markets
+When you are ready to practise:
 
-1. Start the app in Local/chart mode.
-2. Use symbol search and the chart controls to choose markets and timeframes.
-3. Add indicators, studies, drawings, volume views, and linked chart panes as needed.
-4. Use layout, theme, chart style, timezone, replay, news, alerts, and calendar tools where configured.
-5. Keep the chart-only workspace separate from trading until a profile is intentionally attached.
+1. Create Binance Futures Testnet API credentials.
+2. Put the Testnet key and secret in the two Testnet fields in `.env.local`.
+3. Make sure withdrawals are disabled for the key.
+4. Leave `MAWS_BINANCE_TESTNET_EXECUTION_ENABLED=false` while checking the connection.
+5. Restart MAWS.
+6. Use **Trade** in MAWS and choose **Binance Testnet**.
+7. Enter the operator password and wait for the readiness checks.
 
-### 2. Use Paper Trading
+A profile can be connected while order execution remains disabled. The execution switches are safety gates, not a replacement for login, account checks, reconciliation, or risk checks.
 
-1. Start with `MAWS_ENV=local`.
-2. Attach **Paper Trading** from the broker/profile controls.
-3. Use the `BottomPanel` for positions, orders, order history, balance history, journal, metrics, and trading controls.
-4. Paper orders and positions are simulated in the browser and never reach Binance.
-5. Detach Paper Trading when returning to chart-only work.
+### 5. Add Binance Production
 
-The `BottomPanel` is the home for connection, readiness, execution, and safety controls. It appears when Paper Trading is attached or when a Binance profile has been confirmed ready; it is not restored to the top bar.
+Only do this after Testnet works as expected:
 
-### 3. Use Binance Testnet
+1. Create a separate Binance Production API key and secret.
+2. Disable withdrawals on the key.
+3. Put the values in the Production fields in `.env.local`.
+4. Keep `MAWS_BINANCE_PRODUCTION_EXECUTION_ENABLED=false` and `MAWS_EXECUTION_ENABLED=false` until you are ready.
+5. Restart MAWS.
+6. Choose **Binance Production** from **Trade**, enter the operator password, and complete the extra Production confirmation.
 
-Testnet is the recommended next step after Paper Trading.
+MAWS will still block orders if health, reconciliation, account state, risk limits, or another safety check is not ready.
 
-1. Create a Binance Futures Testnet account and API key.
-2. Put the Testnet credentials in server-side environment configuration only.
-3. Keep `MAWS_ENV=local`, add `MAWS_OPERATOR_AUTH`, and restart MAWS once.
-4. From Chart Only, click **Trade**, choose **Binance Testnet**, and authenticate.
-5. Wait for readiness, stream health, and reconciliation.
-6. Review the BottomPanel status and risk settings before submitting an order.
+## Use MAWS
 
-Testnet orders and positions are real Testnet activity. They are not Production orders, but they can create exposure on the Testnet account and should be cleaned up after testing.
+### Charting
 
-### 4. Use Binance Production
+1. Start MAWS and remain in Chart Only.
+2. Choose a symbol and timeframe.
+3. Add indicators, drawings, linked charts, volume, layouts, replay, news, and calendar views as needed.
+4. Use the economic calendar as an information source; MAWS currently gets those events from Xoomar.
+5. Open **Trade** only when you intentionally want to attach Paper Trading or a Binance profile.
 
-Production can submit real orders and should only be enabled deliberately.
+### Paper Trading
 
-1. Verify the Testnet workflow first.
-2. Configure separate Production credentials on the server and disable withdrawals.
-3. Keep `MAWS_ENV=local`, configure `MAWS_OPERATOR_AUTH`, and restart MAWS once.
-4. From Chart Only, click **Trade**, choose **Binance Production**, authenticate, and complete the explicit Production confirmation.
-5. Check readiness, stream health, snapshot freshness, reconciliation, position mode, execution gates, and risk limits.
-6. Keep the kill switch available and monitor the BottomPanel and health surfaces while operating.
+1. Click **Trade**.
+2. Choose **Paper Trading**.
+3. Use the trading panel to create simulated orders and review positions, history, balance, journal, and metrics.
+4. Remember that Paper Trading never sends an order to Binance.
+5. Return to Chart Only when you want to detach the simulated trading session.
 
-A connected broker does not automatically mean submissions are allowed. MAWS can remain connected while normal execution is frozen because of stale data, stream problems, reconciliation drift, an open circuit, a risk limit, or a disabled gate.
+### Testnet
 
-### 5. If something looks wrong
+Testnet is the safest way to learn the connected workflow. After selecting it, wait for the connection, stream, account snapshot, and reconciliation checks to become ready. Review the trading panel before every order. Testnet orders can still create positions and balances on the Testnet account, so close or clean up test exposure when finished.
 
-Do not blindly retry an order or cancellation when the result is unknown. Stop normal mutations, inspect health and exchange state, and allow reconciliation to establish the current truth. For confirmed Testnet or Production exposure, use the emergency flatten workflow and verify its results afterward.
+### Production
 
-Useful local checks:
+Production can send real orders. Confirm the symbol, side, amount, price, account, and protection before submitting. Keep the health and trading panels visible. If an order result is unclear, do not click again immediately; let MAWS reconcile with Binance first.
 
-```bash
-curl http://localhost:3000/api/health
-curl http://localhost:3000/api/health/broker
-npm run secret-scan
-```
+If MAWS shows a freeze, stale data, stream problem, reconciliation problem, circuit breaker, or risk rejection, stop and resolve that condition. A connected account does not mean that order submission is allowed.
 
-## Testing and production build
+### Returning to charting or Paper Trading
 
-### Unit, type, and browser tests
+Use **Trade** and select Chart Only or Paper Trading. MAWS detaches the Binance profile before changing to another profile. No environment change or server restart is needed for normal profile switching.
+
+## Checks for contributors
 
 ```bash
 npm test
-npm test -- --runInBand
 npx tsc --noEmit --pretty false
-npx playwright test
-```
-
-### Binance Testnet integration tests
-
-Integration tests can create Testnet orders and positions. Set up a separate Testnet environment first:
-
-```bash
-cp .env.integration.example .env.integration
-npm run test:integration:setup
-npm run test:integration
-```
-
-Do not use Production credentials for integration tests.
-
-### Production build
-
-```bash
-npm ci
 npm run build
-npm start
+npx playwright test
+npm run secret-scan
 ```
 
-The application uses Next.js standalone output. Non-local deployments should use a TLS-terminating reverse proxy and keep secrets in deployment configuration rather than in the image or repository.
+Integration tests use Binance Testnet only and require a separate `.env.integration` file. Never use Production credentials for tests.
 
-## Project map
+## More information
 
-```text
-app/                    Pages and API route handlers
-components/             Charts, shell, settings, trading, and UI components
-lib/                    Client state plus server, market, and trading libraries
-tests/                  Jest unit and server tests
-tests/integration/      Binance Testnet integration tests
-e2e/                    Playwright browser tests
-scripts/                Development, smoke-test, auth, and secret-scan tools
-docs/                   Detailed architecture, API, operations, and security guides
-.maws/                  Local SQLite state; do not commit
-```
-
-## GitHub Actions
-
-The repository maintains its workflows on `master`; the unit and integration pull-request checks explicitly target `master`:
-
-- **CI - TypeScript & Unit Tests** runs on pushes and pull requests. It installs dependencies, type-checks, and runs Jest.
-- **CI - Live Smoke Test** runs nightly or manually. It type-checks the project, runs a no-network smoke check, and optionally checks a configured Testnet deployment with repository secrets.
-- **Integration Tests** run for relevant server/integration pull requests, nightly, or manually. They check Testnet availability, run the Testnet suite with GitHub Secrets, upload failure artifacts, and validate the workflow file.
-
-The workflows use `actions/checkout@v5`, `actions/setup-node@v5`, and `actions/upload-artifact@v7` where applicable.
-
-## More documentation
-
-- [`docs/README.md`](docs/README.md) — detailed product and architecture overview
-- [`docs/API.md`](docs/API.md) — HTTP API reference
-- [`docs/DEVELOPER.md`](docs/DEVELOPER.md) — development and testing details
-- [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — configuration and operations
+- [`docs/README.md`](docs/README.md) — detailed architecture and deployment notes
+- [`docs/API.md`](docs/API.md) — API reference
+- [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — operations and troubleshooting
 - [`docs/SECURITY.md`](docs/SECURITY.md) — security details
-- [`tests/integration/SETUP.md`](tests/integration/SETUP.md) — Testnet integration setup
+- [`obsidian-vault/`](obsidian-vault/) — local Obsidian notes; ignored by Git

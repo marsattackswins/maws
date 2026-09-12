@@ -180,15 +180,15 @@ npm run dev
 ```
 
 - Runs on http://localhost:3000
-- Uses mock broker (no real trading)
-- No authentication required
+- Starts in Chart Only; Paper Trading needs no credentials
+- Testnet or Production can be attached from the Trade screen after server-side setup and operator login
 - SQLite database in `.maws/maws.db`
 
 ### Production Deployment
 
 MAWS is designed for deployment behind a reverse proxy (nginx):
 
-1. **Environment Configuration**: Set `MAWS_ENV=production` with all required variables
+1. **Environment Configuration**: The normal UI workflow keeps `MAWS_ENV=local` and attaches a configured profile from the UI. A server-managed `MAWS_ENV=production` deployment is also available for deployments that intentionally select one runtime at startup.
 2. **Reverse Proxy**: nginx handles TLS, static files, and proxying to Next.js
 3. **Service Management**: systemd service for process management
 4. **Database**: SQLite with WAL mode for performance
@@ -228,7 +228,7 @@ docker run -p 3000:3000 --env-file .env maws
 
 ### Risk Controls
 
-- **Environment Enforcement**: Local startup does not activate a broker; profile-specific credentials are accepted for authenticated UI switching
+- **Environment Enforcement**: Local startup begins without an active broker; profile-specific credentials are accepted for authenticated UI switching
 - **Production Requirements**: All risk limits must be positive finite numbers
 - **Execution Gates**: Dual requirement (static env var + runtime flag)
 - **Shadow Mode**: Read-only enforcement, zero submissions allowed
@@ -296,8 +296,7 @@ Critical environment variables (see `.env.example` for complete list):
 - `MAWS_OPERATOR_AUTH`: Operator credential hash
 - `MAWS_BINANCE_TESTNET_API_KEY/SECRET`: Separate testnet credentials
 - `MAWS_BINANCE_PRODUCTION_API_KEY/SECRET`: Separate production credentials
-- `MAWS_BINANCE_API_KEY/SECRET`: Legacy active-profile credential aliases
-- `MAWS_EXECUTION_ENABLED`: Existing global static execution gate
+- `MAWS_EXECUTION_ENABLED`: Global static execution gate; keep it false until live execution is deliberately enabled
 - `MAWS_RISK_*`: Risk limit configurations
 - `MAWS_CB_*`: Circuit breaker configurations
 
