@@ -32,9 +32,10 @@ cp .env.example .env
 ```
 
 **Local Development Defaults**:
-- `MAWS_ENV=local` (paper trading, no auth required)
-- No broker credentials needed
-- No operator password needed
+- `MAWS_ENV=local` starts in Chart Only with no active broker profile
+- No credentials are needed for charting or browser-local Paper Trading
+- Add separate Testnet/Production profile credentials and `MAWS_OPERATOR_AUTH` only when attaching Binance from the UI
+- Keep all broker credentials server-side; never use a `NEXT_PUBLIC_` prefix
 
 ### Running Development Server
 

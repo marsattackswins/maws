@@ -203,7 +203,7 @@ export function EconomicCalendar() {
   const [cursor, setCursor] = useState(todayStart);
   const [selected, setSelected] = useState<string | null>(null);
   const [events, setEvents] = useState<CalendarEvent[]>(() =>
-    getMockCalendarEvents().filter((e) => e.impact !== "low"),
+    getMockCalendarEvents(),
   );
   const [source, setSource] = useState<"xoomar" | "mock">("mock");
   const [status, setStatus] = useState<string | null>(null);
@@ -280,7 +280,7 @@ export function EconomicCalendar() {
               ? "…"
               : source === "mock"
                 ? "Demo"
-                : "Live"}
+                : "Live · Xoomar"}
           </span>
           <button
             type="button"
@@ -329,7 +329,7 @@ export function EconomicCalendar() {
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 py-2">
         {dayEvents.length === 0 && (
           <div className="px-2 py-8 text-center text-[12px] text-[#787b86]">
-            {loading ? "Loading events…" : "No high/medium events this day"}
+            {loading ? "Loading events…" : "No events this day"}
           </div>
         )}
 

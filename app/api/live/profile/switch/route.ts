@@ -33,7 +33,7 @@ export async function POST(req: Request): Promise<Response> {
   } catch {
     return jsonError(503, "config", "Server configuration invalid");
   }
-  const auth = authenticate(req, cfg);
+  const auth = authenticate(req, cfg, { allowLocal: true });
   if (isAuthFailure(auth)) return auth.response;
   const body = await readJson<ProfileSwitchRequest>(req);
   if (!body || typeof body !== "object" || !("profileId" in body)) {

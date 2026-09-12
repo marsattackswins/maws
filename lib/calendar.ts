@@ -30,7 +30,7 @@ function dayStart(offset: number) {
   return d.getTime();
 }
 
-function mapImpact(raw: string | null | undefined): CalendarEvent["impact"] {
+function mapImpact(raw: string | number | null | undefined): CalendarEvent["impact"] {
   const v = String(raw ?? "").toLowerCase();
   if (v.includes("high") || v === "3") return "high";
   if (v.includes("medium") || v.includes("med") || v === "2") return "medium";
@@ -57,10 +57,6 @@ function categorize(title: string, country: string): CalendarEvent["category"] {
   return "macro";
 }
 
-function isHighOrMedium(impact: CalendarEvent["impact"]) {
-  return impact === "high" || impact === "medium";
-}
-
 export function mapXoomarRows(rows: XoomarCalendarRow[]): CalendarEvent[] {
   const out: CalendarEvent[] = [];
   for (let i = 0; i < rows.length; i++) {
@@ -69,7 +65,6 @@ export function mapXoomarRows(rows: XoomarCalendarRow[]): CalendarEvent[] {
     const at = Date.parse(row.scheduledAt);
     if (!Number.isFinite(at)) continue;
     const impact = mapImpact(row.importance);
-    if (!isHighOrMedium(impact)) continue;
     const title = row.eventName.trim();
     const period = row.periodLabel ? ` · ${row.periodLabel}` : "";
     out.push({
@@ -89,7 +84,7 @@ export function mapXoomarRows(rows: XoomarCalendarRow[]): CalendarEvent[] {
   return out;
 }
 
-/** Curated demo events when live sources fail (high + medium across 7 days). */
+/** Curated demo events when live sources fail across 7 days. */
 export function getMockCalendarEvents(): CalendarEvent[] {
   const rows: Array<
     Omit<CalendarEvent, "id" | "at" | "source"> & { day: number; hour: number }
@@ -245,6 +240,19 @@ function ymdLocal(ms: number) {
   return `${y}-${m}-${day}`;
 }
 
+function rowsFromResponse<T extends object>(raw: unknown): T[] | null {
+  if (Array.isArray(raw)) return raw as T[];
+  if (
+    typeof raw === "object" &&
+    raw !== null &&
+    "data" in raw &&
+    Array.isArray(raw.data)
+  ) {
+    return raw.data as T[];
+  }
+  return null;
+}
+
 async function tryXoomar(
   windowStart: number,
   windowEnd: number,
@@ -256,17 +264,17 @@ async function tryXoomar(
     { cache: "no-store" },
   );
   if (!res.ok) return null;
-  const raw = (await res.json()) as XoomarCalendarRow[] | { error?: string };
-  if (!Array.isArray(raw) || raw.length === 0) return null;
-  const mapped = mapXoomarRows(raw).filter((e) =>
+  const raw = (await res.json()) as unknown;
+  const rows = rowsFromResponse<XoomarCalendarRow>(raw);
+  if (!rows) return null;
+  return mapXoomarRows(rows).filter((e) =>
     inWindow(e.at, windowStart, windowEnd),
   );
-  return mapped.length > 0 ? mapped : null;
 }
 
 /**
- * Load high + medium events for the next 7 local days (today inclusive).
- * Primary: Xoomar US macro calendar. Demo fallback if unavailable.
+ * Load events for the next 7 local days (today inclusive).
+ * Primary: Xoomar. Demo fallback if unavailable.
  */
 export async function fetchCalendarEvents(): Promise<CalendarFetchResult> {
   const today = new Date();
@@ -275,16 +283,15 @@ export async function fetchCalendarEvents(): Promise<CalendarFetchResult> {
 
   try {
     const live = await tryXoomar(windowStart, windowEnd);
-    if (live && live.length > 0) {
+    if (live) {
       return { events: live, source: "xoomar", windowStart, windowEnd };
     }
   } catch {
-    /* fall through */
+    /* fall through to the demo fallback */
   }
 
-  const mock = getMockCalendarEvents().filter(
-    (e) =>
-      isHighOrMedium(e.impact) && inWindow(e.at, windowStart, windowEnd),
+  const mock = getMockCalendarEvents().filter((e) =>
+    inWindow(e.at, windowStart, windowEnd),
   );
   return {
     events: mock,

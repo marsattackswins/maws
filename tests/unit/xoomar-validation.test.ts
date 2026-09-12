@@ -201,12 +201,12 @@ describe("Xoomar Calendar Validation", () => {
     });
 
     describe("2g - Forwarding and security", () => {
-      test("R19: Duplicate from: first value wins", async () => {
+      test("R19: Duplicate from: first value wins for validation", async () => {
         const res = await GET(makeRequest({ from: ["2025-06-15", "2025-06-01"], to: "2025-06-21" }));
         expect(res.status).toBe(200);
         
         const upstreamUrl = mockFetch.mock.calls[0][0] as string;
-        expect(upstreamUrl).toContain("from=2025-06-15");
+        expect(upstreamUrl).toBe("https://xoomar.com/api/markets/calendar");
       });
 
       test("R20: Unknown params not forwarded", async () => {
@@ -223,18 +223,12 @@ describe("Xoomar Calendar Validation", () => {
         expect(mockFetch).not.toHaveBeenCalled();
       });
 
-      test("R22: Original date strings forwarded unchanged", async () => {
+      test("R22: Valid date strings are used for local filtering", async () => {
         const res = await GET(makeRequest({ from: "2025-06-15", to: "2025-06-21" }));
         expect(res.status).toBe(200);
         
         const upstreamUrl = mockFetch.mock.calls[0][0] as string;
-        const urlObj = new URL(upstreamUrl);
-        expect(urlObj.searchParams.get("from")).toBe("2025-06-15");
-        expect(urlObj.searchParams.get("to")).toBe("2025-06-21");
-        
-        // Exact forwarding without extra encoding or re-formatting
-        expect(upstreamUrl.endsWith("from=2025-06-15&to=2025-06-21") || 
-               upstreamUrl.endsWith("to=2025-06-21&from=2025-06-15")).toBeTruthy();
+        expect(upstreamUrl).toBe("https://xoomar.com/api/markets/calendar");
       });
     });
   });

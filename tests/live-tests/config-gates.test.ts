@@ -42,8 +42,18 @@ describe("environment configuration (fail closed)", () => {
     }
   });
 
-  test("local refuses Binance credentials (fail closed)", () => {
-    expect(() => loadEnvConfig(envSrc({ MAWS_ENV: "local", ...KEYS }))).toThrow(/local refuses Binance credentials/);
+  test("local chart-only mode accepts separate profile credentials", () => {
+    const cfg = loadEnvConfig(envSrc({
+      MAWS_ENV: "local",
+      MAWS_BINANCE_TESTNET_API_KEY: "testnet-key",
+      MAWS_BINANCE_TESTNET_API_SECRET: "testnet-secret",
+      MAWS_BINANCE_PRODUCTION_API_KEY: "production-key",
+      MAWS_BINANCE_PRODUCTION_API_SECRET: "production-secret",
+    }));
+    expect(cfg.activeProfileId).toBeNull();
+    expect(cfg.binanceApiKey).toBeNull();
+    expect(cfg.profiles["binance-testnet"].configured).toBe(true);
+    expect(cfg.profiles["binance-production"].configured).toBe(true);
   });
 
   test("invalid env values and numbers are rejected", () => {

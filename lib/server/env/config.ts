@@ -156,7 +156,7 @@ function parseDefaultProfile(raw: string | undefined): ProfileId {
 }
 
 function profileForEnvironment(env: MawsEnv): ProfileId | null {
-  if (env === "local") return "paper";
+  if (env === "local") return null;
   if (env === "testnet") return "binance-testnet";
   if (env === "production") return "binance-production";
   return null;
@@ -277,7 +277,7 @@ function resolveCredentials(
         : { apiKey: null, apiSecret: null };
 
   if (env === "local" && (legacy.apiKey !== null || legacy.apiSecret !== null)) {
-    throw new Error("MAWS_ENV=local refuses Binance credentials; local mode uses public data only");
+    throw new Error("MAWS_ENV=local does not accept legacy Binance credentials; use profile-specific credentials");
   }
   assertCompletePair(testnet, "MAWS_BINANCE_TESTNET_API_KEY", "MAWS_BINANCE_TESTNET_API_SECRET");
   assertCompletePair(

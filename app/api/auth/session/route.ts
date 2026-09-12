@@ -16,10 +16,12 @@ export async function GET(req: Request): Promise<Response> {
   } catch {
     return jsonOk({ authenticated: false, env: "local" });
   }
-  if (cfg.env === "local") {
+  const runtimeCfg = activeProfileConfig();
+  const hasConfiguredBinanceProfile =
+    cfg.profiles["binance-testnet"].configured || cfg.profiles["binance-production"].configured;
+  if (cfg.env === "local" && !cfg.operatorAuth && !hasConfiguredBinanceProfile) {
     return jsonOk({ authenticated: true, env: "local", envLabel: HOST_MAP.local.label, connectedBroker: "mock" });
   }
-  const runtimeCfg = activeProfileConfig();
   const runtimeProfile = persistenceProfileFromConfig(runtimeCfg);
   const sessionId = readSessionCookie(req.headers.get("cookie"), secureCookieContext(cfg));
   const session = getSession(sessionId);

@@ -52,14 +52,18 @@ type AuthFailure = { response: Response };
  * Full guard chain for every /api/live route: env gate, Origin/Host binding,
  * valid session, and per-session CSRF token on mutating requests.
  */
-export function authenticate(req: Request, cfg: EnvConfig): HandlerContext | AuthFailure {
+export function authenticate(
+  req: Request,
+  cfg: EnvConfig,
+  options: { allowLocal?: boolean } = {},
+): HandlerContext | AuthFailure {
   const guardReq: GuardRequest = {
     method: req.method,
     url: req.url,
     headers: { get: (name: string) => req.headers.get(name) },
   };
 
-  if (cfg.env === "local") {
+  if (cfg.env === "local" && options.allowLocal !== true) {
     return { response: jsonError(403, "env_local", "Live trading is unavailable when MAWS_ENV=local") };
   }
 

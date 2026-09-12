@@ -40,7 +40,7 @@ export type LiveConnectOutcome = "connected" | "unauthenticated" | "error";
 export type ProfileSwitchOutcome = "ready" | "paper" | "unauthenticated" | "error";
 
 function profileIdForEnvironment(environment: string): LiveProfileId | null {
-  if (environment === "local") return "paper";
+  if (environment === "local") return null;
   if (environment === "testnet") return "binance-testnet";
   if (environment === "production") return "binance-production";
   return null;
@@ -240,7 +240,9 @@ export async function restoreServerProfile(): Promise<void> {
   try {
     const session = await liveApi.session();
     if (!session.authenticated) {
+      const paperAttached = useAppStore.getState().connectedBroker === "mock";
       detachClient();
+      if (session.env === "local" && paperAttached) connectMock();
       return;
     }
     if (session.env === "local") {
@@ -338,9 +340,9 @@ export async function connectLiveBroker(): Promise<LiveConnectOutcome> {
 export async function switchLiveProfile(target: LiveProfileId, confirmProduction = false): Promise<ProfileSwitchOutcome> {
   const previous = useLiveStore.getState();
   try {
-    if (target === "paper") {
-      // Paper is a browser-local attachment and does not require Binance
-      // operator authentication or exchange credentials.
+    const hasServerProfile = previous.profileId !== null || useAppStore.getState().connectedBroker === "binance";
+    if (target === "paper" && !hasServerProfile) {
+      // Paper is a browser-local attachment when no server profile is active.
       detachClient();
       connectMock();
       return "paper";
@@ -353,15 +355,21 @@ export async function switchLiveProfile(target: LiveProfileId, confirmProduction
       return "unauthenticated";
     }
     setCsrf(session.csrf ?? null);
-    if (session.env === "local") {
-      useLiveStore.getState().notify("error", "Binance profiles are unavailable in local mode.");
-      return "error";
-    }
-
     stopSse();
     useLiveStore.getState().beginProfileSwitch();
     const response = await liveApi.switchProfile({ profileId: target, confirmProduction, requestId: requestId() });
-    const status = await waitForReady(response, target);
+    const status = target === "paper" ? response : await waitForReady(response, target);
+    if (target === "paper") {
+      if (status.profileId !== null || status.phase === "failed" || status.phase === "detached") {
+        applyProfileStatus(status);
+        throw new LiveApiError(status.reasonCode ?? "target_start_failed", PROFILE_ERROR_TEXT[status.reasonCode ?? ""] ?? "Paper Trading could not be selected.", 409);
+      }
+      detachClient(false);
+      applyProfileStatus(status);
+      connectMock();
+      return "paper";
+    }
+
     if (!isReady(status) || status.profileId !== target) {
       applyProfileStatus(status);
       throw new LiveApiError(status.reasonCode ?? "target_start_failed", PROFILE_ERROR_TEXT[status.reasonCode ?? ""] ?? "The requested profile is not ready.", 409);

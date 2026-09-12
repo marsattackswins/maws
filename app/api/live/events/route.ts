@@ -19,7 +19,7 @@ export async function GET(req: Request): Promise<Response> {
   } catch {
     return new Response("config invalid", { status: 503 });
   }
-  const ctx = authenticate(req, cfg);
+  const ctx = authenticate(req, cfg, { allowLocal: true });
   if (isAuthFailure(ctx)) return ctx.response;
 
   const encoder = new TextEncoder();

@@ -4,9 +4,11 @@ Complete API endpoint documentation for MAWS (Market Analysis & Workflow System)
 
 ## Authentication
 
-All API endpoints (except in local mode) require authentication via:
+Protected API endpoints require authentication via:
 - **Session Cookie**: `maws_session` HTTP-only cookie set by login
 - **Health Token**: `x-maws-health-token` header for health/admin endpoints
+
+Local Chart Only can read safe profile metadata without a session. Selecting a Binance profile and all live profile/state/mutation routes still require an authenticated operator session; mutating requests also require CSRF and origin checks.
 
 ## Response Format
 
@@ -66,7 +68,7 @@ Authenticate with operator credentials and create a session.
 **Headers**: Sets `maws_session` cookie
 
 **Error Responses**:
-- `403` - Authentication not used in local mode
+- `403` - Operator authentication is not configured for local Binance profile access
 - `401` - Invalid operator password
 - `429` - Too many login attempts
 
@@ -127,6 +129,61 @@ Revoke all operator sessions (emergency logout).
   "ok": true
 }
 ```
+
+---
+
+## Profile API
+
+### GET /api/live/profiles
+
+Return safe metadata for the available trading profiles. Credentials, endpoints, and other secrets are never returned.
+
+**Authentication**: Not required in local Chart Only; required in other environments
+
+**Response** (200 OK):
+```json
+{
+  "profiles": [
+    {
+      "profileId": "paper",
+      "label": "Paper",
+      "environment": "paper",
+      "configured": true,
+      "requiresProductionConfirmation": false,
+      "executionEnabled": false
+    }
+  ]
+}
+```
+
+---
+
+### GET /api/live/profile
+
+Return the server-confirmed active profile and readiness state.
+
+**Authentication**: Required (session cookie)
+
+The response identifies Chart Only with `profileId: null`. It does not expose credentials.
+
+---
+
+### POST /api/live/profile/switch
+
+Switch the server-managed profile, or detach to Chart Only/Paper Trading.
+
+**Authentication**: Required (session cookie, CSRF token, and valid origin)
+
+**Request Body**:
+```json
+{
+  "profileId": "binance-testnet",
+  "confirmProduction": false,
+  "requestId": "operator-switch-123"
+}
+```
+
+Supported profile IDs are `paper`, `binance-testnet`, and `binance-production`. Production additionally requires `confirmProduction: true`. Switching is fail-closed: open exposure, uncertain mutations, reconciliation drift, or failed readiness checks block or stop the transition.
 
 ---
 

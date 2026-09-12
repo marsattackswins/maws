@@ -66,7 +66,7 @@ POST /api/auth/revoke-all
 
 1. **Never commit secrets**: All secrets in environment variables only
 2. **Fail closed**: Missing or invalid secrets cause startup failure
-3. **Environment isolation**: Different credentials per environment
+3. **Profile isolation**: Separate credentials and persistence scopes for Testnet and Production
 4. **Minimal permissions**: Broker credentials have withdrawal disabled
 5. **Regular rotation**: Rotate API keys and passwords regularly
 
@@ -110,10 +110,12 @@ Output: 64 hex characters
 ### Secret Rotation
 
 #### Binance API Keys
-1. Generate new keys in Binance dashboard
-2. Update environment variables
-3. Restart MAWS service
+1. Generate new keys in the appropriate Binance dashboard
+2. Update the matching server-side profile variables
+3. Restart MAWS once to load changed credentials
 4. Revoke old keys after verification
+
+Changing between already-configured Testnet and Production profiles is done from the authenticated UI profile chooser and does not require an environment edit or restart.
 
 #### Operator Password
 1. Generate new hash with `npm run gen-operator-auth`
@@ -275,7 +277,7 @@ Recommended for all non-local deployments:
 
 ### Environment Enforcement
 
-- **Local mode**: Refuses broker credentials (fail closed)
+- **Local mode**: Starts without an active broker; profile-specific credentials may be loaded server-side for authenticated UI switching
 - **Production**: All risk limits must be positive finite numbers
 - **Shadow**: Read-only enforcement, zero submissions allowed
 

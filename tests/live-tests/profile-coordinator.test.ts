@@ -88,6 +88,48 @@ afterEach(() => {
 });
 
 describe("profile coordinator", () => {
+  test("starts local Chart Only without a manager and switches to Testnet then Paper", async () => {
+    const cfg = makeCfg({
+      env: "local",
+      activeProfileId: null,
+      binanceApiKey: null,
+      binanceApiSecret: null,
+      profiles: profileRegistry(),
+    });
+    const http = configure(cfg);
+
+    await profileCoordinator().ensureStarted();
+    expect(profileRuntimeStatus()).toMatchObject({
+      profileId: null,
+      environment: null,
+      phase: "idle",
+      ready: false,
+    });
+    expect(http.calls).toHaveLength(0);
+
+    const testnetSwitch = profileCoordinator().switchProfile({
+      profileId: "binance-testnet",
+      requestId: "local-testnet-switch",
+    });
+    await emitLatestStreamOpen();
+    await expect(testnetSwitch).resolves.toMatchObject({
+      profileId: "binance-testnet",
+      environment: "testnet",
+      ready: true,
+    });
+
+    await expect(profileCoordinator().switchProfile({
+      profileId: "paper",
+      requestId: "local-paper-switch",
+    })).resolves.toMatchObject({
+      profileId: null,
+      environment: null,
+      phase: "idle",
+      ready: false,
+    });
+    expect(profileRuntimeStatus().managerStatus).toBe("idle");
+  });
+
   test("owns one manager and selects trusted target credentials and endpoints", async () => {
     const cfg = makeCfg({ profiles: profileRegistry() });
     const http = configure(cfg);

@@ -62,7 +62,7 @@ describe("server profile configuration", () => {
 
   test("maps legacy MAWS_ENV values to safe profile identity", () => {
     const local = loadEnvConfig(env({}));
-    expect(local.activeProfileId).toBe("paper");
+    expect(local.activeProfileId).toBeNull();
     expect(local.profiles.paper.environment).toBe("paper");
 
     const testnet = loadEnvConfig(env({
@@ -119,15 +119,16 @@ describe("server profile configuration", () => {
     ).toThrow("MAWS_PROFILE_CONFIGURATION_INVALID");
   });
 
-  test("preserves local behavior and keeps shadow server-only", () => {
+  test("keeps local chart-only startup while exposing configured profiles", () => {
     const local = loadEnvConfig(env({
       MAWS_BINANCE_TESTNET_API_KEY: "testnet-key",
       MAWS_BINANCE_TESTNET_API_SECRET: "testnet-secret",
     }));
     expect(local.env).toBe("local");
-    expect(local.activeProfileId).toBe("paper");
+    expect(local.activeProfileId).toBeNull();
     expect(local.binanceApiKey).toBeNull();
     expect(local.binanceApiSecret).toBeNull();
+    expect(local.profiles["binance-testnet"].configured).toBe(true);
 
     const shadow = loadEnvConfig(env({
       MAWS_ENV: "shadow",

@@ -11,7 +11,7 @@ export async function GET(req: Request): Promise<Response> {
   } catch {
     return jsonError(503, "config", "Server configuration invalid");
   }
-  const auth = authenticate(req, cfg);
+  const auth = authenticate(req, cfg, { allowLocal: true });
   if (isAuthFailure(auth)) return auth.response;
   return jsonOk(profileRuntimeStatus());
 }

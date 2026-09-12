@@ -48,9 +48,10 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  // Xoomar's calendar endpoint does not document from/to query parameters.
+  // Fetch the current calendar snapshot and let MAWS apply the validated
+  // requested window in lib/calendar.ts.
   const url = new URL(XOOMAR_CALENDAR);
-  url.searchParams.set("from", from!);
-  url.searchParams.set("to", to!);
 
   try {
     const res = await fetch(url.toString(), {

@@ -70,6 +70,24 @@ describe("profile API", () => {
     expect((await confirmation.json()).error.code).toBe("production_confirmation_required");
   });
 
+  test("local Chart Only exposes safe metadata and allows authenticated profile detachment", async () => {
+    const localCfg = makeCfg({ env: "local", activeProfileId: null, binanceApiKey: null, binanceApiSecret: null });
+    freshEnv(localCfg);
+
+    const publicMetadata = await getProfiles(new Request("http://localhost:3000/api/live/profiles"));
+    expect(publicMetadata.status).toBe(200);
+    expect((await publicMetadata.json()).profiles).toHaveLength(3);
+
+    session = createSession("local-profile-api-test");
+    const detached = await switchProfile(authenticatedRequest("/api/live/profile/switch", {
+      method: "POST",
+      body: JSON.stringify({ profileId: "paper", requestId: "local-paper-switch" }),
+      headers: { "content-type": "application/json" },
+    }, session.csrfToken));
+    expect(detached.status).toBe(200);
+    expect((await detached.json()).profileId).toBeNull();
+  });
+
   test("returns no-store safe metadata and excludes internal profiles and secrets", async () => {
     const profiles = await getProfiles(authenticatedRequest("/api/live/profiles"));
     expect(profiles.headers.get("cache-control")).toBe("no-store");

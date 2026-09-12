@@ -14,7 +14,9 @@ export async function POST(req: Request): Promise<Response> {
   } catch {
     return jsonError(503, "config", "Server configuration invalid");
   }
-  if (cfg.env === "local") return jsonError(403, "env_local", "Authentication is not used in local mode");
+  if (cfg.env === "local" && !cfg.operatorAuth) {
+    return jsonError(403, "env_local", "Set MAWS_OPERATOR_AUTH before connecting a Binance profile");
+  }
 
   const guardReq: GuardRequest = {
     method: req.method,

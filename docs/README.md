@@ -85,10 +85,12 @@ graph TB
 
 MAWS supports four environment modes with progressively stricter requirements:
 
-- **local**: Paper trading only, no broker integration, no authentication required
-- **testnet**: Binance USD-M Futures Testnet, requires authentication and testnet credentials
+- **local**: Chart Only startup with no active broker; Paper, Testnet, and Production can be attached from the UI
+- **testnet**: Binance USD-M Futures Testnet startup context, requiring authentication and Testnet credentials
 - **shadow**: Production market data with read-only account, zero order submissions
-- **production**: Real trading, requires all risk limits and execution gates enabled
+- **production**: Real trading startup context, requiring all risk limits and execution gates enabled
+
+Normal local use keeps `MAWS_ENV=local`. The UI can attach a configured Testnet or Production profile without editing the environment or restarting. Binance credentials remain server-side.
 
 ### Broker Abstraction
 
@@ -226,7 +228,7 @@ docker run -p 3000:3000 --env-file .env maws
 
 ### Risk Controls
 
-- **Environment Enforcement**: Local mode refuses broker credentials
+- **Environment Enforcement**: Local startup does not activate a broker; profile-specific credentials are accepted for authenticated UI switching
 - **Production Requirements**: All risk limits must be positive finite numbers
 - **Execution Gates**: Dual requirement (static env var + runtime flag)
 - **Shadow Mode**: Read-only enforcement, zero submissions allowed
@@ -248,15 +250,18 @@ npm run dev
 #### Production
 
 ```bash
-# Set the startup environment (still authoritative in Phase 1)
-export MAWS_ENV=production
-export MAWS_DEFAULT_PROFILE=paper
+# Normal deployment starts in Chart Only and switches profiles from the UI
+export MAWS_ENV=local
 export MAWS_OPERATOR_AUTH=<salt:hash>
-export MAWS_BINANCE_PRODUCTION_API_KEY=<key>
-export MAWS_BINANCE_PRODUCTION_API_SECRET=<secret>
+export MAWS_BINANCE_TESTNET_API_KEY=<testnet-key>
+export MAWS_BINANCE_TESTNET_API_SECRET=<testnet-secret>
+export MAWS_BINANCE_PRODUCTION_API_KEY=<production-key>
+export MAWS_BINANCE_PRODUCTION_API_SECRET=<production-secret>
 export MAWS_BINANCE_PRODUCTION_EXECUTION_ENABLED=false
-# Legacy MAWS_BINANCE_API_KEY/SECRET remain supported during migration.
 # ... other required variables
+
+# Non-local MAWS_ENV=testnet|production|shadow startup modes remain supported
+# when a deployment intentionally wants one server-selected runtime.
 
 # Build and start
 npm run build

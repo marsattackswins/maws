@@ -75,7 +75,7 @@ function safeLoadError(error: unknown): string {
 function safeAuthError(error: unknown): string {
   if (error instanceof LiveAuthError) return "Invalid operator password.";
   if (error instanceof LiveApiError && error.code === "env_local") {
-    return "Binance profiles are unavailable in local mode.";
+    return "Set MAWS_OPERATOR_AUTH to connect a Binance profile from Chart Only.";
   }
   return "Operator authentication is unavailable. Try again.";
 }

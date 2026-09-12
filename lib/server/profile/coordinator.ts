@@ -85,7 +85,7 @@ function publicProfileId(config: EnvConfig): ProfileId | null {
 }
 
 function safeEnvironment(config: EnvConfig): ProfileRuntimeStatus["environment"] {
-  if (config.env === "local") return "paper";
+  if (config.activeProfileId === null) return null;
   if (config.env === "testnet") return "testnet";
   if (config.env === "production") return "production";
   return null;
@@ -215,6 +215,8 @@ export class ProfileCoordinator {
 
   async ensureStarted(): Promise<void> {
     if (this.switchPromise) return;
+    const base = serverConfig();
+    if (base.env === "local" && base.activeProfileId === null && !this.manager && !this.runtimeConfig) return;
     if (this.manager?.status === "ready" && this.phase === "ready") return;
     if (this.startPromise) return this.startPromise;
     const startup = this.startInitial();
@@ -256,12 +258,51 @@ export class ProfileCoordinator {
     }
     if (!safeRequestId(request.requestId)) throw new ProfileCoordinatorError("invalid_profile");
     const target = request.profileId;
-    const pending = this.performSwitch(target);
+    const pending = target === "paper" ? this.detachProfile() : this.performSwitch(target);
     const tracked = pending.finally(() => {
       if (this.switchPromise === tracked) this.switchPromise = null;
     });
     this.switchPromise = tracked;
     return tracked;
+  }
+
+  private async detachProfile(): Promise<ProfileRuntimeStatus> {
+    const base = serverConfig();
+    const previousManager = this.manager;
+    const previousConfig = this.runtimeConfig ?? base;
+    this.phase = "switching";
+    this.failureReason = null;
+    this.generation += 1;
+    blockNormalMutations("profile_switch_in_progress");
+
+    try {
+      await this.checkExposure(previousManager, previousConfig);
+      if (previousManager) await previousManager.stopAndWait();
+    } catch (error) {
+      this.phase = previousManager?.status === "ready" ? "ready" : "failed";
+      this.failureReason = error instanceof ProfileCoordinatorError ? error.code : "target_start_failed";
+      allowNormalMutations();
+      throw error instanceof ProfileCoordinatorError
+        ? error
+        : new ProfileCoordinatorError("target_start_failed");
+    }
+
+    this.manager = null;
+    this.runtimeConfig = {
+      ...base,
+      env: "local",
+      activeProfileId: null,
+      binanceApiKey: null,
+      binanceApiSecret: null,
+    };
+    clearBrokerForCoordinator();
+    clearLiveManagerForCoordinator();
+    clearLiveState();
+    resetHealthSignals();
+    this.phase = "idle";
+    this.failureReason = null;
+    allowNormalMutations();
+    return this.getStatus();
   }
 
   private async performSwitch(target: ProfileId): Promise<ProfileRuntimeStatus> {

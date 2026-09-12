@@ -11,7 +11,7 @@ export async function GET(req: Request): Promise<Response> {
   } catch {
     return jsonError(503, "config", "Server configuration invalid");
   }
-  const ctx = authenticate(req, cfg);
+  const ctx = authenticate(req, cfg, { allowLocal: true });
   if (isAuthFailure(ctx)) return ctx.response;
   return jsonOk({
     account: accountDto(),

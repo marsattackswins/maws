@@ -186,6 +186,20 @@ describe("authenticate guard chain", () => {
     }
   });
 
+  test("local-safe live routes still require an operator session", async () => {
+    const localCfg = makeCfg({ env: "local", activeProfileId: null, binanceApiKey: null, binanceApiSecret: null });
+    freshEnv(localCfg);
+
+    const missing = authenticate(mkReq("GET"), localCfg, { allowLocal: true });
+    expect(isAuthFailure(missing)).toBe(true);
+    if (isAuthFailure(missing)) expect(missing.response.status).toBe(401);
+
+    const { sessionId } = createSession("local-safe-route");
+    const cookie = `${sessionCookieName(secureCookieContext(localCfg))}=${sessionId}`;
+    const authenticated = authenticate(mkReq("GET", { cookie }), localCfg, { allowLocal: true });
+    expect(isAuthFailure(authenticated)).toBe(false);
+  });
+
   test("missing session -> 401", async () => {
     const ctx = authenticate(mkReq("GET"), makeCfg());
     expect(isAuthFailure(ctx)).toBe(true);

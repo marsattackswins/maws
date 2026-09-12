@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-MAWS requires authentication for non-local environments to prevent unauthorized access to trading operations. The system needs to balance security with usability.
+MAWS requires authentication for operator access to trading operations and Binance profile switching. The system starts in local Chart Only without an active broker, while still allowing an authenticated operator to attach a configured Binance profile without changing the server's startup configuration.
 
 ### Problem
 
@@ -95,9 +95,11 @@ interface Session {
 ### Authentication Guard
 
 ```typescript
-function authenticate(req: Request, cfg: EnvConfig): AuthContext {
-  // Skip auth in local mode
-  if (cfg.env === "local") return { authenticated: true, sessionId: null };
+function authenticate(req: Request, cfg: EnvConfig, options = {}): AuthContext {
+  // Only explicitly designated local-safe routes may run in local mode.
+  if (cfg.env === "local" && options.allowLocal !== true) {
+    return { authenticated: false, response: 403 };
+  }
 
   // Validate session cookie
   const sessionId = extractSessionCookie(req);
@@ -220,12 +222,17 @@ POST /api/auth/revoke-all
 
 ## Implementation Notes
 
-### Local Mode Exception
+### Local Chart Only
 
-In `MAWS_ENV=local`, authentication is skipped:
-- No password required
-- No session validation
-- Simplified for development
+`MAWS_ENV=local` is the normal single startup context for the UI:
+
+- The server starts with no active trading profile and does not start a broker manager.
+- Charting and public market-data workflows remain available.
+- Safe profile metadata can be displayed without a session.
+- Attaching Testnet or Production requires `MAWS_OPERATOR_AUTH`, a valid session, CSRF/origin checks, configured profile credentials, and normal readiness gates.
+- Paper Trading remains browser-local and never sends orders to Binance.
+
+The default authentication guard still blocks routes that are not explicitly marked as local-safe; local mode is not a blanket authentication bypass.
 
 ### Session Expiry
 
@@ -243,13 +250,19 @@ Set security headers on responses:
 
 ## Configuration
 
-Required environment variables for non-local:
+Typical single-profile local configuration:
 
 ```bash
-MAWS_ENV=testnet|shadow|production
+MAWS_ENV=local
 MAWS_OPERATOR_AUTH=<salt:hash>
+MAWS_BINANCE_TESTNET_API_KEY=<testnet-key>
+MAWS_BINANCE_TESTNET_API_SECRET=<testnet-secret>
+MAWS_BINANCE_PRODUCTION_API_KEY=<production-key>
+MAWS_BINANCE_PRODUCTION_API_SECRET=<production-secret>
 MAWS_ALLOWED_ORIGIN=https://terminal.example.com
 ```
+
+`MAWS_OPERATOR_AUTH` is required when attaching a Binance profile from local mode. Non-local startup modes remain supported for server-managed deployments and require their normal credentials and authentication.
 
 ## References
 
