@@ -17,7 +17,7 @@ import type { Drawing } from "@/types";
  *     indicatorSettingsId / settingsOpen / contextMenu, syncs selection);
  *   - persistence boundary: drawingTool/stayInDrawingMode/magnet/drawingsHidden
  *     stay persisted, drawingHistory/drawingHistoryIndex/selectedDrawingId/
- *     drawingSettingsTarget stay runtime-only (49-key schema itself is pinned
+ *     drawingSettingsTarget stay runtime-only (50-key schema itself is pinned
  *     by tests/persistence-compat.test.ts);
  *   - normalizeDrawingRehydrate keeps the drawingTool reset and normalizes any
  *     hydrated drawingSettingsTarget back to null;

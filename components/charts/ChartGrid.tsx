@@ -3,7 +3,7 @@
 import { ChartPane } from "@/components/charts/ChartPane";
 import { frToTemplate, layoutKey, layoutTemplate } from "@/lib/layouts";
 import { useAppStore } from "@/lib/store";
-import { useRef, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
 
 const MIN_FR = 0.15;
 
@@ -18,6 +18,7 @@ export function ChartGrid() {
   const maximizedPaneId = useAppStore((s) => s.maximizedPaneId);
   const layoutTracks = useAppStore((s) => s.layoutTracks);
   const setLayoutTracks = useAppStore((s) => s.setLayoutTracks);
+  const clearFocusedPane = useAppStore((s) => s.clearFocusedPane);
   const template = layoutTemplate(layoutCount, orientation);
   const key = layoutKey(layoutCount, orientation);
   const stored = layoutTracks[key];
@@ -28,6 +29,17 @@ export function ChartGrid() {
   const visible = panes.slice(0, layoutCount);
   const maximized = visible.find((p) => p.id === maximizedPaneId);
   const gridRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (!useAppStore.getState().focusedPane) return;
+      event.preventDefault();
+      clearFocusedPane();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [clearFocusedPane]);
 
   const startResize = (
     event: ReactMouseEvent,

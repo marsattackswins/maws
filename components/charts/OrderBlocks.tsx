@@ -55,6 +55,8 @@ export function OrderBlocks({ pane }: { pane: ChartPaneState }) {
   const paneStudies = useAppStore(
     (s) => s.panes.find((p) => p.id === pane.id)?.studies,
   );
+  const indicatorsHidden = useAppStore((s) => s.indicatorsHidden);
+  const focusedPane = useAppStore((s) => s.focusedPane);
   const hasOb = useMemo(
     () => (paneStudies ?? []).some((s) => s.type === "ob"),
     [paneStudies],
@@ -65,8 +67,8 @@ export function OrderBlocks({ pane }: { pane: ChartPaneState }) {
       (paneStudies ?? [])
         .filter((s) => s.type === "ob")
         .map((s) => `${s.id}:${s.hidden ? 1 : 0}:${JSON.stringify(s.settings)}`)
-        .join("|"),
-    [paneStudies],
+        .join("|") + `:${indicatorsHidden ? "hidden" : "visible"}`,
+    [paneStudies, indicatorsHidden],
   );
 
   useEffect(() => {
@@ -90,6 +92,31 @@ export function OrderBlocks({ pane }: { pane: ChartPaneState }) {
       }
       const candles = mawsFeed.getCandles(pane.symbol, pane.timeframe);
       if (candles.length === 0) {
+        svg.innerHTML = "";
+        return;
+      }
+
+      // Order blocks use main-price coordinates. Keep the overlay constrained to
+      // the main Lightweight Charts pane instead of the whole chart host, which
+      // also contains the indicator panes below it.
+      const host = svg.parentElement;
+      const mainPane = handle.chart.panes()[0]?.getHTMLElement();
+      if (!host || !mainPane) {
+        svg.innerHTML = "";
+        return;
+      }
+      const hostRect = host.getBoundingClientRect();
+      const mainRect = mainPane.getBoundingClientRect();
+      const top = Math.max(0, mainRect.top - hostRect.top);
+      const bottom = Math.min(hostRect.bottom, mainRect.bottom);
+      const height = Math.max(0, bottom - Math.max(hostRect.top, mainRect.top));
+      svg.style.left = "0";
+      svg.style.right = "auto";
+      svg.style.top = `${top}px`;
+      svg.style.bottom = "auto";
+      svg.style.height = `${height}px`;
+      svg.style.width = `${hostRect.width}px`;
+      if (height === 0) {
         svg.innerHTML = "";
         return;
       }
@@ -120,7 +147,7 @@ export function OrderBlocks({ pane }: { pane: ChartPaneState }) {
 
       for (const study of studies) {
         seen.add(study.id);
-        if (study.hidden) continue;
+        if (indicatorsHidden || study.hidden) continue;
         const s = study.settings as ObIndicatorSettings;
         if (!isVisibleOnTimeframe(s.visibility, tf)) continue;
 
@@ -241,7 +268,7 @@ export function OrderBlocks({ pane }: { pane: ChartPaneState }) {
       unsub();
       detach();
     };
-  }, [pane.id, pane.symbol, pane.timeframe, sig]);
+  }, [pane.id, pane.symbol, pane.timeframe, sig, indicatorsHidden, focusedPane]);
 
   if (!hasOb) return null;
 

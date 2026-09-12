@@ -27,11 +27,13 @@ import type { ChartPaneState } from "@/types";
  *     guards, MATIC→POL / EURUSD renames, indicator-settings normalization,
  *     seeded-template filtering, drawing normalization, template rematch);
  *   - persistence compat: workspacePartialize still reads every persisted
- *     chart field from the composed store (49-key schema itself is pinned by
+ *     chart field from the composed store (50-key schema itself is pinned by
  *     tests/persistence-compat.test.ts);
  *   - cross-slice defaultLeverage contract: patchSymbolTrading's fallback
  *     still reads chartSettings.defaultLeverage (read-only) and
  *     resetPaperAccount (root-owned, untouched) still writes it;
+ *   - the collective indicator visibility switch preserves each study's own
+ *     hidden setting;
  *   - atomicity: counting-set harness proves setSymbol / setIndicatorSettingsOpen
  *     / applyChartTemplate perform exactly ONE set() with narrow patches.
  */
@@ -45,10 +47,12 @@ const CHART_FIELDS = [
   "panes",
   "range",
   "indicatorSettingsId",
+  "indicatorsHidden",
   "indicatorSettings",
   "chartSettings",
   "alerts",
   "maximizedPaneId",
+  "focusedPane",
   "autoScaleByPane",
   "paneStretchFactors",
   "replay",
@@ -100,11 +104,13 @@ describe("chart-slice defaults (real root store)", () => {
     });
     expect(s.range).toBe("All");
     expect(s.indicatorSettingsId).toBeNull();
+    expect(s.indicatorsHidden).toBe(false);
     expect(s.indicatorSettings).toEqual(DEFAULT_INDICATOR_SETTINGS);
     expect(s.chartSettings).toEqual(DEFAULT_CHART_SETTINGS);
     expect(s.chartSettings.defaultLeverage).toBe(10);
     expect(s.alerts).toEqual([]);
     expect(s.maximizedPaneId).toBeNull();
+    expect(s.focusedPane).toBeNull();
     expect(s.autoScaleByPane).toEqual({});
     expect(s.paneStretchFactors).toEqual({});
     expect(s.replay).toBeNull();
@@ -221,6 +227,18 @@ describe("chart-slice actions (real root store)", () => {
     expect(now.indicatorSettingsId).toBeNull();
   });
 
+  it("setIndicatorsHidden hides indicators without changing individual visibility", () => {
+    const s = useAppStore.getState();
+    const studyId = useAppStore.getState().panes[0]?.studies[0]?.id as string;
+    s.setIndicatorHidden(studyId, true);
+    s.setIndicatorsHidden(true);
+    expect(useAppStore.getState().indicatorsHidden).toBe(true);
+    expect(useAppStore.getState().panes[0]?.studies[0]?.hidden).toBe(true);
+    s.setIndicatorsHidden(false);
+    expect(useAppStore.getState().indicatorsHidden).toBe(false);
+    expect(useAppStore.getState().panes[0]?.studies[0]?.hidden).toBe(true);
+  });
+
   it("setIndicatorHidden toggles a single study instance", () => {
     const s = useAppStore.getState();
     const studyId = useAppStore.getState().panes[0]?.studies[0]?.id as string;
@@ -332,6 +350,13 @@ describe("chart-slice actions (real root store)", () => {
     expect(useAppStore.getState().maximizedPaneId).toBe("pane-3");
     s.setMaximizedPane(null);
     expect(useAppStore.getState().maximizedPaneId).toBeNull();
+    s.toggleFocusedPane("pane-0", "main");
+    expect(useAppStore.getState().focusedPane).toEqual({
+      chartPaneId: "pane-0",
+      paneId: "main",
+    });
+    s.toggleFocusedPane("pane-0", "main");
+    expect(useAppStore.getState().focusedPane).toBeNull();
     s.setPaneAutoScale("pane-0", false);
     expect(useAppStore.getState().autoScaleByPane["pane-0"]).toBe(false);
     s.setPaneStretchFactors("pane-0", { main: 2, byStudyId: { s1: 1 } });

@@ -41,6 +41,7 @@ import { mawsFeed } from "@/lib/maws/feed";
 import { useCandleDebug } from "@/lib/market/candle-debug";
 import { formatTicker, getSymbol, symbolColor } from "@/lib/maws/universe";
 import { assetLogoLetter, assetLogoSrc } from "@/lib/maws/asset-logo";
+import { MAIN_PRICE_PANE_ID } from "@/lib/slices/chart-slice";
 import { useAppStore } from "@/lib/store";
 import { studiesOfType } from "@/lib/studies";
 import { chartOptions, TV } from "@/lib/theme";
@@ -87,6 +88,8 @@ import { createPortal } from "react-dom";
 type Props = {
   pane: ChartPaneState;
   active: boolean;
+  /** Hide the main price legend while an indicator pane is focused. */
+  showMainLegend?: boolean;
   onSymbolClick?: () => void;
   onCrosshair?: (hover: ChartHover) => void;
   onStudyLayouts?: (layouts: StudyPaneLayout[]) => void;
@@ -165,7 +168,7 @@ function createIndicatorSeriesMaps(): IndicatorSeriesMaps {
   };
 }
 
-function studyIsVisible(study: IndicatorInstance, timeframe: ChartPaneState["timeframe"]) {
+function baseStudyIsVisible(study: IndicatorInstance, timeframe: ChartPaneState["timeframe"]) {
   return !study.hidden && isVisibleOnTimeframe(study.settings.visibility, timeframe);
 }
 
@@ -758,6 +761,7 @@ function formatVol(value: number) {
 export const ChartCanvas = memo(function ChartCanvas({
   pane,
   active,
+  showMainLegend = true,
   onSymbolClick,
   onCrosshair,
   onStudyLayouts,
@@ -767,6 +771,8 @@ export const ChartCanvas = memo(function ChartCanvas({
   const countdownRef = useRef<HTMLDivElement>(null);
   const [legendTooltip, setLegendTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
   const settings = useAppStore((s) => s.chartSettings);
+  const indicatorsHidden = useAppStore((s) => s.indicatorsHidden);
+  const focusedPane = useAppStore((s) => s.focusedPane);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   // Dev-only candle-pipeline diagnostics (NEXT_PUBLIC_DEBUG_CANDLES=true).
@@ -779,6 +785,8 @@ export const ChartCanvas = memo(function ChartCanvas({
   const liveStudies = useAppStore(
     (s) => s.panes.find((p) => p.id === pane.id)?.studies ?? pane.studies,
   );
+  const studyIsVisible = (study: IndicatorInstance, timeframe: ChartPaneState["timeframe"]) =>
+    !indicatorsHidden && baseStudyIsVisible(study, timeframe);
   const applyRef = useRef<(candles: Candle[], fit: boolean) => void>(() => {});
   const onCrosshairRef = useRef(onCrosshair);
   onCrosshairRef.current = onCrosshair;
@@ -809,8 +817,8 @@ export const ChartCanvas = memo(function ChartCanvas({
     () =>
       JSON.stringify(
         liveStudies.map((s) => ({ id: s.id, hidden: s.hidden, settings: s.settings })),
-      ),
-    [liveStudies],
+      ) + `:${indicatorsHidden ? "hidden" : "visible"}`,
+    [liveStudies, indicatorsHidden],
   );
   const symbolRef = useRef(pane.symbol);
   const timeframeRef = useRef(pane.timeframe);
@@ -1461,6 +1469,8 @@ export const ChartCanvas = memo(function ChartCanvas({
       pointerDown = false;
       // One layout pass after interaction (separator / resize edge cases).
       scheduleStudyLayouts();
+      // Focus dimensions are temporary and must never replace the saved layout.
+      if (useAppStore.getState().focusedPane?.chartPaneId === pane.id) return;
       persistStretchFactors();
     };
     el.addEventListener("pointerdown", onPanePointerDown);
@@ -2707,23 +2717,52 @@ export const ChartCanvas = memo(function ChartCanvas({
       return null;
     };
 
+    const lastDblClickHandledAt = { current: 0 };
+    const markDblClickHandled = () => {
+      lastDblClickHandledAt.current = performance.now();
+    };
+    const resolvePaneTarget = (param: MouseEventParams): string | null => {
+      if (!(param.point ?? lastHover?.point)) return null;
+      const paneIdx = param.paneIndex ?? lastHover?.paneIndex ?? 0;
+      return paneIdx === 0 ? MAIN_PRICE_PANE_ID : paneStudies[paneIdx - 1]?.id ?? null;
+    };
+    const togglePaneFocus = (param: MouseEventParams): boolean => {
+      const target = resolvePaneTarget(param);
+      if (!target) return false;
+      useAppStore.getState().toggleFocusedPane(pane.id, target);
+      return true;
+    };
+
     const onDblClick = (param: MouseEventParams) => {
       if (useAppStore.getState().drawingTool !== "cursor") return;
       if (useAppStore.getState().drawingSettingsTarget) return;
       const id = resolveIndicatorHit(param);
-      if (id) useAppStore.getState().setIndicatorSettingsOpen(id);
+      if (id) {
+        useAppStore.getState().setIndicatorSettingsOpen(id);
+        markDblClickHandled();
+      } else if (togglePaneFocus(param)) {
+        markDblClickHandled();
+      }
     };
     chart.subscribeDblClick(onDblClick);
 
     const onNativeDblClick = (e: MouseEvent) => {
       if (useAppStore.getState().drawingTool !== "cursor") return;
       if (useAppStore.getState().drawingSettingsTarget) return;
-      // Use last crosshair sample (includes seriesData / paneIndex)
+      // Lightweight Charts does not consistently include pane/series data in its
+      // dblclick payload, so use the last crosshair sample as a native fallback.
+      if (performance.now() - lastDblClickHandledAt.current < 250) return;
       if (!lastHover?.point) return;
-      const id = resolveIndicatorHit(lastHover);
-      if (!id) return;
-      e.preventDefault();
-      useAppStore.getState().setIndicatorSettingsOpen(id);
+      const payload = lastHover;
+      const id = resolveIndicatorHit(payload);
+      if (id) {
+        e.preventDefault();
+        useAppStore.getState().setIndicatorSettingsOpen(id);
+        markDblClickHandled();
+      } else if (togglePaneFocus(payload)) {
+        e.preventDefault();
+        markDblClickHandled();
+      }
     };
     el.addEventListener("dblclick", onNativeDblClick);
 
@@ -2861,6 +2900,83 @@ export const ChartCanvas = memo(function ChartCanvas({
     // can update in place without losing its zoom or scroll position.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pane.id, pane.timeframe, studiesStructureKey, seriesKind]);
+
+  // Focus mode: stretch factors allocate canvas space correctly, but LWC enforces a ~2px
+  // minimum per pane even at factor 0 — visible as slivers. We also hide the <tr> rows
+  // for non-focused panes directly in the DOM so they truly collapse to zero.
+  useEffect(() => {
+    const handle = getChart(pane.id);
+    if (!handle) return;
+
+    const target = focusedPane?.chartPaneId === pane.id ? focusedPane.paneId : null;
+    const paneStudies = liveStudies.filter(
+      (study): study is IndicatorInstance & { type: StudyPaneId } => isPaneStudyId(study.type),
+    );
+    const validTarget =
+      target === MAIN_PRICE_PANE_ID || paneStudies.some((study) => study.id === target)
+        ? target
+        : null;
+    const savedStretch = useAppStore.getState().paneStretchFactors[pane.id];
+    const chartPanes = handle.chart.panes();
+
+    // Step 1: Set stretch factors so LWC allocates the right canvas size.
+    chartPanes[0]?.setStretchFactor(
+      validTarget == null
+        ? savedStretch?.main ?? (paneStudies.length > 0 ? 3 : 1)
+        : validTarget === MAIN_PRICE_PANE_ID
+          ? 1
+          : 0,
+    );
+    for (let i = 0; i < paneStudies.length; i++) {
+      const study = paneStudies[i];
+      chartPanes[i + 1]?.setStretchFactor(
+        validTarget == null
+          ? savedStretch?.byStudyId[study.id] ?? 0.7
+          : validTarget === study.id
+            ? 1
+            : 0,
+      );
+    }
+
+    // Step 2: Determine which LWC pane index is focused.
+    const focusedLwcPaneIdx =
+      validTarget === null
+        ? null
+        : validTarget === MAIN_PRICE_PANE_ID
+          ? 0
+          : paneStudies.findIndex((s) => s.id === validTarget) + 1;
+
+    // Step 3: Toggle <tr> visibility so collapsed panes take zero space.
+    // LWC's chart table structure: [pane0, sep0, pane1, sep1, ..., paneN, timeAxis]
+    const chartEl = handle.chart.chartElement();
+    const table = chartEl.querySelector('table');
+    if (!table) return;
+
+    const allRows = Array.from(table.querySelectorAll('tr')) as HTMLElement[];
+    // The very last <tr> in the LWC table is always the time axis — keep it visible.
+    const timeAxisRow = allRows.at(-1) ?? null;
+    // PaneApi.getHTMLElement() returns the pane's <tr>.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const focusedPaneRow: HTMLElement | null =
+      focusedLwcPaneIdx !== null
+        ? (((chartPanes[focusedLwcPaneIdx] as unknown) as { getHTMLElement?(): HTMLElement | null })
+            .getHTMLElement?.() ?? null)
+        : null;
+
+    for (const row of allRows) {
+      if (validTarget === null || row === focusedPaneRow || row === timeAxisRow) {
+        row.style.removeProperty('display');
+      } else {
+        row.style.display = 'none';
+      }
+    }
+
+    return () => {
+      for (const row of allRows) {
+        row.style.removeProperty('display');
+      }
+    };
+  }, [focusedPane, liveStudies, pane.id, studiesStructureKey]);
 
   // Watermark is a pane primitive: create/detach it here so the Watermark setting and its
   // colour apply live without recreating the chart. Shares the chart-setup effect's identity
@@ -3444,13 +3560,14 @@ export const ChartCanvas = memo(function ChartCanvas({
       <div
         ref={legendRef}
         className={`legend pointer-events-auto absolute left-2 top-1 z-30 flex flex-wrap items-center gap-x-2 text-[11px] text-[#d1d4dc] ${
-          settings.showLogo ||
-          settings.showTitle ||
-          settings.showMarketStatus ||
-          settings.showChartValues ||
-          settings.showBarChange ||
-          settings.showVolume ||
-          settings.showLastDayChange
+          showMainLegend &&
+          (settings.showLogo ||
+            settings.showTitle ||
+            settings.showMarketStatus ||
+            settings.showChartValues ||
+            settings.showBarChange ||
+            settings.showVolume ||
+            settings.showLastDayChange)
             ? ""
             : "hidden"
         }`}

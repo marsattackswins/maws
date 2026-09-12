@@ -10,7 +10,8 @@ import { SessionBreaks } from "@/components/charts/SessionBreaks";
 import { OrderBlocks } from "@/components/charts/OrderBlocks";
 import { DrawingOverlay } from "@/components/drawings/DrawingOverlay";
 import { getChart } from "@/lib/chart-registry";
-import { OVERLAY_INDICATORS } from "@/lib/indicators";
+import { MAIN_PRICE_PANE_ID } from "@/lib/slices/chart-slice";
+import { OVERLAY_INDICATORS, PANE_INDICATORS } from "@/lib/indicators";
 import { useAppStore } from "@/lib/store";
 import type { ChartPaneState } from "@/types";
 import { Maximize2, Minimize2 } from "lucide-react";
@@ -42,6 +43,7 @@ export function ChartPane({ pane }: Props) {
   const showIndicatorLegend = useAppStore((s) => s.chartSettings.showIndicatorLegend);
   const chartBg = useAppStore((s) => s.chartSettings.backgroundColor);
   const maximizedPaneId = useAppStore((s) => s.maximizedPaneId);
+  const focusedPane = useAppStore((s) => s.focusedPane);
   const setMaximizedPane = useAppStore((s) => s.setMaximizedPane);
   const [studyLayouts, setStudyLayouts] = useState<StudyPaneLayout[]>([]);
   const [selectedStudyId, setSelectedStudyId] = useState<string | null>(null);
@@ -55,6 +57,15 @@ export function ChartPane({ pane }: Props) {
   const active = pane.id === activePaneId;
   const maximized = maximizedPaneId === pane.id;
   const showMaximize = layoutCount > 1 || Boolean(maximizedPaneId);
+  const requestedFocus = focusedPane?.chartPaneId === pane.id ? focusedPane.paneId : null;
+  const focusedTarget =
+    requestedFocus === MAIN_PRICE_PANE_ID ||
+    pane.studies.some(
+      (study) => study.id === requestedFocus && PANE_INDICATORS.includes(study.type),
+    )
+      ? requestedFocus
+      : null;
+  const showMainLegend = focusedTarget === null || focusedTarget === MAIN_PRICE_PANE_ID;
 
   const onSymbolClick = useCallback(() => {
     setActivePane(pane.id);
@@ -100,6 +111,7 @@ export function ChartPane({ pane }: Props) {
         <ChartCanvas
           pane={pane}
           active={active}
+          showMainLegend={showMainLegend}
           onSymbolClick={onSymbolClick}
           onStudyLayouts={onStudyLayouts}
         />
@@ -111,7 +123,7 @@ export function ChartPane({ pane }: Props) {
             showStatusLine ? "top-7" : "top-1"
           }`}
         >
-          {showIndicatorLegend && (
+          {showIndicatorLegend && showMainLegend && (
             <IndicatorLegend
               pane={pane}
               ids={[...OVERLAY_INDICATORS]}
@@ -121,21 +133,23 @@ export function ChartPane({ pane }: Props) {
           )}
         </div>
         {showIndicatorLegend &&
-          studyLayouts.map((layout) => (
-            <div
-              key={`${pane.id}-${layout.instanceId}-legend`}
-              className="pointer-events-none absolute left-2 z-30"
-              style={{ top: Math.max(2, layout.top + 2) }}
-            >
-              <IndicatorLegend
-                pane={pane}
-                instanceIds={[layout.instanceId]}
-                showCollapse={false}
-                selectedId={effectiveSelectedId}
-                onSelect={setSelectedStudyId}
-              />
-            </div>
-          ))}
+          studyLayouts
+            .filter((layout) => focusedTarget === null || focusedTarget === layout.instanceId)
+            .map((layout) => (
+              <div
+                key={`${pane.id}-${layout.instanceId}-legend`}
+                className="pointer-events-none absolute left-2 z-30"
+                style={{ top: Math.max(2, layout.top + 2) }}
+              >
+                <IndicatorLegend
+                  pane={pane}
+                  instanceIds={[layout.instanceId]}
+                  showCollapse={false}
+                  selectedId={effectiveSelectedId}
+                  onSelect={setSelectedStudyId}
+                />
+              </div>
+            ))}
         {showPlusButton && <CrosshairPlus pane={pane} suppress={overMaximize} />}
         <ChartNavigation
           paneId={pane.id}

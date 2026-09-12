@@ -11,13 +11,13 @@ import {
  * Automated persistence-compatibility guard for the single workspace key
  * (maws.workspace.v6). Replaces "diff the persisted schema by eye":
  *
- *   1. partialize output must contain EXACTLY the approved 49-key set;
+ *   1. partialize output must contain EXACTLY the approved 50-key set;
  *   2. runtime-only fields (feed values, menus, drawing session state) must
  *      never be persisted — hotSymbols included, from the moment it exists;
  *   3. partialize output must be JSON-serializable;
  *   4. hydrating the REAL root store from a representative legacy V6 fixture
  *      must restore the normalized state (renames, merges, migrations);
- *   5. the debounced write path must persist exactly the same 49-key set.
+ *   5. the debounced write path must persist exactly the same 50-key set;
  *
  * The store is imported fresh via jest.isolateModules with a minimal
  * window/localStorage stub (jest env is "node"). zustand's persist hydration
@@ -46,6 +46,7 @@ const EXPECTED_PERSISTED_KEYS = [
   "drawingTool",
   "drawingsHidden",
   "indicatorSettings",
+  "indicatorsHidden",
   "indicatorTemplates",
   "journal",
   "layoutCount",
@@ -78,8 +79,8 @@ const EXPECTED_PERSISTED_KEYS = [
   "watchlistGroups",
   "watchlistHeight",
 ].sort();
-if (EXPECTED_PERSISTED_KEYS.length !== 49) {
-  throw new Error("Approved persisted key set must contain exactly 49 keys");
+if (EXPECTED_PERSISTED_KEYS.length !== 50) {
+  throw new Error("Approved persisted key set must contain exactly 50 keys");
 }
 
 /** Fields that must NEVER be persisted (runtime-only by design). */
@@ -208,7 +209,7 @@ describe("persistence compatibility (maws.workspace.v6)", () => {
     uninstallWindow();
   });
 
-  it("partialize outputs exactly the approved 49-key set", () => {
+  it("partialize outputs exactly the approved 50-key set", () => {
     installWindow();
     const { useAppStore, workspacePartialize } = freshStore();
     const out = workspacePartialize(useAppStore.getState());
@@ -326,7 +327,7 @@ describe("persistence compatibility (maws.workspace.v6)", () => {
     expect(useAppStore.getState().rightDock).toBe("strategy");
   });
 
-  it("debounced write path persists exactly the 49-key set", () => {
+  it("debounced write path persists exactly the 50-key set", () => {
     jest.useFakeTimers();
     const map = installWindow();
     const { useAppStore } = freshStore();

@@ -54,14 +54,24 @@ export type ChartRange =
   | "5Y"
   | "All";
 
+export const MAIN_PRICE_PANE_ID = "main";
+
+export type FocusedPane = {
+  chartPaneId: string;
+  paneId: string;
+} | null;
+
 export type ChartSliceState = WorkspaceState & {
   layoutSync: LayoutSync;
   range: ChartRange;
   indicatorSettingsId: string | null;
+  indicatorsHidden: boolean;
   indicatorSettings: IndicatorSettingsMap;
   chartSettings: ChartSettings;
   alerts: PriceAlert[];
   maximizedPaneId: string | null;
+  /** Temporary focus target within one chart; intentionally not persisted. */
+  focusedPane: FocusedPane;
   /** Per-pane price auto-scale (A button). Persisted across refresh. */
   autoScaleByPane: Record<string, boolean>;
   /**
@@ -95,6 +105,7 @@ export type ChartSliceActions = {
   removeIndicator: (instanceId: string, paneId?: string) => void;
   /** Clears every study on the pane. */
   clearIndicators: (paneId?: string) => void;
+  setIndicatorsHidden: (value: boolean) => void;
   setIndicatorHidden: (instanceId: string, hidden: boolean, paneId?: string) => void;
   updateStudySettings: (
     instanceId: string,
@@ -114,6 +125,8 @@ export type ChartSliceActions = {
   toggleAlert: (id: string) => void;
   removeAlert: (id: string) => void;
   setMaximizedPane: (id: string | null) => void;
+  toggleFocusedPane: (chartPaneId: string, paneId: string) => void;
+  clearFocusedPane: () => void;
   setPaneAutoScale: (paneId: string, on: boolean) => void;
   setPaneStretchFactors: (
     paneId: string,
@@ -194,10 +207,12 @@ export function createChartSlice(set: RootSet, get: RootGet): ChartSlice {
     panes: defaultPanes,
     range: "All",
     indicatorSettingsId: null,
+    indicatorsHidden: false,
     indicatorSettings: { ...DEFAULT_INDICATOR_SETTINGS },
     chartSettings: DEFAULT_CHART_SETTINGS,
     alerts: [],
     maximizedPaneId: null,
+    focusedPane: null,
     autoScaleByPane: {},
     paneStretchFactors: {},
     replay: null,
@@ -352,6 +367,7 @@ export function createChartSlice(set: RootSet, get: RootGet): ChartSlice {
         activeIndicatorTemplateId: pinned,
       });
     },
+    setIndicatorsHidden: (value) => set({ indicatorsHidden: value }),
     setIndicatorHidden: (instanceId, hidden, paneId) => {
       const id = paneId ?? get().activePaneId;
       const before = get().panes.find((p) => p.id === id);
@@ -538,6 +554,16 @@ export function createChartSlice(set: RootSet, get: RootGet): ChartSlice {
     removeAlert: (id) =>
       set({ alerts: get().alerts.filter((a) => a.id !== id) }),
     setMaximizedPane: (id) => set({ maximizedPaneId: id }),
+    toggleFocusedPane: (chartPaneId, paneId) => {
+      const current = get().focusedPane;
+      set({
+        focusedPane:
+          current?.chartPaneId === chartPaneId && current.paneId === paneId
+            ? null
+            : { chartPaneId, paneId },
+      });
+    },
+    clearFocusedPane: () => set({ focusedPane: null }),
     setPaneAutoScale: (paneId, on) =>
       set({
         autoScaleByPane: { ...get().autoScaleByPane, [paneId]: on },
@@ -702,6 +728,7 @@ export function normalizeChartRehydrate(state: Store): void {
   state.panes = (state.panes ?? [])
     .map((p) => ({ ...p, symbol: rename(p.symbol) }))
     .map((p) => (/^EURUSD$/i.test(p.symbol) ? { ...p, symbol: "BTCUSDT" } : p));
+  state.indicatorsHidden = state.indicatorsHidden === true;
   state.indicatorSettings = {
     volume: normalizeVolumeSettings(state.indicatorSettings?.volume),
     vwap: normalizeVwapSettings(state.indicatorSettings?.vwap),

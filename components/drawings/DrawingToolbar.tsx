@@ -3,7 +3,7 @@
 import { ToolbarBtn } from "@/components/ui/ToolbarBtn";
 import { useAppStore } from "@/lib/store";
 import type { DrawingTool } from "@/types";
-import { EyeOff, Lock, Magnet, Type, ZoomIn } from "lucide-react";
+import { Activity, Lock, Magnet, Pencil, Type, ZoomIn } from "lucide-react";
 import type { ReactNode } from "react";
 
 function Ico({ children }: { children: ReactNode }) {
@@ -189,8 +189,10 @@ export function DrawingToolbar() {
   const setMagnet = useAppStore((s) => s.setMagnet);
   const stay = useAppStore((s) => s.stayInDrawingMode);
   const setStay = useAppStore((s) => s.setStayInDrawingMode);
-  const hidden = useAppStore((s) => s.drawingsHidden);
-  const setHidden = useAppStore((s) => s.setDrawingsHidden);
+  const drawingsHidden = useAppStore((s) => s.drawingsHidden);
+  const setDrawingsHidden = useAppStore((s) => s.setDrawingsHidden);
+  const indicatorsHidden = useAppStore((s) => s.indicatorsHidden);
+  const setIndicatorsHidden = useAppStore((s) => s.setIndicatorsHidden);
   const activePaneId = useAppStore((s) => s.activePaneId);
   const clearDrawings = useAppStore((s) => s.clearDrawings);
 
@@ -219,8 +221,19 @@ export function DrawingToolbar() {
         <ToolbarBtn label="Stay in drawing mode" active={stay} onClick={() => setStay(!stay)}>
           <Lock size={15} />
         </ToolbarBtn>
-        <ToolbarBtn label="Hide drawings" active={hidden} onClick={() => setHidden(!hidden)}>
-          <EyeOff size={15} />
+        <ToolbarBtn
+          label={drawingsHidden ? "Show drawings" : "Hide drawings"}
+          active={drawingsHidden}
+          onClick={() => setDrawingsHidden(!drawingsHidden)}
+        >
+          <Pencil size={15} />
+        </ToolbarBtn>
+        <ToolbarBtn
+          label={indicatorsHidden ? "Show indicators" : "Hide indicators"}
+          active={indicatorsHidden}
+          onClick={() => setIndicatorsHidden(!indicatorsHidden)}
+        >
+          <Activity size={15} />
         </ToolbarBtn>
         <ToolbarBtn label="Clear pane drawings" onClick={() => clearDrawings(activePaneId)}>
           <span className="text-[10px] font-semibold">CLR</span>
