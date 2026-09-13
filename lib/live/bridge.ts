@@ -219,6 +219,7 @@ async function attachConfirmedProfile(status: ProfileRuntimeStatusDto, verifyAft
   }
   useLiveStore.getState().setAttached(true);
   useAppStore.getState().setConnectedBroker("binance");
+  useAppStore.getState().setBottomOpen(false);
   startSse(confirmed, epoch);
   return true;
 }

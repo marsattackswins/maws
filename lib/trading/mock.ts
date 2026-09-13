@@ -59,7 +59,7 @@ export function connectMock() {
     });
   }
   s.setBrokerDialogOpen(false);
-  s.setBottomTab("positions");
+  s.setBottomTabCollapsed("positions");
   if (s.bottomHeight < 240) s.setBottomHeight(260);
 }
 

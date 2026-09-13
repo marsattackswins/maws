@@ -93,10 +93,18 @@ export interface TradingHealthSnapshot {
   };
 }
 
+interface ExecutionReadiness {
+  profileExecutionEnabled: boolean;
+  runtimeEnabled: boolean;
+  canSubmit: boolean;
+  reasons: string[];
+}
+
 interface TradingHealthSectionProps {
   health: TradingHealthSnapshot | null;
   managerStatus: string | null;
   submissionsFrozen: boolean | null;
+  execution: ExecutionReadiness | null;
   loading: boolean;
   error: string | null;
 }
@@ -105,19 +113,18 @@ export default function TradingHealthSection({
   health,
   managerStatus,
   submissionsFrozen,
+  execution,
   loading,
   error,
 }: TradingHealthSectionProps) {
   return (
-    <section className="mt-8" aria-labelledby="trading-infrastructure-heading">
+    <section className="mt-8 rounded-lg bg-[#1e2329] p-6" aria-labelledby="trading-infrastructure-heading">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 id="trading-infrastructure-heading" className="text-xl font-semibold text-white">
             Server Trading
           </h2>
-          <p className="mt-1 text-sm text-[#787b86]">
-            Optional server-side order and account-stream health. This does not determine chart connectivity.
-          </p>
+
         </div>
         {health && <span className="text-xs text-[#787b86]">Updated {formatTime(health.timestamp)}</span>}
       </div>
@@ -129,12 +136,13 @@ export default function TradingHealthSection({
       ) : health ? (
         <div className="space-y-4">
           {error && <PanelMessage tone="yellow">Trading health refresh failed: {error}</PanelMessage>}
-          <TradingSummaryCard health={health} managerStatus={managerStatus} submissionsFrozen={submissionsFrozen} />
-          {isChartOnlyLocal(health, managerStatus) ? (
-            <PanelMessage>
-              Server-side trading is not running in chart-only mode. This is expected and does not affect Binance market data or the charts.
-            </PanelMessage>
-          ) : (
+          <TradingSummaryCard
+            health={health}
+            managerStatus={managerStatus}
+            submissionsFrozen={submissionsFrozen}
+            execution={execution}
+          />
+          {!isChartOnlyLocal(health, managerStatus) && (
             <>
               <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                 <FeedHealthSection health={health} />
@@ -156,37 +164,174 @@ export function TradingSummaryCard({
   health,
   managerStatus,
   submissionsFrozen,
+  execution,
 }: {
   health: TradingHealthSnapshot;
   managerStatus: string | null;
   submissionsFrozen: boolean | null;
+  execution: ExecutionReadiness | null;
 }) {
   const chartOnlyLocal = isChartOnlyLocal(health, managerStatus);
+  const submissionStatus = getSubmissionStatus(chartOnlyLocal, execution, submissionsFrozen);
+  const stream = health.feed.serverTradingStream;
+  const readinessChecks = buildReadinessChecks(health, managerStatus, execution);
+
   return (
-    <Panel title="Server Trading Summary">
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+    <div className="border-t border-[#2a2e39] pt-5">
+      <ExecutionStatusBanner
+        status={submissionStatus}
+        reason={getSubmissionReason(chartOnlyLocal, execution, submissionsFrozen)}
+      />
+      <div className="mt-5 grid grid-cols-2 gap-4 border-t border-[#2a2e39] pt-5 md:grid-cols-3">
+        <SummaryValue label="Mode" value={formatTradingMode(health.env)} />
+        <SummaryValue label="Server manager" value={formatManagerStatus(managerStatus)} />
         <SummaryValue
-          label="Overall"
-          value={<StatusBadge level={health.overall} label={chartOnlyLocal ? "Not running" : undefined} />}
-        />
-        <SummaryValue label="Environment" value={health.env} />
-        <SummaryValue label="Server manager" value={managerStatus ?? "N/A"} />
-        <SummaryValue
-          label="Submissions"
-          value={
-            chartOnlyLocal
-              ? "Disabled"
-              : submissionsFrozen == null
-                ? "N/A"
-                : submissionsFrozen
-                  ? "Frozen"
-                  : "Enabled"
-          }
-          valueClass={chartOnlyLocal ? "text-[#787b86]" : submissionsFrozen ? "text-[#f23645]" : "text-[#089981]"}
+          label="Account stream"
+          value={chartOnlyLocal ? "N/A" : stream.status === "open" ? "Healthy" : formatStreamStatus(stream.status)}
+          valueClass={chartOnlyLocal ? "text-[#787b86]" : stream.level === "healthy" ? "text-[#089981]" : "text-[#f7931a]"}
         />
       </div>
-    </Panel>
+      {!chartOnlyLocal && <ReadinessChecklist checks={readinessChecks} />}
+      {chartOnlyLocal && (
+        <div className="mt-5 border-t border-[#2a2e39] pt-4 text-sm text-[#787b86]">
+          Server-side trading is not running in chart-only mode. This is expected and does not affect Binance market data or the charts.
+        </div>
+      )}
+    </div>
   );
+}
+
+type SubmissionStatus = {
+  label: "Ready" | "Blocked" | "Unavailable";
+  level: TradingHealthLevel;
+};
+
+type ReadinessCheck = {
+  label: string;
+  detail: string;
+  ready: boolean;
+};
+
+function ExecutionStatusBanner({
+  status,
+  reason,
+}: {
+  status: SubmissionStatus;
+  reason: string;
+}) {
+  return (
+    <div className="rounded-md border border-[#2a2e39] bg-[#171b21] p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-xs uppercase tracking-wide text-[#787b86]">Order submissions</div>
+          <div className={`mt-1 text-xl font-semibold ${getStatusColor(status.level)}`}>{status.label}</div>
+        </div>
+        <StatusBadge level={status.level} label={status.label} />
+      </div>
+      <div className="mt-3 text-sm text-[#787b86]">Reason: {reason}</div>
+    </div>
+  );
+}
+
+function ReadinessChecklist({ checks }: { checks: ReadinessCheck[] }) {
+  return (
+    <div className="mt-5 border-t border-[#2a2e39] pt-5">
+      <div className="mb-3 font-medium text-white">Execution readiness</div>
+      <div className="grid gap-2 md:grid-cols-2">
+        {checks.map((check) => {
+          const Icon = check.ready ? CheckCircle : XCircle;
+          return (
+            <div key={check.label} className="flex items-start gap-2 text-sm">
+              <Icon size={16} className={check.ready ? "mt-0.5 shrink-0 text-[#089981]" : "mt-0.5 shrink-0 text-[#f23645]"} />
+              <div>
+                <div className="text-white">{check.label}</div>
+                <div className="text-xs text-[#787b86]">{check.detail}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function getSubmissionStatus(
+  chartOnlyLocal: boolean,
+  execution: ExecutionReadiness | null,
+  submissionsFrozen: boolean | null,
+): SubmissionStatus {
+  if (chartOnlyLocal) return { label: "Blocked", level: "unavailable" };
+  if (execution) return execution.canSubmit ? { label: "Ready", level: "healthy" } : { label: "Blocked", level: "degraded" };
+  if (submissionsFrozen == null) return { label: "Unavailable", level: "unavailable" };
+  return submissionsFrozen ? { label: "Blocked", level: "degraded" } : { label: "Ready", level: "healthy" };
+}
+
+function getSubmissionReason(
+  chartOnlyLocal: boolean,
+  execution: ExecutionReadiness | null,
+  submissionsFrozen: boolean | null,
+): string {
+  if (chartOnlyLocal) return "Chart-only mode keeps order submissions blocked.";
+  const reason = execution?.reasons[0];
+  if (reason?.includes("runtime execution flag")) return "The runtime execution switch is off.";
+  if (reason?.includes("disabled by configuration")) return "The profile execution gate is off.";
+  if (reason?.includes("stream")) return "The private account stream is not ready.";
+  if (reason) return reason;
+  if (submissionsFrozen) return "Safety checks are blocking submissions.";
+  return execution || submissionsFrozen !== null ? "All available checks passed." : "Execution readiness is unavailable.";
+}
+
+function buildReadinessChecks(
+  health: TradingHealthSnapshot,
+  managerStatus: string | null,
+  execution: ExecutionReadiness | null,
+): ReadinessCheck[] {
+  const environmentReady = health.env === "testnet" || health.env === "production";
+  const stream = health.feed.serverTradingStream;
+  return [
+    { label: "Order environment", detail: environmentReady ? formatTradingMode(health.env) : "Chart-only mode", ready: environmentReady },
+    { label: "Profile execution gate", detail: execution?.profileExecutionEnabled ? "Enabled" : "Disabled", ready: execution?.profileExecutionEnabled === true },
+    { label: "Runtime execution switch", detail: execution?.runtimeEnabled ? "Enabled" : "Disabled", ready: execution?.runtimeEnabled === true },
+    { label: "Server manager", detail: managerStatus === "ready" ? "Ready" : formatManagerStatus(managerStatus), ready: managerStatus === "ready" },
+    { label: "Private account stream", detail: stream.level === "healthy" ? "Healthy" : formatStreamStatus(stream.status), ready: stream.level === "healthy" },
+    { label: "Account snapshot", detail: stream.snapshotAt == null ? "Not received" : `Received ${formatTime(stream.snapshotAt)}`, ready: stream.snapshotAt != null },
+    { label: "Reconciliation", detail: health.execution.reconciliation.mismatches === 0 ? "No mismatches" : `${health.execution.reconciliation.mismatches} mismatches`, ready: health.execution.reconciliation.mismatches === 0 },
+    { label: "Circuit breakers", detail: health.circuits.healthy ? "Closed" : "Degraded", ready: health.circuits.healthy },
+  ];
+}
+
+function formatTradingMode(env: string): string {
+  if (env === "local") return "Chart Only";
+  if (env === "testnet") return "Testnet";
+  if (env === "production") return "Production";
+  return env;
+}
+
+function formatManagerStatus(status: string | null): string {
+  if (status === "ready") return "Ready";
+  if (status === "idle") return "Not running";
+  if (status === "degraded") return "Degraded";
+  return status ?? "Unavailable";
+}
+
+function formatStreamStatus(status: StreamStatus): string {
+  if (status === "open") return "Healthy";
+  if (status === "reconnecting") return "Reconnecting";
+  if (status === "closed") return "Offline";
+  return "Unavailable";
+}
+
+function getStatusColor(level: TradingHealthLevel): string {
+  switch (level) {
+    case "healthy":
+      return "text-[#089981]";
+    case "degraded":
+      return "text-[#f7931a]";
+    case "unhealthy":
+      return "text-[#f23645]";
+    default:
+      return "text-[#787b86]";
+  }
 }
 
 export function FeedHealthSection({ health }: { health: TradingHealthSnapshot }) {
@@ -346,7 +491,7 @@ function isChartOnlyLocal(health: TradingHealthSnapshot, managerStatus: string |
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg bg-[#1e2329] p-6">
+    <div className="rounded-lg border border-[#2a2e39] bg-[#171b21] p-6">
       <h3 className="mb-4 font-medium text-white">{title}</h3>
       {children}
     </div>

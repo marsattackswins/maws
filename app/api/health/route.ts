@@ -4,6 +4,7 @@ import { serverConfig } from "@/lib/server/env/config";
 import { buildHealthStatus } from "@/lib/server/health/status";
 import { authenticate, isAuthFailure, jsonError, jsonOk } from "@/lib/server/http/guards";
 import { metricsSnapshot } from "@/lib/server/metrics/collector";
+import packageJson from "../../../package.json";
 
 export const dynamic = "force-dynamic";
 
@@ -49,10 +50,14 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   const health = buildHealthStatus(runtimeCfg);
+  const metrics = metricsSnapshot();
+  const uptimeSeconds = Math.floor((Date.now() - metrics.startTime) / 1000);
 
   return jsonOk({
     env: health.env,
     healthy: health.healthy,
+    version: packageJson.version,
+    startedAt: metrics.startTime,
     brokerConnected: health.brokerConnected,
     managerStatus: health.signals.brokerStatus,
     managerError: health.signals.brokerError,
@@ -71,6 +76,7 @@ export async function GET(req: Request): Promise<Response> {
     execution: health.execution,
     submissionsFrozen: health.submissionsFrozen,
     frozenReasons: health.frozenReasons,
-    metrics: metricsSnapshot(),
+    uptimeSeconds,
+    metrics,
   });
 }

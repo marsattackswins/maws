@@ -775,6 +775,9 @@ Get operational health status for monitoring.
 {
   "env": "testnet",
   "healthy": true,
+  "version": "0.1.0",
+  "startedAt": 1757750400000,
+  "uptimeSeconds": 3600,
   "brokerConnected": true,
   "managerStatus": "ready",
   "managerError": null,

@@ -221,6 +221,10 @@ describe("status page", () => {
       expect(data).toHaveProperty("healthy");
       expect(data).toHaveProperty("env");
       expect(data).toHaveProperty("brokerConnected");
+      expect(data).toHaveProperty("version");
+      expect(data).toHaveProperty("startedAt");
+      expect(data).toHaveProperty("uptimeSeconds");
+      expect(typeof data.uptimeSeconds).toBe("number");
     });
 
     test("/api/health/broker returns broker status when authenticated", async () => {

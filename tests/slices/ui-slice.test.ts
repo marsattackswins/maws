@@ -15,8 +15,8 @@ import {
  *   - toggleBottomTab opens/closes the bottom panel atomically;
  *   - normalizeUiRehydrate validates bottomTab and ONLY there (invalid value
  *     falls back to "positions", every valid tab is preserved);
- *   - atomicity: setBottomTab / toggleBottomTab perform exactly ONE set()
- *     whose single patch carries every cross-field update.
+ *   - atomicity: setBottomTab / setBottomTabCollapsed / toggleBottomTab
+ *     perform exactly ONE set() whose single patch carries every cross-field update.
  */
 
 const VALID_TABS: BottomTab[] = [
@@ -184,6 +184,13 @@ describe("ui-slice atomicity (counting set harness)", () => {
     h.slice.setBottomTab("orders");
     expect(h.calls).toHaveLength(1);
     expect(h.calls[0]).toEqual({ bottomTab: "orders", bottomOpen: true });
+  });
+
+  it("setBottomTabCollapsed selects a tab without opening the panel", () => {
+    const h = makeHarness({ bottomOpen: true, bottomTab: "orders" });
+    h.slice.setBottomTabCollapsed("positions");
+    expect(h.calls).toHaveLength(1);
+    expect(h.calls[0]).toEqual({ bottomTab: "positions", bottomOpen: false });
   });
 
   it("toggleBottomTab (close path) performs exactly one set()", () => {

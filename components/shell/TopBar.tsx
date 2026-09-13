@@ -6,7 +6,7 @@ import { CHART_STYLES } from "@/lib/chart-style";
 import { LAYOUT_COUNTS } from "@/lib/layouts";
 import { MawsLogo } from "@/components/brand/MawsLogo";
 import { DrawingToolbar } from "@/components/drawings/DrawingToolbar";
-import { MAWS, MAWS_FULL_NAME } from "@/lib/maws/brand";
+import { MAWS_FULL_NAME } from "@/lib/maws/brand";
 import { formatPrice, mawsFeed } from "@/lib/maws/feed";
 import { formatTicker } from "@/lib/maws/universe";
 import { isIndicatorTemplateDirty, useActivePane, useAppStore } from "@/lib/store";
@@ -334,6 +334,9 @@ export function TopBar() {
   const setSettingsOpen = useAppStore((s) => s.setSettingsOpen);
   const setBrokerDialogOpen = useAppStore((s) => s.setBrokerDialogOpen);
   const connectedBroker = useAppStore((s) => s.connectedBroker);
+  const liveEnvironment = useLiveStore((s) => s.environment);
+  const liveProfileId = useLiveStore((s) => s.profileId);
+  const tradingMode = getTradingMode(connectedBroker, liveEnvironment, liveProfileId);
   const setBottomTab = useAppStore((s) => s.setBottomTab);
   const setBuySellMenu = useAppStore((s) => s.setBuySellMenu);
   const showBuySell = useAppStore((s) => s.chartSettings.showBuySell);
@@ -1024,7 +1027,9 @@ export function TopBar() {
         <button
           type="button"
           data-trade-trigger
-          className="ml-1 flex h-[28px] items-center gap-1.5 rounded-full bg-[#1a1a1a] px-4 text-[13px] font-semibold text-white hover:bg-[#222]"
+          className={`ml-1 flex h-[28px] items-center gap-1.5 rounded-full px-4 text-[13px] font-semibold ${tradingMode.buttonClass}`}
+          title={`Trade · Current mode: ${tradingMode.label}`}
+          aria-label={`Trade · Current mode: ${tradingMode.label}`}
           onClick={() => {
             closeAllMenus();
             if (settingsOpen) setSettingsOpen(false);
@@ -1036,12 +1041,33 @@ export function TopBar() {
             }
           }}
         >
-          {connectedBroker === "mock" || connectedBroker === "binance" ? (
-            <span className="h-1.5 w-1.5 rounded-full bg-[#089981]" />
-          ) : null}
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
           Trade
         </button>
       </div>
     </header>
   );
+}
+
+function getTradingMode(
+  connectedBroker: string | null,
+  environment: string | null,
+  profileId: string | null,
+): { label: string; buttonClass: string } {
+  const label = connectedBroker === "mock"
+    ? "Paper"
+    : environment === "testnet" || profileId === "binance-testnet"
+      ? "Testnet"
+      : environment === "production" || profileId === "binance-production"
+        ? "Production"
+        : "Chart Only";
+  const buttonClass = label === "Production"
+    ? "bg-[#f0b90b] text-black hover:bg-[#dca900]"
+    : label === "Testnet"
+      ? "bg-[#2962ff] text-white hover:bg-[#2457dc]"
+      : label === "Paper"
+        ? "bg-white text-[#111318] hover:bg-[#e5e7eb]"
+        : "bg-[#1b1e26] text-[#b0b3bc] hover:bg-[#252a33]";
+
+  return { label, buttonClass };
 }

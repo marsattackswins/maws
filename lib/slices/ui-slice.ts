@@ -49,6 +49,7 @@ export type UiSliceActions = {
   setRightOpen: (value: boolean) => void;
   setBottomOpen: (value: boolean) => void;
   setBottomTab: (tab: BottomTab) => void;
+  setBottomTabCollapsed: (tab: BottomTab) => void;
   toggleBottomTab: (tab: BottomTab) => void;
   setRightDock: (dock: DockId) => void;
   setRightWidth: (width: number) => void;
@@ -104,6 +105,7 @@ export function createUiSlice(set: RootSet, get: RootGet): UiSlice {
     setRightOpen: (value) => set({ rightOpen: value }),
     setBottomOpen: (value) => set({ bottomOpen: value }),
     setBottomTab: (tab) => set({ bottomTab: tab, bottomOpen: true }),
+    setBottomTabCollapsed: (tab) => set({ bottomTab: tab, bottomOpen: false }),
     toggleBottomTab: (tab) => {
       const s = get();
       if (s.bottomOpen && s.bottomTab === tab) set({ bottomOpen: false });

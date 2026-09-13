@@ -134,8 +134,8 @@ export default function TradeJournalPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#0b0e11] p-4 text-[#d1d4dc] md:p-6">
-      <div className="mx-auto max-w-[1800px]">
+    <main className="h-screen overflow-y-auto bg-[#0b0e11] p-4 text-[#d1d4dc] sm:p-6">
+      <div className="mx-auto max-w-7xl">
         <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold">Trade Journal</h1>
