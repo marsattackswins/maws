@@ -74,7 +74,7 @@ export function loadTestnetConfig(): EnvConfig {
       label: "Binance Testnet",
       environment: "testnet",
       configured: true,
-      executionEnabled: false,
+      executionEnabled: true,
       apiKey,
       apiSecret,
       restEndpoint: "https://testnet.binancefuture.com",
@@ -104,7 +104,6 @@ export function loadTestnetConfig(): EnvConfig {
     allowedOrigin: null,
     trustProxy: false,
     backupKey: null,
-    executionEnabledStatic: true, // integration tests need to submit orders
     healthToken: null,
     binanceApiKey: apiKey,
     binanceApiSecret: apiSecret,

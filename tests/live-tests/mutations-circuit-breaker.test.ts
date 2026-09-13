@@ -58,7 +58,7 @@ const flush = async (): Promise<void> => {
  * BTCUSDT long; pass [] for an empty position book.
  */
 async function bootRealBroker(positionRows: unknown[] = [POSITION_RISK_ROW]): Promise<void> {
-  cfg = freshEnv(makeCfg({ env: "testnet", allowedOrigin: "https://localhost:3000", executionEnabledStatic: true }));
+  cfg = freshEnv(makeCfg({ env: "testnet", allowedOrigin: "https://localhost:3000" }));
   setRuntime(RUNTIME_KEYS.executionEnabled, "true");
   http = new FakeHttp();
   installFakes(http);

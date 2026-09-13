@@ -73,7 +73,7 @@ function makeHealth(over: Partial<HealthDto> = {}): HealthDto {
     execution: {
       env: "testnet",
       envAllowsSubmissions: true,
-      staticGate: true,
+      profileExecutionEnabled: true,
       runtimeEnabled: true,
       killSwitch: false,
       frozen: false,
@@ -132,7 +132,7 @@ describe("dispatchSubmitOrder execution gate (live broker)", () => {
         execution: {
           env: "testnet",
           envAllowsSubmissions: true,
-          staticGate: true,
+          profileExecutionEnabled: true,
           runtimeEnabled: true,
           killSwitch: true,
           frozen: false,
@@ -156,7 +156,7 @@ describe("dispatchSubmitOrder execution gate (live broker)", () => {
         execution: {
           env: "testnet",
           envAllowsSubmissions: true,
-          staticGate: true,
+          profileExecutionEnabled: true,
           runtimeEnabled: true,
           killSwitch: false,
           frozen: true,
@@ -180,7 +180,7 @@ describe("dispatchSubmitOrder execution gate (live broker)", () => {
         execution: {
           env: "testnet",
           envAllowsSubmissions: true,
-          staticGate: true,
+          profileExecutionEnabled: true,
           runtimeEnabled: false,
           killSwitch: false,
           frozen: false,

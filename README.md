@@ -94,8 +94,8 @@ The copied `.env.local` is intentionally small. In normal use:
 
 1. Leave `MAWS_ENV=local`.
 2. Leave the Testnet and Production fields empty until you need them.
-3. Leave both profile execution switches set to `false` while setting up.
-4. Leave `MAWS_EXECUTION_ENABLED=false` until you deliberately decide to enable live order submission.
+3. Leave both profile execution switches set to `false` while setting up. These are static gates for their respective Binance profiles.
+4. Leave both profile execution switches set to `false` until you deliberately decide to enable live order submission.
 
 For Paper Trading, you do not need to add Binance keys or create an operator password.
 
@@ -137,7 +137,7 @@ Only do this after Testnet works as expected:
 1. Create a separate Binance Production API key and secret.
 2. Disable withdrawals on the key.
 3. Put the values in the Production fields in `.env.local`.
-4. Keep `MAWS_BINANCE_PRODUCTION_EXECUTION_ENABLED=false` and `MAWS_EXECUTION_ENABLED=false` until you are ready.
+4. Keep `MAWS_BINANCE_PRODUCTION_EXECUTION_ENABLED=false` until you are ready.
 5. Restart MAWS.
 6. Choose **Binance Production** from **Trade**, enter the operator password, and complete the extra Production confirmation.
 

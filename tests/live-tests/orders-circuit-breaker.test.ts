@@ -31,7 +31,7 @@ import {
 
 describe("POST /api/live/orders with circuit breaker", () => {
   beforeEach(() => {
-    freshEnv(makeCfg({ env: "testnet", allowedOrigin: "https://localhost:3000", executionEnabledStatic: true }));
+    freshEnv(makeCfg({ env: "testnet", allowedOrigin: "https://localhost:3000" }));
     setRuntime(RUNTIME_KEYS.executionEnabled, "true");
     initializeCircuitBreakers();
   });
@@ -43,7 +43,7 @@ describe("POST /api/live/orders with circuit breaker", () => {
   });
 
   const makeOrderRequest = (body: unknown, sessionId?: string) => {
-    const cfg = makeCfg({ env: "testnet", allowedOrigin: "https://localhost:3000", executionEnabledStatic: true });
+    const cfg = makeCfg({ env: "testnet", allowedOrigin: "https://localhost:3000" });
     const url = "https://localhost:3000/api/live/orders";
     const headers = new Headers({
       "content-type": "application/json",
@@ -156,7 +156,7 @@ describe("POST /api/live/orders end-to-end with REST breaker open", () => {
 
   /** Fresh env + fake exchange + fully started real broker (clock, metadata, snapshot). */
   async function bootRealBroker(): Promise<void> {
-    cfg = freshEnv(makeCfg({ env: "testnet", allowedOrigin: "https://localhost:3000", executionEnabledStatic: true }));
+    cfg = freshEnv(makeCfg({ env: "testnet", allowedOrigin: "https://localhost:3000" }));
     setRuntime(RUNTIME_KEYS.executionEnabled, "true");
     http = new FakeHttp();
     installFakes(http);

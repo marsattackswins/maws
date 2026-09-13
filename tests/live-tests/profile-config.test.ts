@@ -159,8 +159,7 @@ describe("server profile configuration", () => {
       MAWS_BINANCE_PRODUCTION_EXECUTION_ENABLED: "true",
     }));
     expect(enabled.profiles["binance-production"].executionEnabled).toBe(true);
-    // The existing global execution gate remains unchanged in Phase 1.
-    expect(enabled.executionEnabledStatic).toBe(false);
+
   });
 
   test("safe metadata is allowlisted and never contains credentials or endpoints", () => {

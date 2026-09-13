@@ -283,11 +283,11 @@ Recommended for all non-local deployments:
 
 ### Execution Gates
 
-Dual requirement for production:
-- Static environment variable: `MAWS_EXECUTION_ENABLED=true`
-- Runtime flag: `POST /api/live/gates`
+Profile-specific static gates apply before runtime execution can be enabled:
+- Testnet: `MAWS_BINANCE_TESTNET_EXECUTION_ENABLED=true`
+- Production: `MAWS_BINANCE_PRODUCTION_EXECUTION_ENABLED=true`
 
-Both must be true for order submissions.
+The applicable profile gate and the runtime flag from `POST /api/live/gates` must both be true, along with the health, stream, reconciliation, account, and risk checks.
 
 ### Risk Limits
 

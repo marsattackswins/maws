@@ -51,11 +51,11 @@ export async function POST(req: Request): Promise<Response> {
     audit("operator", body.killSwitch ? "killswitch.engaged" : "killswitch.disengaged", {}, ctx.ip);
   }
   if (typeof body.executionEnabled === "boolean") {
-    if (runtimeCfg.env === "production" && body.executionEnabled && !runtimeCfg.executionEnabledStatic) {
-      return jsonError(409, "static_gate", "MAWS_EXECUTION_ENABLED must be true before the runtime flag can open production submissions");
-    }
     if (runtimeCfg.env === "shadow" || runtimeCfg.env === "local") {
       return jsonError(409, "env", "Runtime execution flag cannot open submissions in this environment");
+    }
+    if (body.executionEnabled && !executionDecision(runtimeCfg).profileExecutionEnabled) {
+      return jsonError(409, "profile_execution_gate", "The active profile execution gate is disabled in configuration");
     }
     setRuntime(RUNTIME_KEYS.executionEnabled, body.executionEnabled ? "true" : "false", Date.now(), profile);
     audit("operator", "execution.runtime_flag", { enabled: body.executionEnabled }, ctx.ip);

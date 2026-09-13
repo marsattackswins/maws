@@ -26,7 +26,7 @@ describe("environment configuration (fail closed)", () => {
     const cfg = loadEnvConfig(envSrc({}));
     expect(cfg.env).toBe("local");
     expect(cfg.recvWindowMs).toBe(5000);
-    expect(cfg.executionEnabledStatic).toBe(false);
+
     expect(cfg.risk.maxOrderNotionalUsd).toBe(50);
   });
 
@@ -69,11 +69,6 @@ describe("environment configuration (fail closed)", () => {
     expect(cfg.backupKey?.length).toBe(32);
   });
 
-  test("execution gate is off unless explicitly enabled", () => {
-    expect(loadEnvConfig(envSrc({})).executionEnabledStatic).toBe(false);
-    expect(loadEnvConfig(envSrc({ MAWS_EXECUTION_ENABLED: "true" })).executionEnabledStatic).toBe(true);
-    expect(loadEnvConfig(envSrc({ MAWS_EXECUTION_ENABLED: "yes" })).executionEnabledStatic).toBe(false);
-  });
 
   test("production rejects zero risk caps (fail closed)", () => {
     const base = { MAWS_ENV: "production", MAWS_OPERATOR_AUTH: AUTH, ...KEYS };
@@ -126,9 +121,36 @@ describe("execution gate matrix", () => {
     expect(d.reasons).toContain("runtime execution flag is disabled");
   });
 
+  test("testnet profile execution flag blocks submissions", () => {
+    const cfg = freshEnv(makeCfg());
+    setRuntime(RUNTIME_KEYS.executionEnabled, "true");
+    const profiles = {
+      ...cfg.profiles,
+      "binance-testnet": { ...cfg.profiles["binance-testnet"], executionEnabled: false },
+    };
+    const d = decide({ ...cfg, profiles });
+    expect(d.canSubmit).toBe(false);
+    expect(d.profileExecutionEnabled).toBe(false);
+    expect(d.reasons).toContain("Binance Testnet execution is disabled by configuration");
+  });
+
+  test("production requires its profile execution flag", () => {
+    const cfg = freshEnv(makeCfg({ env: "production", activeProfileId: "binance-production" }));
+    const production = persistenceProfileFromConfig(cfg);
+    setRuntime(RUNTIME_KEYS.executionEnabled, "true", Date.now(), production);
+    const profiles = {
+      ...cfg.profiles,
+      "binance-production": { ...cfg.profiles["binance-production"], executionEnabled: false },
+    };
+    const d = decide({ ...cfg, profiles });
+    expect(d.canSubmit).toBe(false);
+    expect(d.profileExecutionEnabled).toBe(false);
+    expect(d.reasons).toContain("Binance Production execution is disabled by configuration");
+  });
+
   test("shadow can never submit, regardless of flags", () => {
     setRuntime(RUNTIME_KEYS.executionEnabled, "true");
-    const d = decide(makeCfg({ env: "shadow", executionEnabledStatic: true }));
+    const d = decide(makeCfg({ env: "shadow" }));
     expect(d.canSubmit).toBe(false);
     expect(d.reasons).toContain("shadow mode is read-only");
     expect(() => requireSubmissionAllowed(makeCfg({ env: "shadow" }))).toThrow(SubmissionBlockedError);
@@ -139,16 +161,6 @@ describe("execution gate matrix", () => {
     expect(decide(makeCfg({ env: "local" })).canSubmit).toBe(false);
   });
 
-  test("production requires the static MAWS_EXECUTION_ENABLED gate", () => {
-    const production = persistenceProfileFromConfig(makeCfg({ env: "production" }));
-    setRuntime(RUNTIME_KEYS.executionEnabled, "true", Date.now(), production);
-    const off = decide(makeCfg({ env: "production", executionEnabledStatic: false }));
-    expect(off.canSubmit).toBe(false);
-    expect(off.reasons).toContain("MAWS_EXECUTION_ENABLED is not true");
-
-    const on = decide(makeCfg({ env: "production", executionEnabledStatic: true }));
-    expect(on.canSubmit).toBe(true);
-  });
 
   test("kill switch blocks submissions", () => {
     setRuntime(RUNTIME_KEYS.executionEnabled, "true");

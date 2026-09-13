@@ -43,10 +43,11 @@ The server keeps Testnet and Production credentials separate so the UI can switc
 | `binance-production` | `MAWS_BINANCE_PRODUCTION_API_KEY` | `MAWS_BINANCE_PRODUCTION_API_SECRET` | `MAWS_BINANCE_PRODUCTION_EXECUTION_ENABLED=false` |
 
 A key and secret must be supplied together. Missing values leave that profile
-unconfigured; credentials are never copied between profiles. Production
-execution is disabled unless its profile-specific flag is explicitly `true`.
-Withdrawal permission MUST be disabled, and none of these variables may use a
-`NEXT_PUBLIC_` prefix.
+unconfigured; credentials are never copied between profiles. Each profile-specific
+execution flag is an actual static gate: Testnet submissions require the Testnet
+flag, and Production submissions require the Production flag. The runtime
+execution flag and all health/risk gates must also allow the submission. Withdrawal permission MUST be disabled,
+and none of these variables may use a `NEXT_PUBLIC_` prefix.
 
 #### Legacy Binance credentials
 `MAWS_BINANCE_API_KEY` and `MAWS_BINANCE_API_SECRET` remain supported during
@@ -90,11 +91,6 @@ Binance credentials; use the separate profile-specific variables instead.
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-#### MAWS_EXECUTION_ENABLED
-**Description**: Static execution gate
-**Values**: `true` | `false`
-**Default**: `false`
-**Purpose**: Static gate for production submissions (must be true AND runtime gate enabled)
 
 #### MAWS_HEALTH_TOKEN
 **Description**: Shared token for health endpoints
@@ -256,7 +252,6 @@ interface EnvConfig {
   backupKey: Buffer | null;        // Backup encryption key
 
   // Execution
-  executionEnabledStatic: boolean; // Static execution gate
   healthToken: string | null;      // Health check token
 
   // Broker Credentials (legacy active aliases retained for compatibility)

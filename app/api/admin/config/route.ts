@@ -18,7 +18,7 @@ const FIELD_DESCRIPTIONS: Record<string, string> = {
   operatorAuth: "Operator authentication credentials (salt:hash format)",
   allowedOrigin: "Allowed CORS origin for browser requests",
   trustProxy: "Whether to trust X-Forwarded-For header for client IP",
-  executionEnabledStatic: "Whether order execution is statically enabled",
+
   recvWindowMs: "Binance API request validity window in milliseconds",
   rateInternalPerMin: "Maximum internal requests per minute",
   reconIntervalMs: "Interval between reconciliation runs in milliseconds",

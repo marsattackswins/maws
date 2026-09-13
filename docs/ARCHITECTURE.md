@@ -324,7 +324,7 @@ interface EnvConfig {
   allowedOrigin: string | null;    // CORS origin
   trustProxy: boolean;             // Proxy trust mode
   backupKey: Buffer | null;        // Backup encryption key
-  executionEnabledStatic: boolean; // Static execution gate
+
   healthToken: string | null;      // Health check token
   binanceApiKey: string | null;
   binanceApiSecret: string | null;

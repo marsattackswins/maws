@@ -306,8 +306,9 @@ Critical environment variables (see `.env.example` for complete list):
 - `MAWS_DEFAULT_PROFILE`: Safe profile metadata default (paper unless explicitly set)
 - `MAWS_OPERATOR_AUTH`: Operator credential hash
 - `MAWS_BINANCE_TESTNET_API_KEY/SECRET`: Separate testnet credentials
+- `MAWS_BINANCE_TESTNET_EXECUTION_ENABLED`: Static Testnet execution gate
 - `MAWS_BINANCE_PRODUCTION_API_KEY/SECRET`: Separate production credentials
-- `MAWS_EXECUTION_ENABLED`: Global static execution gate; keep it false until live execution is deliberately enabled
+- `MAWS_BINANCE_PRODUCTION_EXECUTION_ENABLED`: Static Production profile gate
 - `MAWS_RISK_*`: Risk limit configurations
 - `MAWS_CB_*`: Circuit breaker configurations
 

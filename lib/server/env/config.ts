@@ -47,7 +47,6 @@ export interface EnvConfig {
   allowedOrigin: string | null;
   trustProxy: boolean;
   backupKey: Buffer | null;
-  executionEnabledStatic: boolean;
   healthToken: string | null;
   binanceApiKey: string | null;
   binanceApiSecret: string | null;
@@ -351,7 +350,6 @@ export function loadEnvConfig(source: NodeJS.ProcessEnv = process.env): EnvConfi
     allowedOrigin: source.MAWS_ALLOWED_ORIGIN?.trim() || null,
     trustProxy: source.MAWS_TRUST_PROXY === "true",
     backupKey: hexKey(source.MAWS_BACKUP_KEY),
-    executionEnabledStatic: source.MAWS_EXECUTION_ENABLED === "true",
     healthToken: source.MAWS_HEALTH_TOKEN?.trim() || null,
     // Keep the legacy active fields so all existing broker code retains its
     // process-startup behavior while credentials migrate to profile variables.

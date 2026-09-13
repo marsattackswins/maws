@@ -785,7 +785,7 @@ Get operational health status for monitoring.
   "recon": "ok",
   "reconHealthy": true,
   "execution": {
-    "staticEnabled": true,
+    "profileExecutionEnabled": true,
     "runtimeEnabled": true,
     "canSubmit": true
   },

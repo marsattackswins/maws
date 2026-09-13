@@ -89,7 +89,7 @@ export interface LiveStateDto {
 export interface ExecutionDecisionDto {
   env: string;
   envAllowsSubmissions: boolean;
-  staticGate: boolean;
+  profileExecutionEnabled: boolean;
   runtimeEnabled: boolean;
   killSwitch: boolean;
   frozen: boolean;

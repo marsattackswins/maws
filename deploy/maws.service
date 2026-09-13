@@ -13,7 +13,6 @@
 #   MAWS_BINANCE_PRODUCTION_API_KEY=...
 #   MAWS_BINANCE_PRODUCTION_API_SECRET=...
 #   MAWS_BINANCE_PRODUCTION_EXECUTION_ENABLED=false
-#   MAWS_EXECUTION_ENABLED=false   (existing global gate; keep false by default)
 # Legacy MAWS_BINANCE_API_KEY/SECRET remain supported during migration.
 # Never enable withdrawal permission on the Binance API key.
 

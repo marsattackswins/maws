@@ -8,7 +8,7 @@ import { healthSignals } from "../health/state";
 export interface ExecutionDecision {
   env: string;
   envAllowsSubmissions: boolean;
-  staticGate: boolean;
+  profileExecutionEnabled: boolean;
   runtimeEnabled: boolean;
   killSwitch: boolean;
   frozen: boolean;
@@ -25,7 +25,7 @@ export interface ExecutionDecision {
 /**
  * Submission requires ALL of:
  *  - an env that permits submissions (testnet or production; shadow/local never),
- *  - for production: the static MAWS_EXECUTION_ENABLED=true gate,
+ *  - the active Binance profile's static execution gate,
  *  - the DB runtime execution flag,
  *  - kill switch disengaged,
  *  - not frozen by health/reconciliation,
@@ -43,6 +43,12 @@ export function executionDecision(cfg: EnvConfig): ExecutionDecision {
   const frozen = getRuntime(RUNTIME_KEYS.frozen, "", profile) === "true";
   const frozenReason = getRuntime(RUNTIME_KEYS.frozenReason, "", profile);
   const envAllowsSubmissions = cfg.env === "testnet" || cfg.env === "production";
+  const executableProfileId = cfg.env === "testnet"
+    ? "binance-testnet"
+    : cfg.env === "production"
+      ? "binance-production"
+      : null;
+  const profileExecutionEnabled = executableProfileId !== null && cfg.profiles[executableProfileId].executionEnabled;
   const signals = healthSignals();
   const managerReady = signals.brokerStatus === "ready";
   const stream = signals.stream;
@@ -72,10 +78,12 @@ export function executionDecision(cfg: EnvConfig): ExecutionDecision {
     canSubmit = false;
     reasons.push(cfg.env === "shadow" ? "shadow mode is read-only" : `env ${cfg.env} does not permit submissions`);
   }
-  if (cfg.env === "production" && !cfg.executionEnabledStatic) {
+  if (envAllowsSubmissions && !profileExecutionEnabled) {
     canSubmit = false;
-    reasons.push("MAWS_EXECUTION_ENABLED is not true");
+    const profileLabel = executableProfileId === null ? "active profile" : cfg.profiles[executableProfileId].label;
+    reasons.push(`${profileLabel} execution is disabled by configuration`);
   }
+
   if (!runtimeEnabled) {
     canSubmit = false;
     reasons.push("runtime execution flag is disabled");
@@ -112,7 +120,7 @@ export function executionDecision(cfg: EnvConfig): ExecutionDecision {
   return {
     env: cfg.env,
     envAllowsSubmissions,
-    staticGate: cfg.executionEnabledStatic,
+    profileExecutionEnabled,
     runtimeEnabled,
     killSwitch,
     frozen,

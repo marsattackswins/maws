@@ -47,7 +47,6 @@ jest.mock("@/lib/server/env/config", () => ({
     allowedOrigin: "http://localhost:3000",
     trustProxy: false,
     backupKey: Buffer.from("test-backup-key-32-bytes-xxxxxxxxxx"),
-    executionEnabledStatic: true,
     healthToken: "test-health-token-secret",
     binanceApiKey: "test-api-key-12345",
     binanceApiSecret: "test-api-secret-67890",

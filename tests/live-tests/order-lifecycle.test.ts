@@ -495,15 +495,4 @@ describe("execution gates inside OrderService", () => {
     expect(res.error).toContain("shadow mode is read-only");
   });
 
-  test("production requires the static execution gate", async () => {
-    const off = setup({ env: "production", executionEnabledStatic: false });
-    const blocked = await off.svc.submitOrder({ symbol: "BTCUSDT", side: "BUY", type: "MARKET", qty: "0.001", clientOrderId: "pd1" });
-    expect(blocked.ok).toBe(false);
-    expect(blocked.error).toContain("MAWS_EXECUTION_ENABLED");
-
-    const on = setup({ env: "production", executionEnabledStatic: true });
-    on.http.route("/fapi/v1/order", () => jsonRes(orderFixture({ clientOrderId: "pd2", status: "NEW" })));
-    const allowed = await on.svc.submitOrder({ symbol: "BTCUSDT", side: "BUY", type: "MARKET", qty: "0.001", clientOrderId: "pd2" });
-    expect(allowed.ok).toBe(true);
-  });
 });
