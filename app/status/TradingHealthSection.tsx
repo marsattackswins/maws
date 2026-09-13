@@ -113,9 +113,11 @@ export default function TradingHealthSection({
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 id="trading-infrastructure-heading" className="text-xl font-semibold text-white">
-            Trading Infrastructure
+            Server Trading
           </h2>
-          <p className="mt-1 text-sm text-[#787b86]">Read-only trading system health and recovery state</p>
+          <p className="mt-1 text-sm text-[#787b86]">
+            Optional server-side order and account-stream health. This does not determine chart connectivity.
+          </p>
         </div>
         {health && <span className="text-xs text-[#787b86]">Updated {formatTime(health.timestamp)}</span>}
       </div>
@@ -128,12 +130,20 @@ export default function TradingHealthSection({
         <div className="space-y-4">
           {error && <PanelMessage tone="yellow">Trading health refresh failed: {error}</PanelMessage>}
           <TradingSummaryCard health={health} managerStatus={managerStatus} submissionsFrozen={submissionsFrozen} />
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <FeedHealthSection health={health} />
-            <ExecutionHealthSection health={health} />
-          </div>
-          <StrategyHealthSection health={health} />
-          <CircuitBreakersSection health={health} />
+          {isChartOnlyLocal(health, managerStatus) ? (
+            <PanelMessage>
+              Server-side trading is not running in chart-only mode. This is expected and does not affect Binance market data or the charts.
+            </PanelMessage>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                <FeedHealthSection health={health} />
+                <ExecutionHealthSection health={health} />
+              </div>
+              <StrategyHealthSection health={health} />
+              <CircuitBreakersSection health={health} />
+            </>
+          )}
         </div>
       ) : (
         <PanelMessage>No trading health data available</PanelMessage>
@@ -151,18 +161,28 @@ export function TradingSummaryCard({
   managerStatus: string | null;
   submissionsFrozen: boolean | null;
 }) {
+  const chartOnlyLocal = isChartOnlyLocal(health, managerStatus);
   return (
-    <Panel title="Trading Infrastructure Summary">
+    <Panel title="Server Trading Summary">
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <SummaryValue label="Overall" value={<StatusBadge level={health.overall} />} />
+        <SummaryValue
+          label="Overall"
+          value={<StatusBadge level={health.overall} label={chartOnlyLocal ? "Not running" : undefined} />}
+        />
         <SummaryValue label="Environment" value={health.env} />
-        <SummaryValue label="Manager" value={managerStatus ?? "N/A"} />
+        <SummaryValue label="Server manager" value={managerStatus ?? "N/A"} />
         <SummaryValue
           label="Submissions"
           value={
-            submissionsFrozen == null ? "N/A" : submissionsFrozen ? "Frozen" : "Enabled"
+            chartOnlyLocal
+              ? "Disabled"
+              : submissionsFrozen == null
+                ? "N/A"
+                : submissionsFrozen
+                  ? "Frozen"
+                  : "Enabled"
           }
-          valueClass={submissionsFrozen ? "text-[#f23645]" : "text-[#089981]"}
+          valueClass={chartOnlyLocal ? "text-[#787b86]" : submissionsFrozen ? "text-[#f23645]" : "text-[#089981]"}
         />
       </div>
     </Panel>
@@ -172,7 +192,7 @@ export function TradingSummaryCard({
 export function FeedHealthSection({ health }: { health: TradingHealthSnapshot }) {
   const stream = health.feed.serverTradingStream;
   return (
-    <Panel title="Feed Health">
+    <Panel title="Server Trading Feed">
       <div className="space-y-3 text-sm">
         <div className="flex items-center justify-between">
           <span className="text-[#787b86]">{stream.label}</span>
@@ -184,7 +204,7 @@ export function FeedHealthSection({ health }: { health: TradingHealthSnapshot })
         <DetailRow label="Snapshot/recovery" value={formatTime(stream.snapshotAt)} />
         <div className="flex items-start gap-2 border-t border-[#2a2e39] pt-3 text-xs text-[#787b86]">
           <Info size={14} className="mt-0.5 shrink-0" />
-          <span>Per-symbol/timeframe market feed health is browser-local / not available server-side.</span>
+          <span>Chart market-data health is browser-local. Check the live status shown on each chart.</span>
         </div>
       </div>
     </Panel>
@@ -318,6 +338,10 @@ function RecentMismatches({ health }: { health: TradingHealthSnapshot }) {
       )}
     </div>
   );
+}
+
+function isChartOnlyLocal(health: TradingHealthSnapshot, managerStatus: string | null): boolean {
+  return health.env === "local" && managerStatus === "idle";
 }
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {

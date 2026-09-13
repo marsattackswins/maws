@@ -67,6 +67,27 @@ Open [http://localhost:3000](http://localhost:3000). MAWS starts in Chart Only. 
 
 Your local database is stored in `.maws/maws.db`. It is local working data and should not be committed.
 
+### Local pages
+
+- [`/`](http://localhost:3000/) — Main MAWS trading dashboard
+- [`/login`](http://localhost:3000/login) — Operator login
+- [`/status`](http://localhost:3000/status) — Application and Binance connectivity status
+- [`/admin`](http://localhost:3000/admin) — Admin dashboard
+- [`/admin/journal`](http://localhost:3000/admin/journal) — Audit journal
+
+The status page separates public Binance connectivity from optional server-side trading. In Chart Only, **Server Trading: Not running** is expected; it does not mean Binance market data or the charts are disconnected.
+
+### Optional: run the standalone production server
+
+To test the optimized standalone build locally:
+
+```bash
+npm run build
+npm start
+```
+
+This serves the same app at [http://localhost:3000](http://localhost:3000). The launcher loads `.env.local` and `.env`, keeps the SQLite database at `.maws/maws.db`, and serves the standalone static assets. On Windows, stop `npm start` before running another build so the build output and SQLite files are not locked.
+
 ### 2. Fill in the environment file only when needed
 
 The copied `.env.local` is intentionally small. In normal use:

@@ -164,7 +164,10 @@ export function aggregateTradingHealth(input: TradingHealthInput): TradingHealth
   }));
   const hasUnhealthyCircuit = breakers.some((breaker) => breaker.level === "unhealthy");
   const hasDegradedCircuit = breakers.some((breaker) => breaker.level === "degraded");
-  const level = hasUnhealthyCircuit || input.reconciliation.mismatches > 0 || streamLevel === "unhealthy" || streamLevel === "unavailable"
+  const chartOnlyLocal = input.env === "local" && input.stream === null;
+  const level = chartOnlyLocal
+    ? "unavailable"
+    : hasUnhealthyCircuit || input.reconciliation.mismatches > 0 || streamLevel === "unhealthy" || streamLevel === "unavailable"
     ? "unhealthy"
     : hasDegradedCircuit || input.failedOrders.count > 0 || streamLevel === "degraded" || (input.rateLimiter?.pressure ?? 0) > 0.7
       ? "degraded"

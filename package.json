@@ -5,8 +5,8 @@
   "description": "MAWS — Market Analysis & Workflow System",
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "build": "next build",
-    "start": "next start",
+    "build": "next build && node scripts/prepare-standalone.mjs",
+    "start": "node scripts/start-standalone.mjs",
     "lint": "eslint",
     "test": "jest",
     "test:watch": "jest --watch",

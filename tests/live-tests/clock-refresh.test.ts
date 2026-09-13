@@ -52,6 +52,17 @@ describe("local-mode clock refresh (health staleness regression)", () => {
     jest.useRealTimers();
   });
 
+  test("chart-only local mode is healthy without a trading manager", () => {
+    const cfg = freshEnv(makeCfg({ env: "local", activeProfileId: null }));
+    resetHealthSignalsForTests();
+    const health = buildHealthStatus(cfg);
+
+    expect(health.healthy).toBe(true);
+    expect(health.brokerConnected).toBe(false);
+    expect(health.clockHealthy).toBe(false);
+    expect(health.streamHealthy).toBe(false);
+  });
+
   test("startup syncs the clock once, then the periodic refresh keeps it fresh", async () => {
     const manager = startLocalManager();
     const startPromise = manager.ensureStarted();

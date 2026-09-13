@@ -3,13 +3,11 @@
 import { useEffect, useState } from "react";
 import TradingHealthSection, { type TradingHealthSnapshot } from "./TradingHealthSection";
 
+type StatusLevel = "healthy" | "degraded" | "unhealthy" | "unavailable";
+
 interface ApiHealth {
   healthy: boolean;
   env: string;
-  brokerConnected: boolean;
-  clockHealthy: boolean;
-  streamHealthy: boolean;
-  reconHealthy: boolean;
   managerStatus?: string;
   submissionsFrozen?: boolean;
 }
@@ -62,10 +60,8 @@ export default function StatusPage() {
       const apiData: ApiHealth = await apiRes.json();
 
       let brokerData: BrokerHealth | null = null;
-      if (brokerRes.ok) {
+      if (brokerRes.ok || brokerRes.status === 503) {
         brokerData = await brokerRes.json();
-      } else if (brokerRes.status === 503) {
-        brokerData = await brokerRes.json(); // 503 still returns body with status
       }
 
       let tradingHealth: TradingHealthSnapshot | null = null;
@@ -91,7 +87,11 @@ export default function StatusPage() {
         ...prev,
         loading: false,
         tradingHealthLoading: false,
-        tradingHealthError: prev.tradingHealth ? (err instanceof Error ? err.message : "Failed to refresh trading health") : prev.tradingHealthError,
+        tradingHealthError: prev.tradingHealth
+          ? err instanceof Error
+            ? err.message
+            : "Failed to refresh trading health"
+          : prev.tradingHealthError,
         error: err instanceof Error ? err.message : "Failed to fetch status",
       }));
     }
@@ -99,13 +99,13 @@ export default function StatusPage() {
 
   useEffect(() => {
     fetchStatus();
-    const interval = setInterval(fetchStatus, 30000); // Refresh every 30s
+    const interval = setInterval(fetchStatus, 30000);
     return () => clearInterval(interval);
   }, []);
 
   if (status.loading) {
     return (
-      <div className="min-h-screen bg-[#0b0e11] flex items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-[#0b0e11]">
         <div className="text-[#787b86]">Loading...</div>
       </div>
     );
@@ -113,96 +113,65 @@ export default function StatusPage() {
 
   if (status.error) {
     return (
-      <div className="min-h-screen bg-[#0b0e11] flex items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-[#0b0e11]">
         <div className="text-center">
-          <div className="text-[#f23645] text-lg mb-2">Error</div>
-          <div className="text-[#787b86] text-sm">{status.error}</div>
+          <div className="mb-2 text-lg text-[#f23645]">Error</div>
+          <div className="text-sm text-[#787b86]">{status.error}</div>
         </div>
       </div>
     );
   }
 
+  const connectionLevel = getConnectionLevel(status.api, status.broker);
+  const connectionLabel = getConnectionLabel(connectionLevel);
+
   return (
     <div className="min-h-screen bg-[#0b0e11] p-8">
       <div className="mx-auto max-w-7xl">
-        <h1 className="text-2xl font-semibold text-white mb-8">System Status</h1>
+        <div className="mb-8">
+          <h1 className="text-2xl font-semibold text-white">System Status</h1>
+          <p className="mt-2 text-sm text-[#787b86]">
+            A quick view of application and Binance connectivity.
+          </p>
+        </div>
 
-        <div className="space-y-4">
-          {/* API Status */}
-          <div className="bg-[#1e2329] rounded-lg p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span
-                  className={`h-3 w-3 rounded-full ${
-                    status.api?.healthy ? "bg-[#089981]" : "bg-[#f23645]"
-                  }`}
-                />
-                <span className="text-white font-medium">API</span>
+        <div className="space-y-8">
+          <section className="rounded-lg bg-[#1e2329] p-6" aria-labelledby="connectivity-heading">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 id="connectivity-heading" className="text-xl font-semibold text-white">
+                  Connectivity
+                </h2>
+                <p className="mt-1 text-sm text-[#787b86]">
+                  This is the connection that powers public market data and charts.
+                </p>
               </div>
-              <span
-                className={`text-sm ${
-                  status.api?.healthy ? "text-[#089981]" : "text-[#f23645]"
-                }`}
-              >
-                {status.api?.healthy ? "Healthy" : "Unhealthy"}
-              </span>
+              <StatusIndicator level={connectionLevel} label={connectionLabel} />
             </div>
-            {status.api && (
-              <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-                <div className="text-[#787b86]">Environment</div>
-                <div className="text-white">{status.api.env}</div>
-                <div className="text-[#787b86]">Clock</div>
-                <div className={status.api.clockHealthy ? "text-[#089981]" : "text-[#f23645]"}>
-                  {status.api.clockHealthy ? "OK" : "Degraded"}
-                </div>
-                <div className="text-[#787b86]">Stream</div>
-                <div className={status.api.streamHealthy ? "text-[#089981]" : "text-[#f23645]"}>
-                  {status.api.streamHealthy ? "OK" : "Degraded"}
-                </div>
-              </div>
-            )}
-          </div>
 
-          {/* Broker Status */}
-          <div className="bg-[#1e2329] rounded-lg p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span
-                  className={`h-3 w-3 rounded-full ${
-                    status.broker?.status === "ok"
-                      ? "bg-[#089981]"
-                      : status.broker?.status === "degraded"
-                      ? "bg-[#f7931a]"
-                      : "bg-[#f23645]"
-                  }`}
-                />
-                <span className="text-white font-medium">Broker</span>
-              </div>
-              <span
-                className={`text-sm ${
-                  status.broker?.status === "ok"
-                    ? "text-[#089981]"
-                    : status.broker?.status === "degraded"
-                    ? "text-[#f7931a]"
-                    : "text-[#f23645]"
-                }`}
-              >
-                {status.broker?.status === "ok"
-                  ? "Connected"
-                  : status.broker?.status === "degraded"
-                  ? "Degraded"
-                  : "Disconnected"}
-              </span>
+            <div className="mt-6 grid gap-4 border-t border-[#2a2e39] pt-5 sm:grid-cols-2 lg:grid-cols-4">
+              <StatusDetail
+                label="Application API"
+                value={status.api?.healthy ? "Healthy" : "Unhealthy"}
+                level={status.api?.healthy ? "healthy" : "unhealthy"}
+              />
+              <StatusDetail
+                label="Binance public API"
+                value={getBrokerLabel(status.broker)}
+                level={getBrokerLevel(status.broker)}
+              />
+              <StatusDetail label="Environment" value={status.api?.env ?? "Unavailable"} />
+              <StatusDetail
+                label="API latency"
+                value={status.broker ? `${status.broker.latency_ms}ms` : "Unavailable"}
+              />
             </div>
-            {status.broker && (
-              <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-                <div className="text-[#787b86]">Broker</div>
-                <div className="text-white capitalize">{status.broker.broker}</div>
-                <div className="text-[#787b86]">Latency</div>
-                <div className="text-white">{status.broker.latency_ms}ms</div>
-              </div>
-            )}
-          </div>
+
+            <div className="mt-5 border-t border-[#2a2e39] pt-4 text-sm text-[#787b86]">
+              Each chart shows its own live/reconnecting feed status. The server trading stream
+              below is separate and is not required for chart-only mode.
+            </div>
+          </section>
 
           <TradingHealthSection
             health={status.tradingHealth}
@@ -212,9 +181,8 @@ export default function StatusPage() {
             error={status.tradingHealthError}
           />
 
-          {/* Last Check */}
           {status.lastCheck && (
-            <div className="text-center text-[#787b86] text-sm mt-6">
+            <div className="text-center text-sm text-[#787b86]">
               Last checked: {status.lastCheck.toLocaleTimeString()}
             </div>
           )}
@@ -222,4 +190,87 @@ export default function StatusPage() {
       </div>
     </div>
   );
+}
+
+function getConnectionLevel(api: ApiHealth | null, broker: BrokerHealth | null): StatusLevel {
+  if (!api) return "unavailable";
+  if (!api.healthy) return "unhealthy";
+  if (!broker) return "unavailable";
+  return broker.status === "ok" ? "healthy" : "degraded";
+}
+
+function getConnectionLabel(level: StatusLevel): string {
+  switch (level) {
+    case "healthy":
+      return "Healthy";
+    case "degraded":
+      return "Degraded";
+    case "unhealthy":
+      return "Unhealthy";
+    default:
+      return "Unavailable";
+  }
+}
+
+function getBrokerLevel(broker: BrokerHealth | null): StatusLevel {
+  if (!broker) return "unavailable";
+  return broker.status === "ok" ? "healthy" : "degraded";
+}
+
+function getBrokerLabel(broker: BrokerHealth | null): string {
+  if (!broker) return "Unavailable";
+  return broker.status === "ok" ? "Connected" : "Degraded";
+}
+
+function StatusIndicator({ level, label }: { level: StatusLevel; label: string }) {
+  const color = getStatusColor(level);
+  return (
+    <div className={`flex items-center gap-2 ${color}`}>
+      <span className={`h-3 w-3 rounded-full ${getStatusDot(level)}`} />
+      <span className="text-sm font-medium">{label}</span>
+    </div>
+  );
+}
+
+function StatusDetail({
+  label,
+  value,
+  level,
+}: {
+  label: string;
+  value: string;
+  level?: StatusLevel;
+}) {
+  return (
+    <div>
+      <div className="text-xs text-[#787b86]">{label}</div>
+      <div className={`mt-1 ${level ? getStatusColor(level) : "text-white"}`}>{value}</div>
+    </div>
+  );
+}
+
+function getStatusColor(level: StatusLevel): string {
+  switch (level) {
+    case "healthy":
+      return "text-[#089981]";
+    case "degraded":
+      return "text-[#f7931a]";
+    case "unhealthy":
+      return "text-[#f23645]";
+    default:
+      return "text-[#787b86]";
+  }
+}
+
+function getStatusDot(level: StatusLevel): string {
+  switch (level) {
+    case "healthy":
+      return "bg-[#089981]";
+    case "degraded":
+      return "bg-[#f7931a]";
+    case "unhealthy":
+      return "bg-[#f23645]";
+    default:
+      return "bg-[#787b86]";
+  }
 }

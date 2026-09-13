@@ -85,7 +85,7 @@ graph TB
 
 MAWS supports four environment modes with progressively stricter requirements:
 
-- **local**: Chart Only startup with no active broker; Paper, Testnet, and Production can be attached from the UI
+- **local**: Chart Only startup with no attached trading account or server trading manager; public Binance market data remains available, and Paper, Testnet, and Production can be attached from the UI
 - **testnet**: Binance USD-M Futures Testnet startup context, requiring authentication and Testnet credentials
 - **shadow**: Production market data with read-only account, zero order submissions
 - **production**: Real trading startup context, requiring all risk limits and execution gates enabled
@@ -228,7 +228,7 @@ docker run -p 3000:3000 --env-file .env maws
 
 ### Risk Controls
 
-- **Environment Enforcement**: Local startup begins without an active broker; profile-specific credentials are accepted for authenticated UI switching
+- **Environment Enforcement**: Local startup begins without an attached trading account or server trading manager; public market data remains available, and profile-specific credentials are accepted for authenticated UI switching
 - **Production Requirements**: All risk limits must be positive finite numbers
 - **Execution Gates**: Dual requirement (static env var + runtime flag)
 - **Shadow Mode**: Read-only enforcement, zero submissions allowed
@@ -246,6 +246,17 @@ npm install
 # Start development server
 npm run dev
 ```
+
+The local development server starts in Chart Only and serves the MAWS dashboard at `http://localhost:3000`.
+
+For a local production-like run, build and start the standalone server:
+
+```bash
+npm run build
+npm start
+```
+
+The standalone launcher loads `.env.local` and `.env`, copies the required static assets, and resolves the default database to `.maws/maws.db`. Stop `npm start` before rebuilding on Windows to avoid file locks.
 
 #### Production
 
@@ -310,11 +321,12 @@ curl http://localhost:3000/api/health
 
 Response includes:
 - Environment mode
-- Broker connection status
-- Stream health
-- Reconciliation status
+- Server trading-manager and broker state
+- Clock, private stream, and reconciliation health
 - Execution gate state
 - Circuit breaker states
+
+For public Binance reachability, use `GET /api/health/broker`; it performs a lightweight Binance public API ping. In local Chart Only, the public API can be reachable while the server trading manager is idle. The `/status` page presents those as separate statuses so an idle server trading manager is not mistaken for a disconnected chart feed.
 
 #### Health Check with Token
 

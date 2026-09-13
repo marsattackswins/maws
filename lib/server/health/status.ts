@@ -100,6 +100,7 @@ export function buildHealthStatus(cfg: EnvConfig): HealthStatus {
 
     const reconHealthy = true; // N/A for local mode
     const managerHealthy = signals.managerRunning && signals.brokerStatus === "ready";
+    const chartOnlyLocal = cfg.activeProfileId === null && !signals.managerRunning;
 
     const openCircuits = circuitRegistry.getOpenCircuits();
     const frozenReasons = [...execution.reasons];
@@ -124,7 +125,12 @@ export function buildHealthStatus(cfg: EnvConfig): HealthStatus {
       circuitBreakerStates,
       submissionsFrozen,
       frozenReasons,
-      healthy: managerHealthy && clockHealthy && streamHealthy && reconHealthy && circuitBreakersHealthy, // Submission is intentionally unavailable in local mode
+      // Chart-only local mode intentionally has no server trading manager,
+      // private stream, or exchange clock signal. Those are unavailable rather
+      // than failed; circuit-breaker state is the only server health concern.
+      healthy: chartOnlyLocal
+        ? circuitBreakersHealthy
+        : managerHealthy && clockHealthy && streamHealthy && reconHealthy && circuitBreakersHealthy,
     };
   }
 
