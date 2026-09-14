@@ -92,6 +92,26 @@ function applyProfileStatus(status: ProfileRuntimeStatusDto): void {
   useLiveStore.getState().setProfileRuntime(status);
 }
 
+async function enableAuthenticatedExecution(profileId: LiveProfileId | null): Promise<void> {
+  if (profileId === null || profileId === "paper") return;
+  try {
+    await liveApi.setGates({ executionEnabled: true });
+    return;
+  } catch {
+    // Refresh the session once so a rotated CSRF token does not leave a newly
+    // authenticated profile waiting for a manual execution action.
+  }
+  try {
+    const session = await liveApi.session();
+    if (!session.authenticated) return;
+    setCsrf(session.csrf ?? null);
+    await liveApi.setGates({ executionEnabled: true });
+  } catch {
+    // Keep the profile attached; health and the admin page surface any
+    // remaining readiness block without hiding the cause.
+  }
+}
+
 function detachClient(clearRuntime = true): void {
   stopSse();
   if (refreshTimer) {
@@ -220,6 +240,7 @@ async function attachConfirmedProfile(status: ProfileRuntimeStatusDto, verifyAft
   useLiveStore.getState().setAttached(true);
   useAppStore.getState().setConnectedBroker("binance");
   useAppStore.getState().setBottomOpen(false);
+  await enableAuthenticatedExecution(confirmed.profileId);
   startSse(confirmed, epoch);
   return true;
 }
@@ -389,6 +410,13 @@ export async function switchLiveProfile(target: LiveProfileId, confirmProduction
       // The original stable error category is more useful than a second failure.
     }
     if (observed) {
+      if (target !== "paper" && observed.phase === "switching") {
+        try {
+          observed = await waitForReady(observed, target);
+        } catch {
+          // Keep the original error if the status endpoint is unavailable.
+        }
+      }
       applyProfileStatus(observed);
       if (isReady(observed) && observed.profileId !== "paper") {
         stopSse();

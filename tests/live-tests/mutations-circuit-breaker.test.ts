@@ -7,7 +7,9 @@
  * zero outbound exchange mutation calls, and never a business-shaped 422 or a
  * generic 500. These tests run the REAL route → factory → BinanceAdapter →
  * OrderService → BinanceRestClient stack against an in-memory FakeHttp
- * exchange; only the breaker state is forced.
+ * exchange; only the breaker state is forced. Position closes are explicit
+ * reduce-only emergency actions and intentionally remain available when the
+ * normal REST breaker or execution gate is open.
  *
  * Companion to orders-circuit-breaker.test.ts (the POST /api/live/orders
  * proof); see that file for the original regression narrative.
@@ -25,11 +27,12 @@ import { CircuitBreakerOpenError } from "@/lib/server/resilience/circuit-breaker
 import { getBroker, resetBrokerForTests } from "@/lib/server/broker/factory";
 import { getMetrics, METRICS } from "@/lib/server/metrics/collector";
 import { createIntent } from "@/lib/server/binance/intents";
-import { applyPositionSnapshot } from "@/lib/server/binance/state";
+
 import type { EnvConfig } from "@/lib/server/env/config";
 import {
   BTCUSDT_INFO,
   FakeHttp,
+  FakeWs,
   freshEnv,
   installFakes,
   jsonRes,
@@ -68,10 +71,14 @@ async function bootRealBroker(positionRows: unknown[] = [POSITION_RISK_ROW]): Pr
   http.route("/fapi/v2/account", () => jsonRes({ totalWalletBalance: "1000", totalUnrealizedProfit: "0", totalMarginBalance: "1000", availableBalance: "1000", maxWithdrawAmount: "1000", assets: [{ asset: "USDT", walletBalance: "1000", unrealizedProfit: "0", availableBalance: "1000", marginBalance: "1000" }] }));
   http.route("/fapi/v2/positionRisk", () => jsonRes(positionRows));
   http.route("/fapi/v1/openOrders", () => jsonRes([]));
+  http.route("/fapi/v1/allOpenOrders", () => jsonRes([]));
   http.route("/fapi/v1/listenKey", () => jsonRes({ listenKey: "LK-BRK" }));
   http.route("/fapi/v1/leverageBracket", () => jsonRes([]));
   http.route("/fapi/v1/userTrades", () => jsonRes([]));
+  http.route("/fapi/v1/order", () => jsonRes(orderFixture({ type: "MARKET", status: "FILLED", origQty: "0.002" })));
   await getBroker().connect();
+  FakeWs.last().emitOpen();
+  await flush();
 }
 
 const POSITION_RISK_ROW = {
@@ -252,16 +259,18 @@ describe("POST /api/live/orders/cancel with REST breaker open", () => {
 // ---------------------------------------------------------------------------
 
 describe("POST /api/live/positions/close with REST breaker open", () => {
-  test("breaker trips at submit: route answers 503 circuit_open, not 422/500", async () => {
+  test("close remains available as a reduce-only emergency action", async () => {
     await bootRealBroker();
+    setRuntime(RUNTIME_KEYS.killSwitch, "true");
+    setRuntime(RUNTIME_KEYS.frozen, "true");
     getBinanceRestBreaker().forceOpen();
 
     const { sessionId } = createSession("brk-close");
     const res = await postMutation("/api/live/positions/close", { symbol: "BTCUSDT" }, sessionId);
-    await expectCircuitOpenContract(res);
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { ok: boolean }).toMatchObject({ ok: true });
 
-    // No reduce-only order POST ever left for the exchange.
-    expect(http.callsTo("/fapi/v1/order")).toHaveLength(0);
+    expect(http.callsTo("/fapi/v1/order").filter((call) => call.method === "POST")).toHaveLength(1);
   });
 
   test("no open position keeps the existing business 422 (not 503/500)", async () => {

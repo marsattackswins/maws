@@ -46,6 +46,13 @@ function rectNode(
  * to an SVG layer (like SessionBreaks). Each visible `ob` study runs the incremental engine over
  * the pane's candles; the per-study history cache makes live ticks O(blocks) instead of a full
  * recompute.
+ *
+ * Layering: the SVG sits BELOW the ChartCanvas element (`z-[1]` vs the canvas's `z-10`), so
+ * order blocks render behind the candles — they are background zones, not foreground marks.
+ * The z-index must stay positive: the pane's background is painted by the positioned `section`
+ * ancestor (z-index auto), and a negative-z child would paint beneath it and disappear. The
+ * chart's own canvas background is transparent, so the blocks stay visible behind the price
+ * action. User drawings (z-[5]) intentionally sit above the blocks.
  */
 export function OrderBlocks({ pane }: { pane: ChartPaneState }) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -275,7 +282,7 @@ export function OrderBlocks({ pane }: { pane: ChartPaneState }) {
   return (
     <svg
       ref={svgRef}
-      className="pointer-events-none absolute inset-0 z-[11] h-full w-full"
+      className="pointer-events-none absolute inset-0 z-[1] h-full w-full"
       aria-hidden
     />
   );

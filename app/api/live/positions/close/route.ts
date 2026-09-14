@@ -6,11 +6,11 @@ import { runBrokerMutation } from "@/lib/server/response/broker-mutation";
 import { withMutationLog } from "@/lib/server/log/request-log";
 import { observeLiveMutationLatency, LIVE_MUTATION_OPERATIONS } from "@/lib/server/metrics/collector";
 import { checkRateLimit, recordRequest, rateLimitedResponse } from "@/lib/server/rate-limit";
-import { assertProfileMutationRequest, ProfileCoordinatorError, profileErrorStatus } from "@/lib/server/profile/coordinator";
+import { assertProfileRequest, ProfileCoordinatorError, profileErrorStatus } from "@/lib/server/profile/coordinator";
 
 export const dynamic = "force-dynamic";
 
-/** Reduce-only market close of the position for the given symbol. */
+/** Explicit reduce-only market close; allowed while normal submissions are halted. */
 export async function POST(req: Request): Promise<Response> {
   return withMutationLog(req, async (logCtx) => {
     let cfg;
@@ -22,7 +22,7 @@ export async function POST(req: Request): Promise<Response> {
     const ctx = authenticate(req, cfg, { allowLocal: true });
     if (isAuthFailure(ctx)) return ctx.response;
     try {
-      assertProfileMutationRequest(req);
+      assertProfileRequest(req);
     } catch (error) {
       if (error instanceof ProfileCoordinatorError) return jsonError(profileErrorStatus(error.code), error.code, "Profile runtime changed; retry the request");
       throw error;
@@ -44,8 +44,8 @@ export async function POST(req: Request): Promise<Response> {
     try {
       result = await runBrokerMutation(
         () => {
-          assertProfileMutationRequest(req);
-          return getBroker().closePosition(symbol);
+          assertProfileRequest(req);
+          return getBroker().emergencyClosePosition(symbol);
         },
         { symbol },
       );
@@ -56,11 +56,14 @@ export async function POST(req: Request): Promise<Response> {
     observeLiveMutationLatency(symbol, LIVE_MUTATION_OPERATIONS.CLOSE_POSITION, Math.round(performance.now() - start));
     recordRequest(symbol, LIVE_MUTATION_OPERATIONS.CLOSE_POSITION);
     if (result instanceof Response) return result;
+    const response = result.status === "NO_POSITION"
+      ? { ...result, ok: false, error: `No open position for ${symbol}` }
+      : result;
 
-    audit("operator", result.ok ? "position.ui.closed" : "position.ui.close_rejected", {
+    audit("operator", response.ok ? "position.ui.closed" : "position.ui.close_rejected", {
       symbol: body.symbol,
-      error: result.error,
+      error: response.error,
     }, ctx.ip);
-    return jsonOk(result, { status: result.ok ? 200 : 422 });
+    return jsonOk(response, { status: response.ok ? 200 : 422 });
   });
 }

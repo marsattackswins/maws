@@ -40,10 +40,21 @@ export interface StreamDeps {
     setTimeout: (fn: () => void, ms: number) => unknown;
     clearTimeout: (h: unknown) => void;
   };
+  /** How long startup may wait for another process's lease to expire. */
+  leaseWaitTimeoutMs?: number;
+}
+
+export class StreamLeaseUnavailableError extends Error {
+  constructor() {
+    super("User-data stream lease is owned by another server process");
+    this.name = "StreamLeaseUnavailableError";
+  }
 }
 
 const KEEPALIVE_MS = 25 * 60 * 1000;
 const ROTATE_MS = 23 * 60 * 60 * 1000;
+const LEASE_RETRY_MS = 1000;
+const DEFAULT_LEASE_WAIT_TIMEOUT_MS = 65_000;
 const MAX_BUFFER = 5000;
 
 /**
@@ -62,6 +73,8 @@ export class UserDataStream {
   private reconnectTimer: unknown = null;
   private keepaliveTimer: unknown = null;
   private leaseTimer: unknown = null;
+  private leaseWaitResolve: (() => void) | null = null;
+  private phase = "closed";
   private reconnects = 0;
   private generation = 0;
   private startedAt: number | null = null;
@@ -78,7 +91,7 @@ export class UserDataStream {
     return {
       connected: this.ws != null && !this.buffering && !this.stopped,
       leaseOwned: this.deps.lease.isOwner(),
-      phase: this.buffering ? "snapshot" : this.stopped ? "closed" : "live",
+      phase: this.phase,
       buffering: this.buffering,
       reconnects: this.reconnects,
       listenKeyAgeMs: this.listenKeyCreatedAt === 0 ? 0 : Date.now() - this.listenKeyCreatedAt,
@@ -93,17 +106,39 @@ export class UserDataStream {
 
   async start(): Promise<void> {
     this.stopped = false;
+    this.phase = "starting";
     this.startedAt = Date.now();
     const startGeneration = this.generation;
-    if (!this.deps.lease.tryAcquire()) {
-      log.warn("another server instance owns the user-data stream; standing by");
-      this.deps.onStatus({ connected: false, leaseOwned: false, phase: "standby", reconnects: 0, generation: this.generation, bufferOverflow: this.bufferOverflow, lastApplicationEventAt: this.lastApplicationEventAt, startedAt: this.startedAt, circuitState: this.streamCircuitState() });
-      return;
-    }
+    if (!await this.acquireLease(startGeneration)) return;
+    if (this.stopped || this.generation !== startGeneration) return;
     this.startLeaseRenewal();
     await this.openWithNewListenKey();
     if (this.stopped || this.generation !== startGeneration + 1) return;
     this.startKeepalive();
+  }
+
+  private async acquireLease(startGeneration: number): Promise<boolean> {
+    const deadline = Date.now() + (this.deps.leaseWaitTimeoutMs ?? DEFAULT_LEASE_WAIT_TIMEOUT_MS);
+    for (;;) {
+      if (this.stopped || this.generation !== startGeneration) return false;
+      if (this.deps.lease.tryAcquire()) return true;
+      if (Date.now() >= deadline) {
+        this.phase = "standby";
+        this.notify({ connected: false, leaseOwned: false, phase: "standby" });
+        throw new StreamLeaseUnavailableError();
+      }
+      this.phase = "standby";
+      log.warn("another server instance owns the user-data stream; retrying lease acquisition");
+      this.notify({ connected: false, leaseOwned: false, phase: "standby" });
+      await new Promise<void>((resolve) => {
+        this.leaseWaitResolve = resolve;
+        this.leaseTimer = this.timers.setTimeout(() => {
+          this.leaseTimer = null;
+          if (this.leaseWaitResolve === resolve) this.leaseWaitResolve = null;
+          resolve();
+        }, LEASE_RETRY_MS);
+      });
+    }
   }
 
   stop(): void {
@@ -118,6 +153,10 @@ export class UserDataStream {
       if (h != null) this.timers.clearTimeout(h);
     }
     this.reconnectTimer = this.keepaliveTimer = this.leaseTimer = null;
+    const resolveLeaseWait = this.leaseWaitResolve;
+    this.leaseWaitResolve = null;
+    resolveLeaseWait?.();
+    this.phase = "closed";
     if (this.ws) {
       try {
         this.ws.close();
@@ -152,10 +191,11 @@ export class UserDataStream {
   }
 
   private notify(status: Partial<StreamStatus>): void {
+    this.phase = status.phase ?? this.phase;
     this.deps.onStatus({
       connected: this.ws != null && !this.buffering && !this.stopped,
       leaseOwned: this.deps.lease.isOwner(),
-      phase: "live",
+      phase: this.phase,
       reconnects: this.reconnects,
       generation: this.generation,
       bufferOverflow: this.bufferOverflow,
@@ -217,6 +257,8 @@ export class UserDataStream {
 
   private connectWs(): void {
     const generation = ++this.generation;
+    this.phase = "connecting";
+    this.notify({ connected: false, phase: "connecting" });
     const host = HOST_MAP[this.deps.cfgEnv].uds;
     const ws = brokerClients().ws.connect(`${host}/ws/${this.listenKey}`);
     this.ws = ws;
@@ -233,6 +275,7 @@ export class UserDataStream {
   private onOpen(generation: number): void {
     if (generation !== this.generation || this.stopped) return;
     this.buffering = true;
+    this.phase = "snapshot";
     this.buffer = [];
     this.notify({ connected: false, phase: "snapshot" });
     void this.recover(generation);
@@ -276,6 +319,7 @@ export class UserDataStream {
     } catch (err) {
       log.error("snapshot recovery failed; scheduling reconnect", { generation, error: String(err) });
       this.deps.freeze("stream snapshot recovery failed");
+      this.notify({ connected: false, phase: "reconnecting" });
       this.scheduleReconnect();
     }
   }
@@ -311,6 +355,7 @@ export class UserDataStream {
   private onDrop(generation: number): void {
     if (generation !== this.generation || this.stopped) return;
     this.ws = null;
+    this.phase = "reconnecting";
     this.buffering = false;
     this.buffer = [];
     this.notify({ connected: false, phase: "reconnecting" });

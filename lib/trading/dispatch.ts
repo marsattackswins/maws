@@ -127,11 +127,6 @@ export async function dispatchCancelOrder(id: string): Promise<{ ok: boolean; er
 
 /** Live positions are keyed by symbol (one-way mode); paper positions by id. */
 export async function dispatchClosePosition(idOrSymbol: string): Promise<{ ok: boolean; error?: string }> {
-  const halt = tradingHaltReason();
-  if (halt !== null && activeBrokerId() === "binance") {
-    notifyLiveError(`Trading halted: ${halt}`);
-    return { ok: false, error: "trading_halted" };
-  }
   if (activeBrokerId() !== "binance") {
     mockClosePosition(idOrSymbol);
     return { ok: true };

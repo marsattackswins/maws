@@ -10,6 +10,7 @@ export interface ProfileRuntimeStatusDto {
   phase: LiveProfilePhase;
   ready: boolean;
   managerStatus: string;
+  managerError?: string | null;
   streamHealthy: boolean | null;
   executionAllowed: boolean;
   generation: number;

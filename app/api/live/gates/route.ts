@@ -55,7 +55,7 @@ export async function POST(req: Request): Promise<Response> {
       return jsonError(409, "env", "Runtime execution flag cannot open submissions in this environment");
     }
     if (body.executionEnabled && !executionDecision(runtimeCfg).profileExecutionEnabled) {
-      return jsonError(409, "profile_execution_gate", "The active profile execution gate is disabled in configuration");
+      return jsonError(409, "profile_configuration", "Binance credentials are not configured for the active profile");
     }
     setRuntime(RUNTIME_KEYS.executionEnabled, body.executionEnabled ? "true" : "false", Date.now(), profile);
     audit("operator", "execution.runtime_flag", { enabled: body.executionEnabled }, ctx.ip);

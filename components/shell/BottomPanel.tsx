@@ -19,8 +19,13 @@ export const PANEL_TABS = [
 ] as const;
 
 export const PANEL_TOOLBAR_HEIGHT = 32;
+/**
+ * Plain text tab. The active underline is a 2px pseudo-element a few px above
+ * the button's bottom edge (a bottom border would sit flush with the panel
+ * edge and disappear against it), spanning exactly the label width.
+ */
 export const PANEL_TAB_CLASS =
-  "relative top-0 box-border flex h-[22px] min-h-[22px] appearance-none items-center justify-center rounded-full border-0 px-3 py-0 text-[12px] font-semibold leading-[22px] outline-none focus:outline-none focus-visible:ring-0 active:top-0 active:translate-y-0";
+  "relative box-border flex h-[32px] min-h-[32px] appearance-none items-center justify-center bg-transparent px-3 py-0 text-[12px] font-medium leading-none outline-none after:absolute after:inset-x-3 after:bottom-[4px] after:h-[2px] after:rounded-full after:content-[\"\"] after:bg-transparent focus:outline-none focus-visible:ring-0";
 
 export function isPanelTabActive(tab: string, open: boolean, itemId: string): boolean {
   return tab === itemId && open;
@@ -48,16 +53,18 @@ function sectionHeightLimit(section: HTMLElement | null): number {
   return panelHeightLimit(availablePanelHeight(section), applicationHeight(section));
 }
 
+/** Compact panel stamp: "Sep 14 · 3:44 PM" (no year, per the toolbar design). */
 export function formatPanelDateTime(date: Date, timezone: string): string {
   return new Intl.DateTimeFormat("en-US", {
     timeZone: timezoneIana(timezone),
     month: "short",
     day: "numeric",
-    year: "numeric",
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
-  }).format(date);
+  })
+    .format(date)
+    .replace(",", " ·");
 }
 
 function PanelDateTime() {
@@ -104,8 +111,42 @@ export function hasConfirmedBroker(
   return (live.phase === "ready" && live.ready) || live.phase === "switching";
 }
 
+type StatusTone = "blue" | "green" | "yellow" | "red";
+
+const STATUS_COLOR: Record<StatusTone, string> = {
+  blue: "#2962ff",
+  green: "#089981",
+  yellow: "#f0b90b",
+  red: "#f23645",
+};
+
+function StatusDot({ tone, pulse = false }: { tone: StatusTone; pulse?: boolean }) {
+  return (
+    <span className="relative inline-flex h-1.5 w-1.5 shrink-0">
+      {pulse ? (
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-50" style={{ backgroundColor: STATUS_COLOR[tone] }} />
+      ) : null}
+      <span className="relative inline-flex h-1.5 w-1.5 rounded-full" style={{ backgroundColor: STATUS_COLOR[tone] }} />
+    </span>
+  );
+}
+
+function StatusItem({ marker, text, tone, pulse = false, title }: { marker: string; text: string; tone: StatusTone; pulse?: boolean; title: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] leading-none" title={title} data-status={marker}>
+      <StatusDot tone={tone} pulse={pulse} />
+      <span className="font-medium" style={{ color: STATUS_COLOR[tone] }}>
+        {text}
+      </span>
+    </span>
+  );
+}
+
 function LiveStatusIndicator() {
   const envLabel = useLiveStore((s) => s.envLabel);
+  const liveProfileId = useLiveStore((s) => s.profileId);
+  const livePhase = useLiveStore((s) => s.phase);
+  const liveReady = useLiveStore((s) => s.ready);
   const health = useLiveStore((s) => s.health);
   const stream = useLiveStore((s) => s.stream);
   const [busy, setBusy] = useState(false);
@@ -115,14 +156,34 @@ function LiveStatusIndicator() {
   const frozen = decision?.frozen === true;
   const killSwitch = decision?.killSwitch === true;
   const streamOn = stream?.connected === true;
-  const statusTone = canSubmit ? "text-[#089981]" : frozen ? "text-[#f23645]" : "text-[#ff9800]";
-  const statusLabel = canSubmit
-    ? "Ready"
+  const connectionReady = liveReady && livePhase === "ready";
+
+  const env = envLabel ?? "Binance";
+  const envTone: StatusTone = /prod/i.test(env) ? "green" : /test/i.test(env) ? "blue" : "yellow";
+
+  const connection: { text: string; tone: StatusTone; pulse: boolean } = livePhase === "switching"
+    ? { text: "Switching", tone: "yellow", pulse: true }
+    : connectionReady
+      ? { text: "Connected", tone: "green", pulse: false }
+      : livePhase === "failed" || livePhase === "detached"
+        ? { text: "Unavailable", tone: "red", pulse: false }
+        : { text: "Checking", tone: "yellow", pulse: true };
+
+  const orders: { text: string; tone: StatusTone; pulse: boolean } = canSubmit
+    ? { text: "Orders open", tone: "green", pulse: false }
     : frozen
-      ? "Frozen"
+      ? { text: "Orders frozen", tone: "red", pulse: false }
       : killSwitch
-        ? "Kill switch on"
-        : "Blocked";
+        ? { text: "Orders stopped", tone: "red", pulse: false }
+        : decision == null
+          ? { text: "Orders checking", tone: "yellow", pulse: true }
+          : { text: "Orders blocked", tone: "yellow", pulse: false };
+
+  const streamStatus: { text: string; tone: StatusTone; pulse: boolean } = stream == null
+    ? { text: "Stream checking", tone: "yellow", pulse: true }
+    : streamOn
+      ? { text: "Stream live", tone: "green", pulse: true }
+      : { text: "Stream down", tone: "red", pulse: false };
 
   const toggleKillSwitch = async () => {
     if (busy) return;
@@ -138,62 +199,47 @@ function LiveStatusIndicator() {
     }
   };
 
+  const separator = <span className="h-3 w-px shrink-0 bg-[var(--maws-border)]" />;
+
   return (
-    <div className="ml-1 flex min-w-0 shrink-0 items-center gap-2 text-[11px]" role="status">
-      <span className="font-semibold text-[#2962ff]">{envLabel ?? "Binance"}</span>
-      <span className={`font-semibold ${statusTone}`}>{statusLabel}</span>
-      <span className="text-[var(--maws-muted)]">
-        Stream: <span className={streamOn ? "text-[#089981]" : "text-[#f23645]"}>{streamOn ? "live" : "down"}</span>
-      </span>
-      {frozen && decision?.frozenReason ? (
-        <span className="max-w-[180px] truncate text-[#f23645]" title={decision.frozenReason}>
-          {decision.frozenReason}
-        </span>
-      ) : null}
+    <div className="ml-2 flex min-w-0 shrink-0 items-center gap-2" role="status" aria-label="Live trading status">
+      <StatusItem
+        marker="env"
+        text={env}
+        tone={envTone}
+        title={liveProfileId ? profileLabel(liveProfileId) : "Trading environment"}
+      />
+      {separator}
+      <StatusItem marker="connection" text={connection.text} tone={connection.tone} pulse={connection.pulse} title={profilePhaseLabel(livePhase)} />
+      {separator}
+      <StatusItem
+        marker="orders"
+        text={orders.text}
+        tone={orders.tone}
+        pulse={orders.pulse}
+        title={frozen && decision?.frozenReason ? decision.frozenReason : "Whether new order submissions are currently allowed"}
+      />
+      {separator}
+      <StatusItem marker="stream" text={streamStatus.text} tone={streamStatus.tone} pulse={streamStatus.pulse} title="Private account stream status" />
+      {separator}
       <button
         type="button"
         disabled={busy}
+        aria-pressed={killSwitch}
         onClick={() => {
           void toggleKillSwitch();
         }}
-        className={`rounded-[4px] px-2 py-0.5 text-[11px] font-semibold ${
-          killSwitch ? "bg-[#089981] text-black" : "bg-[#f23645] text-white"
-        } ${busy ? "opacity-60" : ""}`}
-        title="Toggle the emergency kill switch (blocks all submissions)"
+        className={`inline-flex h-[20px] shrink-0 items-center rounded-full border px-2 text-[10px] font-semibold uppercase tracking-wide transition-colors disabled:cursor-wait disabled:opacity-60 ${
+          killSwitch
+            ? "border-[#f23645] bg-[#f23645] text-white hover:bg-[#d92f3d]"
+            : "border-[#f23645]/50 bg-transparent text-[#f23645] hover:bg-[#f23645]/10"
+        }`}
+        title={killSwitch ? "Click to resume new order submissions" : "Click to engage the emergency kill switch and block new order submissions"}
       >
-        {killSwitch ? "Resume trading" : "Kill switch"}
+        {busy ? "···" : killSwitch ? "Kill switch ON" : "Kill switch"}
       </button>
     </div>
   );
-}
-
-function LiveProfileStatus() {
-  const connectedBroker = useAppStore((s) => s.connectedBroker);
-  const liveProfileId = useLiveStore((s) => s.profileId);
-  const livePhase = useLiveStore((s) => s.phase);
-  const liveReady = useLiveStore((s) => s.ready);
-
-  if (connectedBroker !== "binance") return null;
-  if (liveProfileId) {
-    return (
-      <span
-        className={`ml-1 flex h-[28px] items-center gap-1.5 rounded-full border px-3 text-[11px] ${liveReady && livePhase === "ready" ? "border-[#089981]/40 text-[#089981]" : "border-[#f0b90b]/40 text-[#f0b90b]"}`}
-        title={`${profileLabel(liveProfileId)} · ${profilePhaseLabel(livePhase)}`}
-      >
-        <span className="max-w-[120px] truncate">{profileLabel(liveProfileId)}</span>
-        <span>· {profilePhaseLabel(livePhase)}</span>
-      </span>
-    );
-  }
-  if (livePhase === "failed" || livePhase === "detached") {
-    return (
-      <span className="ml-1 flex h-[28px] items-center gap-1.5 rounded-full border border-[#f0b90b]/40 px-3 text-[11px] text-[#f0b90b]" role="status">
-        <span>Live profile unavailable</span>
-        <span>· {profilePhaseLabel(livePhase)}</span>
-      </span>
-    );
-  }
-  return null;
 }
 
 export function BottomPanel() {
@@ -277,7 +323,8 @@ export function BottomPanel() {
         className="absolute bottom-0 left-0 right-0 box-border flex h-[32px] min-h-[32px] items-center gap-1 border-t px-2"
         style={{ borderColor: open ? "var(--maws-border)" : "transparent" }}
       >
-        <div className="flex min-w-0 shrink-0 items-center gap-1">
+        {connected === "binance" ? <LiveStatusIndicator /> : null}
+        <div className="flex min-w-0 flex-1 items-center justify-center gap-1">
           {PANEL_TABS.map((item) => {
             const on = isPanelTabActive(tab, open, item.id);
             return (
@@ -285,27 +332,14 @@ export function BottomPanel() {
                 key={item.id}
                 type="button"
                 onClick={() => toggleBottomTab(item.id)}
-                className={PANEL_TAB_CLASS}
-                style={
-                  on
-                    ? { background: "#d1d4dc", color: "#131722" }
-                    : {
-                        background: "var(--maws-elevated)",
-                        color: "var(--maws-text)",
-                      }
-                }
+                className={`${PANEL_TAB_CLASS} ${on ? "after:bg-white" : ""}`}
+                style={on ? { color: "#ffffff" } : { color: "var(--maws-text)" }}
               >
                 {item.label}
               </button>
             );
           })}
         </div>
-        {connected === "binance" ? (
-          <>
-            <LiveProfileStatus />
-            <LiveStatusIndicator />
-          </>
-        ) : null}
         <TradingMetrics />
         <PanelDateTime />
       </div>

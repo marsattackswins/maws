@@ -20,7 +20,7 @@ describe("shell bottom-area layout", () => {
     expect(topBar).not.toContain("LiveStatusIndicator");
     expect(bottomPanel).toContain("LiveStatusIndicator");
     expect(bottomPanel).toContain("profilePhaseLabel");
-    expect(bottomPanel).toContain("Stream:");
+    expect(bottomPanel).toContain('marker="stream"');
     expect(bottomPanel).toContain("Kill switch");
   });
 

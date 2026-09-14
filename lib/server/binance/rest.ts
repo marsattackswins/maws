@@ -40,6 +40,7 @@ export const ERR_UNKNOWN_ORDER = -2013;
 export const ERR_UNKNOWN_CANCEL = -2011;
 export const ERR_INVALID_API_KEY = -2015;
 export const ERR_LISTEN_KEY = -1125;
+export const ERR_REDUCE_ONLY_REJECT = -2022;
 
 export type BinanceErrorCertainty = "definite_rejection" | "unknown_outcome" | "not_an_api_error";
 

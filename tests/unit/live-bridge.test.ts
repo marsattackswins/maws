@@ -12,6 +12,7 @@ const mockLiveApi = {
   profile: jest.fn<() => Promise<unknown>>(),
   switchProfile: jest.fn<(input: { profileId: string; confirmProduction: boolean; requestId: string }) => Promise<unknown>>(),
   state: jest.fn<() => Promise<unknown>>(),
+  setGates: jest.fn<(input: { executionEnabled?: boolean; killSwitch?: boolean }) => Promise<unknown>>(),
 };
 
 jest.mock("@/lib/live/api", () => ({
@@ -84,6 +85,7 @@ describe("live broker attachment", () => {
     mockLiveApi.profile.mockReset();
     mockLiveApi.switchProfile.mockReset();
     mockLiveApi.state.mockReset();
+    mockLiveApi.setGates.mockReset();
   });
 
   test("local mode restores chart-only state without probing live profile APIs", async () => {
@@ -188,6 +190,7 @@ describe("live broker attachment", () => {
       phase: "ready",
     }));
     expect(FakeEventSource.instances).toHaveLength(1);
+    expect(mockLiveApi.setGates).toHaveBeenCalledWith({ executionEnabled: true });
   });
 
   test("does not restore a persisted paper broker when the server has no active profile", async () => {

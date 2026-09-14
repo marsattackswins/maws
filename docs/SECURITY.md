@@ -283,11 +283,12 @@ Recommended for all non-local deployments:
 
 ### Execution Gates
 
-Profile-specific static gates apply before runtime execution can be enabled:
-- Testnet: `MAWS_BINANCE_TESTNET_EXECUTION_ENABLED=true`
-- Production: `MAWS_BINANCE_PRODUCTION_EXECUTION_ENABLED=true`
-
-The applicable profile gate and the runtime flag from `POST /api/live/gates` must both be true, along with the health, stream, reconciliation, account, and risk checks.
+After operator authentication and connection of a configured Binance profile, MAWS
+sets the runtime execution flag automatically. The environment, health, stream,
+reconciliation, account, position-mode, freeze, kill-switch, and risk checks must
+still all allow the submission. The runtime flag remains available to the server
+as an operational control, but no separate per-profile execution env flag is
+required.
 
 ### Risk Limits
 

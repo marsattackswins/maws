@@ -274,7 +274,7 @@ function getSubmissionReason(
   if (chartOnlyLocal) return "Chart-only mode keeps order submissions blocked.";
   const reason = execution?.reasons[0];
   if (reason?.includes("runtime execution flag")) return "The runtime execution switch is off.";
-  if (reason?.includes("disabled by configuration")) return "The profile execution gate is off.";
+  if (reason?.includes("credentials are not configured")) return "Binance credentials are not configured for this profile.";
   if (reason?.includes("stream")) return "The private account stream is not ready.";
   if (reason) return reason;
   if (submissionsFrozen) return "Safety checks are blocking submissions.";
@@ -290,7 +290,6 @@ function buildReadinessChecks(
   const stream = health.feed.serverTradingStream;
   return [
     { label: "Order environment", detail: environmentReady ? formatTradingMode(health.env) : "Chart-only mode", ready: environmentReady },
-    { label: "Profile execution gate", detail: execution?.profileExecutionEnabled ? "Enabled" : "Disabled", ready: execution?.profileExecutionEnabled === true },
     { label: "Runtime execution switch", detail: execution?.runtimeEnabled ? "Enabled" : "Disabled", ready: execution?.runtimeEnabled === true },
     { label: "Server manager", detail: managerStatus === "ready" ? "Ready" : formatManagerStatus(managerStatus), ready: managerStatus === "ready" },
     { label: "Private account stream", detail: stream.level === "healthy" ? "Healthy" : formatStreamStatus(stream.status), ready: stream.level === "healthy" },

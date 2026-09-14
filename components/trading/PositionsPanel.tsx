@@ -36,10 +36,16 @@ function Metric({
   const color =
     tone === "up" ? "text-[#089981]" : tone === "down" ? "text-[#f23645]" : "text-[#d1d4dc]";
   return (
-    <span className="whitespace-nowrap text-[11px] text-[#787b86]">
-      {label}: <span className={color}>{value}</span>
+    <span className="flex flex-col justify-center gap-[3px] whitespace-nowrap border-l border-[var(--maws-border)] px-4 py-[5px] first:border-l-0">
+      <span className="text-[9px] font-semibold uppercase leading-none tracking-[0.08em] text-[#787b86]">{label}</span>
+      <span className={`text-[13px] font-semibold leading-none ${color}`}>{value}</span>
     </span>
   );
+}
+
+/** P&L values always carry an explicit sign: +0.00 / -1.23. Zero counts as positive. */
+function formatSigned(value: number): string {
+  return `${value >= 0 ? "+" : ""}${formatNum(value)}`;
 }
 
 function Empty({ text }: { text: string }) {
@@ -153,28 +159,22 @@ export function useTradingMetrics() {
 
 export function TradingMetrics() {
   const {
-    live,
     accountBalance,
     equity,
     realizedShown,
     unrealized,
-    margin,
     available,
-    orderMargin,
     buffer,
-    pnlTone,
   } = useTradingMetrics();
 
   return (
-    <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-x-3 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      <Metric label="Account balance" value={formatNum(accountBalance)} />
+    <div className="ml-auto flex shrink-0 items-stretch">
+      <Metric label="Balance" value={formatNum(accountBalance)} />
       <Metric label="Equity" value={formatNum(equity)} />
-      <Metric label="Realized P&L" value={formatNum(realizedShown)} tone={pnlTone(realizedShown)} />
-      <Metric label="Unrealized P&L" value={formatNum(unrealized)} tone={pnlTone(unrealized)} />
-      <Metric label="Account margin" value={formatNum(margin)} />
-      <Metric label="Available funds" value={formatNum(available)} />
-      <Metric label="Orders margin" value={live ? "—" : formatNum(orderMargin)} />
-      <Metric label="Margin buffer" value={`${formatNum(buffer)}%`} />
+      <Metric label="Realized" value={formatSigned(realizedShown)} tone={realizedShown >= 0 ? "up" : "down"} />
+      <Metric label="Unrealized" value={formatSigned(unrealized)} tone={unrealized >= 0 ? "up" : "down"} />
+      <Metric label="Available" value={formatNum(available)} />
+      <Metric label="Buffer" value={`${formatNum(buffer, 0)}%`} />
     </div>
   );
 }

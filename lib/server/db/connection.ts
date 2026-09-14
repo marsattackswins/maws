@@ -33,6 +33,21 @@ export function getDb(): Database.Database {
   return db;
 }
 
+/**
+ * Close the connection at process exit so SQLite checkpointing happens
+ * synchronously and no WAL is left for the next process to recover.
+ */
+export function closeDbForShutdown(): void {
+  if (!db) return;
+  try {
+    db.pragma("wal_checkpoint(TRUNCATE)");
+    db.close();
+  } catch {
+    // Best effort: the WAL recovers automatically on next open anyway.
+  }
+  db = null;
+}
+
 /** Test seam: swap the backing file or close the connection. */
 export function resetDbForTests(newPath?: string): void {
   if (db) {

@@ -1,4 +1,5 @@
 import { exec, spawn } from "node:child_process";
+import path from "node:path";
 import { platform } from "node:os";
 
 const port = process.env.PORT ?? "3000";
@@ -20,11 +21,24 @@ ${cyan}${bold}  ████╗   ████╗   ██████╗   █�
   ${dim}Market Analysis & Workflow System • Dev Server${reset}
 `);
 
-const child = spawn("next", ["dev", "-p", port], {
+const nextBin = path.resolve(process.cwd(), "node_modules", "next", "dist", "bin", "next");
+const child = spawn(process.execPath, [nextBin, "dev", "-p", port], {
   stdio: "inherit",
-  shell: true,
   env: process.env,
 });
+
+let stopping = false;
+const stopChild = (signal = "SIGTERM") => {
+  if (stopping) return;
+  stopping = true;
+  if (!child.killed) child.kill(signal);
+  const fallback = setTimeout(() => {
+    if (child.exitCode === null) child.kill();
+  }, 5_000);
+  fallback.unref();
+};
+process.once("SIGINT", () => stopChild("SIGINT"));
+process.once("SIGTERM", () => stopChild("SIGTERM"));
 
 child.on("exit", (code, signal) => {
   if (signal) process.kill(process.pid, signal);

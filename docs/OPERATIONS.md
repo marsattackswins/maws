@@ -37,17 +37,18 @@ npm run gen-operator-auth
 #### Profile-specific Binance credentials
 The server keeps Testnet and Production credentials separate so the UI can switch profiles without changing `.env.local` or restarting the server:
 
-| Profile | API key | API secret | Static execution default |
-|---|---|---|---|
-| `binance-testnet` | `MAWS_BINANCE_TESTNET_API_KEY` | `MAWS_BINANCE_TESTNET_API_SECRET` | `MAWS_BINANCE_TESTNET_EXECUTION_ENABLED=false` |
-| `binance-production` | `MAWS_BINANCE_PRODUCTION_API_KEY` | `MAWS_BINANCE_PRODUCTION_API_SECRET` | `MAWS_BINANCE_PRODUCTION_EXECUTION_ENABLED=false` |
+| Profile | API key | API secret |
+|---|---|---|
+| `binance-testnet` | `MAWS_BINANCE_TESTNET_API_KEY` | `MAWS_BINANCE_TESTNET_API_SECRET` |
+| `binance-production` | `MAWS_BINANCE_PRODUCTION_API_KEY` | `MAWS_BINANCE_PRODUCTION_API_SECRET` |
 
 A key and secret must be supplied together. Missing values leave that profile
-unconfigured; credentials are never copied between profiles. Each profile-specific
-execution flag is an actual static gate: Testnet submissions require the Testnet
-flag, and Production submissions require the Production flag. The runtime
-execution flag and all health/risk gates must also allow the submission. Withdrawal permission MUST be disabled,
-and none of these variables may use a `NEXT_PUBLIC_` prefix.
+unconfigured; credentials are never copied between profiles. After operator
+authentication and profile connection, MAWS enables normal submissions
+automatically. Health, stream, account, reconciliation, position-mode,
+freeze, kill-switch, and risk gates still block unsafe submissions. Withdrawal
+permission MUST be disabled, and none of these variables may use a
+`NEXT_PUBLIC_` prefix.
 
 #### Legacy Binance credentials
 `MAWS_BINANCE_API_KEY` and `MAWS_BINANCE_API_SECRET` remain supported during

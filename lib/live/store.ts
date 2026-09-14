@@ -88,7 +88,7 @@ export const useLiveStore = create<LiveStore>()((set) => ({
       generation: status.generation,
       reasonCode: status.reasonCode,
       managerStatus: status.managerStatus,
-      managerError: null,
+      managerError: status.managerError ?? null,
       env: status.environment,
       envLabel: status.environment === "paper" ? "Paper Trading" : status.environment === "testnet" ? "Binance Testnet" : status.environment === "production" ? "Binance Production" : null,
       health: status.phase === "ready" && state.profileId === status.profileId && state.generation === status.generation ? state.health : null,

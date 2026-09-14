@@ -33,6 +33,7 @@ export type ProfileRuntimeStatus = {
   phase: ProfilePhase;
   ready: boolean;
   managerStatus: string;
+  managerError?: string | null;
   streamHealthy: boolean | null;
   executionAllowed: boolean;
   generation: number;
@@ -109,20 +110,60 @@ function safeRequestId(value: unknown): boolean {
   return value === undefined || (typeof value === "string" && value.length >= 8 && value.length <= 128 && /^[A-Za-z0-9._:-]+$/.test(value));
 }
 
+const PROFILE_START_TIMEOUT_MS = 45_000;
+
+async function withTimeout<T>(operation: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+    operation.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 async function waitForReady(config: EnvConfig, manager: BinanceLiveManager): Promise<void> {
-  const deadline = Date.now() + 5_000;
+  const deadline = Date.now() + 30_000;
   while (manager.status === "ready" && reasonForHealth(config, manager) !== null && Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  if (manager.status !== "ready" || reasonForHealth(config, manager) !== null) throw new Error("manager readiness checks failed");
+  if (manager.status !== "ready") throw new Error("manager startup failed");
+  const reason = reasonForHealth(config, manager);
+  if (reason !== null) throw new Error(`manager readiness check failed: ${reason}`);
+}
+
+function safeStartupFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message.trim() : "";
+  if (!message || message.length > 240 || /api[-_]?secret|signature=|x-mbx-api-key/i.test(message)) {
+    return "Binance profile startup checks failed";
+  }
+  return message;
 }
 
 function reasonForHealth(config: EnvConfig, manager: BinanceLiveManager | null): string | null {
   if (!manager || manager.status !== "ready") return "manager_not_ready";
   const health = buildHealthStatus(config);
-  if (!health.streamHealthy) return "stream_unhealthy";
+  if (!health.streamHealthy) {
+    const stream = health.signals.stream;
+    if (!stream) return "stream_not_started";
+    if (stream.leaseOwned !== true) return stream.phase === "standby" ? "stream_standby" : "stream_lease_not_owned";
+    if (stream.circuitState === "open") return "stream_circuit_open";
+    if (stream.phase === "snapshot") return "stream_snapshot_pending";
+    if (stream.phase === "reconnecting") return "stream_reconnecting";
+    if (stream.phase === "connecting") return "stream_connecting";
+    return stream.connected ? "stream_stale" : "stream_disconnected";
+  }
   if (config.env !== "local") {
-    if (!health.clockHealthy) return "clock_unhealthy";
+    // Clock drift does not block signing: requests already carry
+    // offset-corrected timestamps and a -1021 resyncs + retries. A large raw
+    // drift only disqualifies production, where wall-clock truth matters.
+    if (config.env === "production" && !health.clockHealthy) return "clock_unhealthy";
     if (!health.signals.snapshot || Date.now() - health.signals.snapshot.fetchedAt > config.snapshotMaxAgeMs) return "snapshot_stale";
     if (!health.positionModeHealthy) return "position_mode_invalid";
     if (!health.reconHealthy) return health.signals.recon.lastResult === "drift" ? "reconciliation_drift" : "reconciliation_failed";
@@ -160,6 +201,7 @@ export class ProfileCoordinator {
   private startPromise: Promise<void> | null = null;
   private switchPromise: Promise<ProfileRuntimeStatus> | null = null;
   private failureReason: ProfileErrorCode | null = null;
+  private failureMessage: string | null = null;
 
   getStatus(): ProfileRuntimeStatus {
     if (!this.manager && hasLiveManager()) {
@@ -180,6 +222,7 @@ export class ProfileCoordinator {
       phase: this.phase,
       ready,
       managerStatus: manager?.status ?? "idle",
+      managerError: manager?.error ?? this.failureMessage,
       streamHealthy: stream ? buildHealthStatus(config ?? serverConfig()).streamHealthy : null,
       executionAllowed: ready && decision?.canSubmit === true,
       generation: this.generation,
@@ -231,6 +274,7 @@ export class ProfileCoordinator {
     const base = serverConfig();
     this.phase = "switching";
     this.failureReason = null;
+    this.failureMessage = null;
     blockNormalMutations("profile_switch_in_progress");
     this.generation += 1;
     const broker = getBroker();
@@ -240,8 +284,10 @@ export class ProfileCoordinator {
       await broker.connect();
       await waitForReady(this.runtimeConfig, this.manager);
       this.phase = "ready";
+      this.failureMessage = null;
       allowNormalMutations();
     } catch {
+      this.failureMessage = this.manager?.error ?? "Binance profile startup failed";
       this.phase = "failed";
       this.failureReason = "target_start_failed";
       blockNormalMutations("profile_runtime_unavailable");
@@ -301,6 +347,7 @@ export class ProfileCoordinator {
     resetHealthSignals();
     this.phase = "idle";
     this.failureReason = null;
+    this.failureMessage = null;
     allowNormalMutations();
     return this.getStatus();
   }
@@ -315,6 +362,7 @@ export class ProfileCoordinator {
 
     this.phase = "switching";
     this.failureReason = null;
+    this.failureMessage = null;
     this.generation += 1;
     blockNormalMutations("profile_switch_in_progress");
 
@@ -353,15 +401,26 @@ export class ProfileCoordinator {
       replaceBrokerForCoordinator(new BinanceAdapter(targetConfig, targetManager));
       this.manager = targetManager;
       this.runtimeConfig = targetConfig;
-      await targetManager.ensureStarted();
-      await waitForReady(targetConfig, targetManager);
+      await withTimeout(
+        (async () => {
+          await targetManager.ensureStarted();
+          await waitForReady(targetConfig, targetManager);
+        })(),
+        PROFILE_START_TIMEOUT_MS,
+        "Binance profile startup timed out while waiting for readiness",
+      );
       this.phase = "ready";
       this.failureReason = null;
+      this.failureMessage = null;
       allowNormalMutations();
       return this.getStatus();
-    } catch {
+    } catch (error) {
+      const readinessReason = targetManager ? reasonForHealth(targetConfig, targetManager) : null;
+      const targetError = targetManager?.error;
+      this.failureMessage = targetError
+        ?? (readinessReason ? `Binance profile startup check failed: ${readinessReason.replaceAll("_", " ")}` : safeStartupFailure(error));
       const targetCleaned = targetManager ? await this.cleanFailedTarget(targetManager) : true;
-      const rollback = targetCleaned ? await this.rollback(previousManager, previousConfig) : null;
+      const rollback = targetCleaned && previousManager ? await this.rollback(previousManager, previousConfig) : null;
       if (rollback) throw new ProfileCoordinatorError("target_start_failed");
       this.manager = null;
       this.runtimeConfig = null;
@@ -369,8 +428,13 @@ export class ProfileCoordinator {
       clearLiveManagerForCoordinator();
       clearLiveState();
       resetHealthSignals();
-      this.phase = "detached";
-      this.failureReason = targetCleaned ? "rollback_failed" : "target_start_failed";
+      if (!previousManager) {
+        this.phase = "failed";
+        this.failureReason = "target_start_failed";
+      } else {
+        this.phase = "detached";
+        this.failureReason = targetCleaned ? "rollback_failed" : "target_start_failed";
+      }
       blockNormalMutations("profile_runtime_unavailable");
       throw new ProfileCoordinatorError(this.failureReason);
     }
@@ -395,13 +459,21 @@ export class ProfileCoordinator {
       replaceBrokerForCoordinator(new BinanceAdapter(previousConfig, previousManager));
       this.manager = previousManager;
       this.runtimeConfig = previousConfig;
-      await previousManager.ensureStarted();
-      await waitForReady(previousConfig, previousManager);
+      await withTimeout(
+        (async () => {
+          await previousManager.ensureStarted();
+          await waitForReady(previousConfig, previousManager);
+        })(),
+        PROFILE_START_TIMEOUT_MS,
+        "Previous profile restore timed out while waiting for readiness",
+      );
       this.phase = "ready";
       this.failureReason = null;
+      this.failureMessage = null;
       allowNormalMutations();
       return this.getStatus();
     } catch {
+      await previousManager.stopAndWait().catch(() => undefined);
       return null;
     }
   }
@@ -452,6 +524,29 @@ export class ProfileCoordinator {
     const blocked = normalMutationBlock();
     if (blocked === "profile_switch_in_progress") throw new ProfileCoordinatorError("profile_switch_in_progress");
     if (blocked === "profile_runtime_unavailable") throw new ProfileCoordinatorError("stale_profile");
+  }
+
+  /**
+   * Best-effort teardown for process exit. Releases the user-data stream
+   * lease (via manager stop) so a following server instance can attach
+   * immediately instead of waiting out the lease TTL. Never throws.
+   */
+  async shutdownForExit(): Promise<void> {
+    const manager = this.manager;
+    this.manager = null;
+    this.runtimeConfig = null;
+    this.phase = "idle";
+    this.failureReason = null;
+    if (manager) {
+      try {
+        await manager.stopAndWait();
+      } catch {
+        // The lease row expires via TTL even if teardown fails mid-way.
+      }
+    }
+    clearBrokerForCoordinator();
+    clearLiveManagerForCoordinator();
+    clearLiveState();
   }
 
   resetForTests(): void {

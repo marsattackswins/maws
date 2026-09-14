@@ -25,8 +25,8 @@ export interface ExecutionDecision {
 /**
  * Submission requires ALL of:
  *  - an env that permits submissions (testnet or production; shadow/local never),
- *  - the active Binance profile's static execution gate,
- *  - the DB runtime execution flag,
+ *  - an authenticated, configured Binance profile,
+ *  - the DB runtime execution flag (enabled automatically after profile attachment),
  *  - kill switch disengaged,
  *  - not frozen by health/reconciliation,
  *  - manager ready, stream lease owned, healthy private stream, and a recent
@@ -48,12 +48,14 @@ export function executionDecision(cfg: EnvConfig): ExecutionDecision {
     : cfg.env === "production"
       ? "binance-production"
       : null;
-  const profileExecutionEnabled = executableProfileId !== null && cfg.profiles[executableProfileId].executionEnabled;
+  const profileExecutionEnabled = executableProfileId !== null && cfg.profiles[executableProfileId].configured;
   const signals = healthSignals();
   const managerReady = signals.brokerStatus === "ready";
   const stream = signals.stream;
   const streamLeaseOwned = stream?.leaseOwned === true;
-  const streamHeartbeatAt = stream?.lastApplicationEventAt ?? stream?.startedAt ?? null;
+  // Only real application events count as heartbeat; null means "no events yet",
+  // not "stale" — falling back to startedAt froze submissions on quiet accounts.
+  const streamHeartbeatAt = stream?.lastApplicationEventAt ?? null;
   const streamHealthy =
     stream != null &&
     stream.connected &&
@@ -80,8 +82,7 @@ export function executionDecision(cfg: EnvConfig): ExecutionDecision {
   }
   if (envAllowsSubmissions && !profileExecutionEnabled) {
     canSubmit = false;
-    const profileLabel = executableProfileId === null ? "active profile" : cfg.profiles[executableProfileId].label;
-    reasons.push(`${profileLabel} execution is disabled by configuration`);
+    reasons.push("Binance credentials are not configured for the active profile");
   }
 
   if (!runtimeEnabled) {

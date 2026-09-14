@@ -27,6 +27,7 @@ import type { EnvConfig } from "@/lib/server/env/config";
 import {
   BTCUSDT_INFO,
   FakeHttp,
+  FakeWs,
   accountFixture,
   freshEnv,
   installFakes,
@@ -34,6 +35,11 @@ import {
   makeCfg,
   orderFixture,
 } from "./helpers";
+
+/** Let pending stream callbacks (snapshot/lease/health signals) settle. */
+const flush = async (): Promise<void> => {
+  for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+};
 
 // ---------------------------------------------------------------------------
 // stdout capture: the request logger emits its JSON lines via process.stdout.
@@ -129,6 +135,7 @@ function standardFakes(http: FakeHttp, opts: { withPosition?: boolean } = {}): v
     ),
   );
   http.route("/fapi/v1/openOrders", () => jsonRes([]));
+  http.route("/fapi/v1/allOpenOrders", () => jsonRes([]));
   http.route("/fapi/v1/listenKey", () => jsonRes({ listenKey: "LK-LOGTEST" }));
   http.route("/fapi/v1/leverageBracket", () => jsonRes([]));
   http.route("/fapi/v1/userTrades", () => jsonRes([]));
@@ -141,6 +148,8 @@ async function bootBroker(http: FakeHttp, opts: { withPosition?: boolean } = {})
   installFakes(http);
   standardFakes(http, opts);
   await getBroker().connect();
+  FakeWs.last()?.emitOpen();
+  await flush();
   return cfg;
 }
 

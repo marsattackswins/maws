@@ -199,6 +199,9 @@ describe("BinanceLiveManager end-to-end (fake testnet)", () => {
     const result = await manager.reconcileRun("manual");
     expect(result.result).toBe("ok");
     expect(getRuntime(RUNTIME_KEYS.frozen)).toBe("false");
+    // The stream-health gate requires a live stream before submissions pass.
+    FakeWs.last().emitOpen();
+    await flush();
     http.route("/fapi/v1/order", () => jsonRes(orderFixture({ clientOrderId: "dr2", status: "NEW" })));
     const ok = await manager.orders.submitOrder({ symbol: "BTCUSDT", side: "BUY", type: "MARKET", qty: "0.001", clientOrderId: "dr2" });
     expect(ok.ok).toBe(true);

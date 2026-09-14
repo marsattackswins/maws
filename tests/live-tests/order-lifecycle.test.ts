@@ -351,6 +351,40 @@ describe("position close and native protection", () => {
     expect(noPos.ok).toBe(false);
   });
 
+  test("closePosition retries without reduceOnly when testnet rejects -2022 with no open orders", async () => {
+    const h = setup();
+    h.http.route("/fapi/v2/positionRisk", () => jsonRes([{ symbol: "BTCUSDT", positionAmt: "0.002", entryPrice: "49000", markPrice: "50000", unRealizedProfit: "2", liquidationPrice: "0", leverage: "1", positionSide: "BOTH" }]));
+    h.http.route("/fapi/v1/openOrders", () => jsonRes([]));
+    // First POST carries reduceOnly and is rejected exactly like testnet does;
+    // the immediate retry drops the flag and succeeds.
+    h.http.script("/fapi/v1/order", () => jsonRes({ code: -2022, msg: "ReduceOnly Order is rejected." }, 400));
+    h.http.route("/fapi/v1/order", () => jsonRes(orderFixture({ clientOrderId: "cls-fallback", type: "MARKET", status: "FILLED" })));
+
+    const res = await h.svc.closePosition("BTCUSDT");
+
+    expect(res.ok).toBe(true);
+    const posts = placeCalls(h);
+    expect(posts).toHaveLength(2);
+    const first = queryOf(posts[0]);
+    const second = queryOf(posts[1]);
+    expect(first.get("reduceOnly")).toBe("true");
+    expect(second.get("reduceOnly")).toBeNull();
+    expect(second.get("quantity")).toBe("0.002");
+  });
+
+  test("closePosition keeps the -2022 rejection when open orders could conflict", async () => {
+    const h = setup();
+    h.http.route("/fapi/v2/positionRisk", () => jsonRes([{ symbol: "BTCUSDT", positionAmt: "0.002", entryPrice: "49000", markPrice: "50000", unRealizedProfit: "2", liquidationPrice: "0", leverage: "1", positionSide: "BOTH" }]));
+    h.http.route("/fapi/v1/openOrders", () => jsonRes([orderFixture({ clientOrderId: "conflicting", status: "NEW" })]));
+    h.http.route("/fapi/v1/order", () => jsonRes({ code: -2022, msg: "ReduceOnly Order is rejected." }, 400));
+
+    const res = await h.svc.closePosition("BTCUSDT");
+
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain("ReduceOnly Order is rejected");
+    expect(placeCalls(h)).toHaveLength(1);
+  });
+
   test("protectPosition uses genuine exchange conditional orders with closePosition=true", async () => {
     const h = setup();
     liveState().positions.set("BTCUSDT", {

@@ -20,7 +20,7 @@ Add your Testnet credentials:
 ```env
 MAWS_BINANCE_TESTNET_API_KEY=abc123...
 MAWS_BINANCE_TESTNET_API_SECRET=xyz789...
-MAWS_BINANCE_TESTNET_EXECUTION_ENABLED=false
+
 ```
 
 ## Step 3: Fund Account (30 sec)

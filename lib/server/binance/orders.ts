@@ -2,7 +2,7 @@ import "server-only";
 
 import crypto from "node:crypto";
 
-import { isNegative, isZero, parseDec, toStr } from "./decimal";
+import { abs, isNegative, isZero, parseDec, toStr } from "./decimal";
 import { audit } from "../audit/log";
 import { requireEmergencyActionAllowed, requireSubmissionAllowed, SubmissionBlockedError } from "../gates/execution";
 import type { EnvConfig } from "../env/config";
@@ -17,6 +17,7 @@ import {
   BinanceRestClient,
   classifyBinanceError,
   ERR_INVALID_API_KEY,
+  ERR_REDUCE_ONLY_REJECT,
   ERR_UNKNOWN_CANCEL,
 } from "./rest";
 import { TransportTimeoutError } from "./transport";
@@ -50,6 +51,12 @@ export interface SubmitOrderInput {
   kind?: "order" | "algo";
   /** Internal emergency-close path; it still sends a normal MARKET order. */
   emergencyClose?: boolean;
+  /**
+   * Set by the position-close paths for both the reduce-only attempt and the
+   * testnet-flag fallback. The quantity is the exchange's live position size,
+   * so the order only flattens and must skip the new-exposure risk gate.
+   */
+  isClose?: boolean;
 }
 
 export interface ReferencePrice {
@@ -61,12 +68,48 @@ export interface ReferencePrice {
 /** Fail closed: refuse submissions when the best available quote is older than this. */
 export const STALE_REFERENCE_MS = 30_000;
 
+/**
+ * Binance testnet occasionally rejects fully valid reduce-only closes with
+ * -2022 REDUCE_ONLY_REJECT even in one-way mode with no open orders. The same
+ * order without the flag is accepted; production honors the flag correctly.
+ *
+ * -2022 also has a legitimate meaning — an existing open order conflicting
+ * with the close — so the fallback only fires when `verifySafeToFallback`
+ * confirms the testnet-defect signature: no open orders AND the position
+ * still matches the quantity/side that was read for the close. Otherwise the
+ * original rejection is returned unchanged. The retry is safety-equivalent:
+ * -2022 on HTTP 400 is a definite rejection (nothing executed), and the plain
+ * order is verified to only flatten right before it is sent.
+ */
+function submitCloseWithReduceOnlyFallback(
+  place: (reduceOnly: boolean) => Promise<OrderResult>,
+  verifySafeToFallback: () => Promise<boolean>,
+): Promise<OrderResult> {
+  return (async () => {
+    const first = await place(true);
+    if (!(first.ok === false && first.errorCode === ERR_REDUCE_ONLY_REJECT)) return first;
+    audit("operator", "order.close.reduce_only_rejected", { code: ERR_REDUCE_ONLY_REJECT });
+    let safeToFallback = false;
+    try {
+      safeToFallback = await verifySafeToFallback();
+    } catch {
+      // Cannot verify exchange state: fail closed, keep the original rejection.
+    }
+    if (!safeToFallback) return first;
+    const second = await place(false);
+    audit("operator", "order.close.reduce_only_fallback", { clientOrderId: second.clientOrderId, ok: second.ok });
+    return second;
+  })();
+}
+
 export interface OrderResult {
   ok: boolean;
   clientOrderId: string;
   status?: string;
   exchangeOrderId?: number | null;
   error?: string;
+  /** Binance rejection code when the exchange refused the order (e.g. -2022). */
+  errorCode?: number;
   duplicate?: boolean;
 }
 
@@ -166,7 +209,7 @@ export class OrderService {
       return { ok: false, clientOrderId, error: "Market data is stale; order rejected until quotes refresh" };
     }
     const effectivePrice = input.price ?? input.stopPrice ?? reference?.price ?? "0";
-    if (!input.closePosition && !input.emergencyClose && !input.reduceOnly) {
+    if (!input.closePosition && !input.emergencyClose && !input.reduceOnly && !input.isClose) {
       const riskErrors = checkRisk(
         cfg,
         this.deps.getRiskSnapshot(),
@@ -245,7 +288,7 @@ export class OrderService {
       trackOrderRejected(clientOrderId, symbol, err.exchangeMsg);
       audit("operator", "order.rejected.exchange", { symbol, clientOrderId, code: err.code, msg: err.exchangeMsg });
       this.deps.emit("order-update", { clientOrderId, status: "REJECTED", error: err.exchangeMsg });
-      return { ok: false, clientOrderId, error: `Exchange rejected the order: ${err.exchangeMsg}` };
+      return { ok: false, clientOrderId, error: `Exchange rejected the order: ${err.exchangeMsg}`, errorCode: err.code };
     }
     if (err instanceof TransportTimeoutError) {
       // Unknown outcome: never retry blindly. Persist uncertainty, freeze, resolve.
@@ -417,18 +460,47 @@ export class OrderService {
         : await this.deps.rest.getPositionRiskEmergency(symbol);
       const row = rows.find((candidate) => candidate.symbol === symbol && !isZero(parseDec(candidate.positionAmt)));
       if (!row) return { ok: true, clientOrderId: "", status: "NO_POSITION" };
+      try {
+        // Existing protective/reduce-only orders can reserve the position size and
+        // cause Binance to reject this close with -2022. Cancel them before the
+        // reduce-only market order so closing also cannot leave stale exits behind.
+        await this.deps.rest.cancelAllOpenOrdersEmergency(symbol);
+      } catch (err) {
+        if (err instanceof CircuitBreakerOpenError) throw err;
+        const message = err instanceof BinanceApiError ? err.exchangeMsg : String(err);
+        return { ok: false, clientOrderId: "", error: `Unable to cancel existing orders for ${symbol}: ${message}` };
+      }
+
       const amount = parseDec(row.positionAmt);
       const short = isNegative(amount);
       const qty = short ? toStr({ units: -amount.units, scale: amount.scale }) : toStr(amount);
-      return this.submitOrderSerialized({
-        symbol,
-        side: short ? "BUY" : "SELL",
-        type: "MARKET",
-        qty,
-        reduceOnly: true,
-        emergencyClose: true,
-        clientOrderId: newServerClientOrderId("em"),
-      });
+      return submitCloseWithReduceOnlyFallback(
+        (reduceOnly) =>
+          this.submitOrderSerialized({
+            symbol,
+            side: short ? "BUY" : "SELL",
+            type: "MARKET",
+            qty,
+            reduceOnly,
+            emergencyClose: true,
+            isClose: true,
+            clientOrderId: newServerClientOrderId("em"),
+          }),
+        async () => {
+          const [orders, rows] = await Promise.all([
+            this.deps.rest.getOpenOrdersEmergency(symbol),
+            this.deps.rest.getPositionRiskEmergency(symbol),
+          ]);
+          const row = rows.find((candidate) => candidate.symbol === symbol);
+          return (
+            orders.length === 0 &&
+            row != null &&
+            !isZero(parseDec(row.positionAmt)) &&
+            isNegative(parseDec(row.positionAmt)) === short &&
+            toStr(abs(parseDec(row.positionAmt))) === qty
+          );
+        },
+      );
     });
   }
 
@@ -451,14 +523,32 @@ export class OrderService {
     const qty = short ? toStr({ units: -amount.units, scale: amount.scale }) : toStr(amount);
     // A normal UI close is still a live order submission. Only the explicit
     // emergency-flatten path may bypass the execution gates.
-    return this.submitOrder({
-      symbol,
-      side: short ? "BUY" : "SELL",
-      type: "MARKET",
-      qty,
-      reduceOnly: true,
-      clientOrderId: newServerClientOrderId("cls"),
-    });
+    return submitCloseWithReduceOnlyFallback(
+      (reduceOnly) =>
+        this.submitOrder({
+          symbol,
+          side: short ? "BUY" : "SELL",
+          type: "MARKET",
+          qty,
+          reduceOnly,
+          isClose: true,
+          clientOrderId: newServerClientOrderId("cls"),
+        }),
+      async () => {
+        const [orders, rows] = await Promise.all([
+          this.deps.rest.getOpenOrders(symbol),
+          this.deps.rest.getPositionRisk(symbol),
+        ]);
+        const row = rows.find((candidate) => candidate.symbol === symbol);
+        return (
+          orders.length === 0 &&
+          row != null &&
+          !isZero(parseDec(row.positionAmt)) &&
+          isNegative(parseDec(row.positionAmt)) === short &&
+          toStr(abs(parseDec(row.positionAmt))) === qty
+        );
+      },
+    );
   }
 
   /**
@@ -596,7 +686,7 @@ function validateOrderInput(input: SubmitOrderInput, constraints: SymbolConstrai
     if (!input.closePosition && !input.qty) errors.push("qty is required");
     return errors.length > 0 ? { errors, recordRejection: true } : null;
   }
-  if (!input.qty || input.closePosition || !input.reduceOnly || input.type !== "MARKET") {
+  if (!input.qty || input.closePosition || (!input.reduceOnly && !input.isClose) || input.type !== "MARKET") {
     return { errors: ["Emergency close requires an explicit reduce-only MARKET quantity"], recordRejection: false };
   }
   return null;

@@ -153,6 +153,17 @@ export class BinanceAdapter implements IBroker {
     }
   }
 
+  async emergencyClosePosition(symbol: string): Promise<OrderResult> {
+    try {
+      return await this.manager.orders.emergencyClosePosition(symbol);
+    } catch (err) {
+      if (err instanceof BinanceApiError) {
+        throw new BrokerOrderError("binance", err.code, err.exchangeMsg, err);
+      }
+      throw new BrokerError("Failed to emergency-close position", "binance", err);
+    }
+  }
+
   async emergencyFlatten(triggeredBy: string) {
     return this.manager.emergencyFlatten(triggeredBy);
   }

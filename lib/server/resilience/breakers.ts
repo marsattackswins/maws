@@ -5,6 +5,7 @@
 import "server-only";
 
 import { circuitRegistry } from "./circuit-registry";
+import { CircuitBreaker } from "./circuit-breaker";
 import { BinanceApiError, TransportTimeoutError } from "../binance/rest";
 import { serverConfig } from "../env/config";
 
@@ -66,36 +67,48 @@ export function resetCircuitBreakersForTests(): void {
 }
 
 /**
+ * Heal a registry that lost its breakers. Breakers normally come from
+ * `initializeCircuitBreakers()` in the startup hook, but dev hot-reloads
+ * swap module graphs: the recompiled module instance starts with an empty
+ * registry while instrumentation never runs again. Re-creating from config
+ * is idempotent (`getOrCreate`), so this is safe on every call.
+ */
+function ensureBreakersExist(): void {
+  if (
+    circuitRegistry.get("binance-rest") &&
+    circuitRegistry.get("binance-stream") &&
+    circuitRegistry.get("reconciliation")
+  ) {
+    return;
+  }
+  initializeCircuitBreakers();
+}
+
+/** Fetch a breaker by name, healing the registry first if needed. */
+function getBreaker(name: "binance-rest" | "binance-stream" | "reconciliation"): CircuitBreaker {
+  ensureBreakersExist();
+  return circuitRegistry.get(name) as CircuitBreaker;
+}
+
+/**
  * Get the Binance REST API circuit breaker.
  */
-export function getBinanceRestBreaker() {
-  const breaker = circuitRegistry.get("binance-rest");
-  if (!breaker) {
-    throw new Error("Circuit breakers not initialized. Call initializeCircuitBreakers() first.");
-  }
-  return breaker;
+export function getBinanceRestBreaker(): CircuitBreaker {
+  return getBreaker("binance-rest");
 }
 
 /**
  * Get the WebSocket stream circuit breaker.
  */
-export function getBinanceStreamBreaker() {
-  const breaker = circuitRegistry.get("binance-stream");
-  if (!breaker) {
-    throw new Error("Circuit breakers not initialized. Call initializeCircuitBreakers() first.");
-  }
-  return breaker;
+export function getBinanceStreamBreaker(): CircuitBreaker {
+  return getBreaker("binance-stream");
 }
 
 /**
  * Get the reconciliation circuit breaker.
  */
-export function getReconciliationBreaker() {
-  const breaker = circuitRegistry.get("reconciliation");
-  if (!breaker) {
-    throw new Error("Circuit breakers not initialized. Call initializeCircuitBreakers() first.");
-  }
-  return breaker;
+export function getReconciliationBreaker(): CircuitBreaker {
+  return getBreaker("reconciliation");
 }
 
 /**

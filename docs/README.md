@@ -268,7 +268,6 @@ export MAWS_BINANCE_TESTNET_API_KEY=<testnet-key>
 export MAWS_BINANCE_TESTNET_API_SECRET=<testnet-secret>
 export MAWS_BINANCE_PRODUCTION_API_KEY=<production-key>
 export MAWS_BINANCE_PRODUCTION_API_SECRET=<production-secret>
-export MAWS_BINANCE_PRODUCTION_EXECUTION_ENABLED=false
 # ... other required variables
 
 # Non-local MAWS_ENV=testnet|production|shadow startup modes remain supported
@@ -306,9 +305,9 @@ Critical environment variables (see `.env.example` for complete list):
 - `MAWS_DEFAULT_PROFILE`: Safe profile metadata default (paper unless explicitly set)
 - `MAWS_OPERATOR_AUTH`: Operator credential hash
 - `MAWS_BINANCE_TESTNET_API_KEY/SECRET`: Separate testnet credentials
-- `MAWS_BINANCE_TESTNET_EXECUTION_ENABLED`: Static Testnet execution gate
+
 - `MAWS_BINANCE_PRODUCTION_API_KEY/SECRET`: Separate production credentials
-- `MAWS_BINANCE_PRODUCTION_EXECUTION_ENABLED`: Static Production profile gate
+
 - `MAWS_RISK_*`: Risk limit configurations
 - `MAWS_CB_*`: Circuit breaker configurations
 

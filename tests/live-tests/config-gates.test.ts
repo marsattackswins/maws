@@ -121,7 +121,7 @@ describe("execution gate matrix", () => {
     expect(d.reasons).toContain("runtime execution flag is disabled");
   });
 
-  test("testnet profile execution flag blocks submissions", () => {
+  test("configured testnet credentials are sufficient for the profile gate", () => {
     const cfg = freshEnv(makeCfg());
     setRuntime(RUNTIME_KEYS.executionEnabled, "true");
     const profiles = {
@@ -129,23 +129,18 @@ describe("execution gate matrix", () => {
       "binance-testnet": { ...cfg.profiles["binance-testnet"], executionEnabled: false },
     };
     const d = decide({ ...cfg, profiles });
-    expect(d.canSubmit).toBe(false);
-    expect(d.profileExecutionEnabled).toBe(false);
-    expect(d.reasons).toContain("Binance Testnet execution is disabled by configuration");
+    expect(d.canSubmit).toBe(true);
+    expect(d.profileExecutionEnabled).toBe(true);
   });
 
-  test("production requires its profile execution flag", () => {
+  test("missing production credentials block the profile", () => {
     const cfg = freshEnv(makeCfg({ env: "production", activeProfileId: "binance-production" }));
     const production = persistenceProfileFromConfig(cfg);
     setRuntime(RUNTIME_KEYS.executionEnabled, "true", Date.now(), production);
-    const profiles = {
-      ...cfg.profiles,
-      "binance-production": { ...cfg.profiles["binance-production"], executionEnabled: false },
-    };
-    const d = decide({ ...cfg, profiles });
+    const d = decide(cfg);
     expect(d.canSubmit).toBe(false);
     expect(d.profileExecutionEnabled).toBe(false);
-    expect(d.reasons).toContain("Binance Production execution is disabled by configuration");
+    expect(d.reasons).toContain("Binance credentials are not configured for the active profile");
   });
 
   test("shadow can never submit, regardless of flags", () => {

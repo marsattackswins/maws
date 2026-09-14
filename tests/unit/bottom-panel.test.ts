@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, test } from "@jest/globals";
 import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import {
-  BottomPanel,
+import { renderToStaticMarkup } from "react-dom/server";import { BottomPanel,
   formatPanelDateTime,
   hasConfirmedBroker,
   isPanelTabActive,
@@ -11,6 +9,7 @@ import {
   PANEL_TOOLBAR_HEIGHT,
   panelHeightLimit,
 } from "@/components/shell/BottomPanel";
+import { TradingMetrics } from "@/components/trading/PositionsPanel";
 import { useLiveStore } from "@/lib/live/store";
 import { disconnectBroker } from "@/lib/trading/mock";
 import { useAppStore } from "@/lib/store";
@@ -181,22 +180,49 @@ describe("bottom trading panel attachment visibility", () => {
       "Trading Journal",
     ]);
     expect(PANEL_TOOLBAR_HEIGHT).toBe(32);
-    expect(PANEL_TAB_CLASS).toContain("h-[22px]");
-    expect(PANEL_TAB_CLASS).toContain("min-h-[22px]");
+    expect(PANEL_TAB_CLASS).toContain("h-[32px]");
+    expect(PANEL_TAB_CLASS).toContain("after:h-[2px]");
+    expect(PANEL_TAB_CLASS).toContain("after:content-");
+    expect(PANEL_TAB_CLASS).toContain("bg-transparent");
     expect(PANEL_TAB_CLASS).toContain("px-3");
-    expect(PANEL_TAB_CLASS).toContain("font-semibold");
-    expect(PANEL_TAB_CLASS).toContain("leading-[22px]");
+    expect(PANEL_TAB_CLASS).toContain("font-medium");
     expect(isPanelTabActive("orders", true, "orders")).toBe(true);
     expect(isPanelTabActive("orders", false, "orders")).toBe(false);
     expect(isPanelTabActive("orders", true, "positions")).toBe(false);
   });
 
-  test("date/time follows the chart timezone in 12-hour format without seconds", () => {
+  test("date/time follows the chart timezone in compact 12-hour format without seconds or year", () => {
     const instant = new Date("2024-01-02T13:05:09.000Z");
 
-    expect(formatPanelDateTime(instant, "UTC")).toBe("Jan 2, 2024, 1:05 PM");
-    expect(formatPanelDateTime(instant, "America/New_York")).toBe("Jan 2, 2024, 8:05 AM");
+    expect(formatPanelDateTime(instant, "UTC")).toBe("Jan 2 · 1:05 PM");
+    expect(formatPanelDateTime(instant, "America/New_York")).toBe("Jan 2 · 8:05 AM");
     expect(formatPanelDateTime(instant, "UTC")).not.toMatch(/:\d{2}:\d{2}/);
+    expect(formatPanelDateTime(instant, "UTC")).not.toMatch(/2024/);
+  });
+
+  test("metrics strip shows the six compact segmented metrics", () => {
+    useAppStore.setState({ connectedBroker: "mock" });
+    const markup = renderToStaticMarkup(createElement(TradingMetrics));
+
+    for (const label of ["Balance", "Equity", "Realized", "Unrealized", "Available", "Buffer"]) {
+      expect(markup).toContain(label);
+    }
+    // The two margin metrics are gone from the strip.
+    expect(markup).not.toContain("Account margin");
+    expect(markup).not.toContain("Orders margin");
+    // Segmented pill: uppercase labels over values with divider borders.
+    expect(markup).toContain("uppercase");
+    expect(markup).toContain("border-l");
+  });
+
+  test("P&L metrics carry explicit signs and buffer is an integer percentage", () => {
+    useAppStore.setState({ connectedBroker: "mock", mockRealized: 0 });
+    const markup = renderToStaticMarkup(createElement(TradingMetrics));
+
+    // Zero P&L renders with an explicit plus sign and neutral-positive tone.
+    expect(markup).toContain(">+0.00<");
+    expect(markup).toContain("100%");
+    expect(markup).not.toContain(">0.00<");
   });
 
   test("expanded and dragged panel heights are capped by half the application height", () => {

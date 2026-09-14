@@ -27,7 +27,9 @@ export interface IBroker {
   submitOrder(params: OrderParams): Promise<OrderResult>;
   cancelOrder(clientOrderId: string, symbol: string): Promise<OrderResult>;
   getOrder(symbol: string, clientOrderId: string): Promise<Order | null>;
+  /** Explicit reduce-only close; allowed when normal submissions are halted. */
   closePosition(symbol: string): Promise<OrderResult>;
+  emergencyClosePosition(symbol: string): Promise<OrderResult>;
   emergencyFlatten(triggeredBy: string): Promise<EmergencyFlattenSummary>;
   protectPosition(params: ProtectPositionParams): Promise<ProtectPositionResult>;
 

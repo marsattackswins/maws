@@ -279,6 +279,25 @@ describe("user-data stream: snapshot-plus-buffer recovery", () => {
     expect(rows).toHaveLength(0);
   });
 
+  test("waits for a held lease and starts when ownership becomes available", async () => {
+    const h = setupStream();
+    const blocker = new StreamOwnerLease("uds", h.cfg.leaseTtlMs);
+    expect(blocker.tryAcquire()).toBe(true);
+
+    const starting = h.stream.start();
+    await Promise.resolve();
+    expect(FakeWs.instances).toHaveLength(0);
+    expect(h.statuses.at(-1)?.phase).toBe("standby");
+
+    blocker.release();
+    h.timers.advance(1000);
+    await starting;
+
+    expect(h.lease.isOwner()).toBe(true);
+    expect(FakeWs.instances).toHaveLength(1);
+    await h.stream.stopAndWait();
+  });
+
   test("a second instance cannot steal the lease; it can take over after release", async () => {
     const h = setupStream();
     await h.stream.start();
@@ -287,6 +306,28 @@ describe("user-data stream: snapshot-plus-buffer recovery", () => {
     h.stream.stop();
     expect(other.tryAcquire()).toBe(true);
     other.release();
+  });
+
+  test("takes over an unexpired lease whose holder process is gone", async () => {
+    const h = setupStream();
+    // A crashed process left its lease behind (unexpired TTL, dead PID).
+    getDb()
+      .prepare(`INSERT INTO stream_owner_lease (profile_id, lease_key, owner, acquired_at, expires_at) VALUES (?, ?, ?, ?, ?)`)
+      .run("binance-testnet", "uds", "deadbeef:999999999", Date.now(), Date.now() + h.cfg.leaseTtlMs);
+
+    expect(h.lease.tryAcquire()).toBe(true);
+    expect(getDb().prepare(`SELECT owner FROM stream_owner_lease WHERE lease_key = 'uds'`).get()).toEqual({ owner: h.lease.ownerId });
+    h.lease.release();
+  });
+
+  test("an unexpired lease held by an unknown-format owner still blocks", async () => {
+    const h = setupStream();
+    // Legacy row without a PID suffix: fail-safe is to wait out the TTL.
+    getDb()
+      .prepare(`INSERT INTO stream_owner_lease (profile_id, lease_key, owner, acquired_at, expires_at) VALUES (?, ?, ?, ?, ?)`)
+      .run("binance-testnet", "uds", "legacy-owner", Date.now(), Date.now() + h.cfg.leaseTtlMs);
+
+    expect(h.lease.tryAcquire()).toBe(false);
   });
 
   test("lease renewal keeps ownership; a lost lease stops the stream", async () => {

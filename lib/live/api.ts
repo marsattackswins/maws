@@ -47,11 +47,15 @@ async function call<T>(path: string, init: { method?: string; body?: unknown } =
     | (T & { error?: { code?: string; message?: string } })
     | null;
   if (!res.ok) {
-    throw new LiveApiError(
-      data?.error?.code ?? "http_error",
-      data?.error?.message ?? `Request failed (${res.status})`,
-      res.status,
-    );
+    const errorBody = data && typeof data === "object" ? (data as { error?: unknown }).error : undefined;
+    const errorObject = errorBody && typeof errorBody === "object" ? errorBody as { code?: unknown; message?: unknown } : null;
+    const code = typeof errorObject?.code === "string" ? errorObject.code : "http_error";
+    const message = typeof errorBody === "string"
+      ? errorBody
+      : typeof errorObject?.message === "string"
+        ? errorObject.message
+        : `Request failed (${res.status})`;
+    throw new LiveApiError(code, message, res.status);
   }
   return data as T;
 }

@@ -130,6 +130,29 @@ describe("profile coordinator", () => {
     expect(profileRuntimeStatus().managerStatus).toBe("idle");
   });
 
+  test("reports a failed target cleanly when Chart Only has no profile to restore", async () => {
+    const cfg = makeCfg({
+      env: "local",
+      activeProfileId: null,
+      binanceApiKey: null,
+      binanceApiSecret: null,
+      profiles: profileRegistry(),
+    });
+    const http = configure(cfg);
+    http.script("/fapi/v1/exchangeInfo", () => jsonRes({ code: -1000, msg: "metadata unavailable" }, 503));
+
+    await expect(profileCoordinator().switchProfile({
+      profileId: "binance-testnet",
+      requestId: "chart-only-target-failure",
+    })).rejects.toMatchObject({ code: "target_start_failed" });
+
+    expect(profileRuntimeStatus()).toMatchObject({
+      phase: "failed",
+      profileId: null,
+      reasonCode: "target_start_failed",
+    });
+  });
+
   test("owns one manager and selects trusted target credentials and endpoints", async () => {
     const cfg = makeCfg({ profiles: profileRegistry() });
     const http = configure(cfg);
@@ -194,5 +217,30 @@ describe("profile coordinator", () => {
     expect(profileRuntimeStatus().profileId).toBe("binance-testnet");
     expect(profileRuntimeStatus().phase).toBe("ready");
     expect(profileRuntimeStatus().ready).toBe(true);
+  });
+
+  test("connects to testnet despite large clock drift (signing is offset-corrected)", async () => {
+    const cfg = makeCfg({
+      env: "local",
+      activeProfileId: null,
+      binanceApiKey: null,
+      binanceApiSecret: null,
+      profiles: profileRegistry(),
+    });
+    const http = configure(cfg);
+    // Simulate a rebooted Windows clock running ~2s behind the exchange.
+    http.route("/fapi/v1/time", () => jsonRes({ serverTime: Date.now() + 2000 }));
+
+    const switching = profileCoordinator().switchProfile({
+      profileId: "binance-testnet",
+      requestId: "chart-only-clock-drift",
+    });
+    await emitLatestStreamOpen();
+    await expect(switching).resolves.toMatchObject({
+      profileId: "binance-testnet",
+      environment: "testnet",
+      phase: "ready",
+      ready: true,
+    });
   });
 });

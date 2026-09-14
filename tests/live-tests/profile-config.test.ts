@@ -142,21 +142,20 @@ describe("server profile configuration", () => {
     expect(shadow.binanceApiSecret).toBe("production-secret");
   });
 
-  test("production profile execution defaults disabled and is opt-in", () => {
+  test("configured production credentials enable the profile automatically", () => {
     const disabled = loadEnvConfig(env({
       MAWS_ENV: "production",
       MAWS_OPERATOR_AUTH: AUTH,
       MAWS_BINANCE_PRODUCTION_API_KEY: "production-key",
       MAWS_BINANCE_PRODUCTION_API_SECRET: "production-secret",
     }));
-    expect(disabled.profiles["binance-production"].executionEnabled).toBe(false);
+    expect(disabled.profiles["binance-production"].executionEnabled).toBe(true);
 
     const enabled = loadEnvConfig(env({
       MAWS_ENV: "production",
       MAWS_OPERATOR_AUTH: AUTH,
       MAWS_BINANCE_PRODUCTION_API_KEY: "production-key",
       MAWS_BINANCE_PRODUCTION_API_SECRET: "production-secret",
-      MAWS_BINANCE_PRODUCTION_EXECUTION_ENABLED: "true",
     }));
     expect(enabled.profiles["binance-production"].executionEnabled).toBe(true);
 
@@ -170,7 +169,6 @@ describe("server profile configuration", () => {
       MAWS_BINANCE_TESTNET_API_SECRET: sentinelSecret,
       MAWS_BINANCE_PRODUCTION_API_KEY: "production-key",
       MAWS_BINANCE_PRODUCTION_API_SECRET: "production-secret",
-      MAWS_BINANCE_PRODUCTION_EXECUTION_ENABLED: "true",
     }));
 
     const metadata = safeProfileMetadata(cfg.profiles);

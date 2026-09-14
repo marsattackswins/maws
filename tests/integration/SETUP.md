@@ -32,7 +32,7 @@ Add your Testnet credentials:
 ```env
 MAWS_BINANCE_TESTNET_API_KEY=your-actual-testnet-api-key
 MAWS_BINANCE_TESTNET_API_SECRET=your-actual-testnet-secret
-MAWS_BINANCE_TESTNET_EXECUTION_ENABLED=false
+
 ```
 
 ### 4. Run Tests

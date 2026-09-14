@@ -124,6 +124,7 @@ describe("Phase 2 emergency flatten", () => {
     const http = new FakeHttp();
     installFakes(http);
     http.route("/fapi/v2/positionRisk", () => jsonRes([{ symbol: "BTCUSDT", positionAmt: "-0.002", entryPrice: "50000", markPrice: "50000", unRealizedProfit: "0", leverage: "1", liquidationPrice: "0", notional: "-100" }]));
+    http.route("/fapi/v1/allOpenOrders", () => jsonRes([]));
     http.route("/fapi/v1/order", () => jsonRes(orderFixture({ side: "BUY", type: "MARKET", origQty: "0.002", clientOrderId: "emergency-response" })));
     const rest = new BinanceRestClient(cfg, new RateLimiter(cfg.rateInternalPerMin), async () => undefined);
     rest.setTransportForTests(http);
@@ -143,9 +144,40 @@ describe("Phase 2 emergency flatten", () => {
     const result = await service.emergencyClosePosition("BTCUSDT");
     expect(result.ok).toBe(true);
     expect(http.callsTo("/fapi/v2/positionRisk")).toHaveLength(1);
+    expect(http.callsTo("/fapi/v1/allOpenOrders").filter((call) => call.method === "DELETE")).toHaveLength(1);
     expect(http.callsTo("/fapi/v1/order").filter((call) => call.method === "POST")).toHaveLength(1);
     expect(new URL(http.callsTo("/fapi/v1/order")[0].url).search).toContain("reduceOnly=true");
     expect(new URL(http.callsTo("/fapi/v1/order")[0].url).search).toContain("quantity=0.002");
+  });
+
+  test("emergency close falls back to a plain order when testnet rejects -2022", async () => {
+    const cfg = makeCfg();
+    const http = new FakeHttp();
+    installFakes(http);
+    http.route("/fapi/v2/positionRisk", () => jsonRes([{ symbol: "BTCUSDT", positionAmt: "-0.002", entryPrice: "50000", markPrice: "50000", unRealizedProfit: "0", leverage: "1", liquidationPrice: "0", notional: "-100" }]));
+    http.route("/fapi/v1/allOpenOrders", () => jsonRes([]));
+    http.route("/fapi/v1/openOrders", () => jsonRes([]));
+    http.script("/fapi/v1/order", () => jsonRes({ code: -2022, msg: "ReduceOnly Order is rejected." }, 400));
+    http.route("/fapi/v1/order", () => jsonRes(orderFixture({ side: "BUY", type: "MARKET", origQty: "0.002", clientOrderId: "emergency-fallback" })));
+    const rest = new BinanceRestClient(cfg, new RateLimiter(cfg.rateInternalPerMin), async () => undefined);
+    rest.setTransportForTests(http);
+    const service = new OrderService({
+      cfg,
+      rest,
+      getConstraints: () => null,
+      getReferencePrice: async () => null,
+      getRiskSnapshot: () => ({ balanceUsd: 0, grossExposureUsd: 0, openOrderCount: 0, openPositionCount: 0, realizedTodayUsd: 0 }),
+      freeze: () => undefined,
+      emit: () => undefined,
+    });
+
+    const result = await service.emergencyClosePosition("BTCUSDT");
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe("NEW");
+    const posts = http.callsTo("/fapi/v1/order").filter((call) => call.method === "POST");
+    expect(posts).toHaveLength(2);
+    expect(new URL(posts[0].url).search).toContain("reduceOnly=true");
+    expect(new URL(posts[1].url).search).not.toContain("reduceOnly");
   });
 });
 
@@ -215,11 +247,33 @@ describe("Phase 2 stream and reconciliation health", () => {
     stream.stop();
   });
 
+  test("an idle connected private stream remains healthy without application events", () => {
+    const now = Date.now();
+    setHealthSignal({
+      stream: {
+        connected: true,
+        leaseOwned: true,
+        phase: "live",
+        startedAt: now - 10 * 60 * 1000,
+        lastEventAt: null,
+        lastApplicationEventAt: null,
+        reconnects: 0,
+        listenKeyRenewedAt: null,
+        generation: 4,
+        bufferOverflow: false,
+        circuitState: "closed",
+      },
+    });
+    const health = buildHealthStatus(makeCfg());
+    expect(health.streamHealthy).toBe(true);
+  });
+
   test("heartbeat age degrades an otherwise connected private stream", () => {
     const now = Date.now();
     setHealthSignal({
       stream: {
         connected: true,
+        leaseOwned: true,
         phase: "live",
         startedAt: now - 10 * 60 * 1000,
         lastEventAt: now,

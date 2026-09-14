@@ -29,6 +29,11 @@ export async function register(): Promise<void> {
   const { initializeCircuitBreakers } = await import("@/lib/server/resilience/breakers");
   initializeCircuitBreakers();
 
+  // Signal handlers release the user-data stream lease and checkpoint the DB
+  // on Ctrl+C / SIGTERM so the next server instance can attach immediately.
+  const { installGracefulShutdown } = await import("@/lib/server/shutdown");
+  installGracefulShutdown();
+
   log.info("live profile coordinator starting...");
   const { profileCoordinator } = await import("@/lib/server/profile/coordinator");
   profileCoordinator()

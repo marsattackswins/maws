@@ -88,6 +88,7 @@ export function BrokerDialog() {
   const livePhase = useLiveStore((s) => s.phase);
   const liveReady = useLiveStore((s) => s.ready);
   const liveReason = useLiveStore((s) => s.reasonCode);
+  const liveManagerError = useLiveStore((s) => s.managerError);
   const [profiles, setProfiles] = useState<ProfileMetadataDto[]>(FALLBACK_PROFILES);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -187,9 +188,19 @@ export function BrokerDialog() {
     if (switching) return;
     setSwitchingTarget(profileId);
     setLoadError(null);
-    const result = await switchLiveProfile(profileId, confirmProduction);
-    setSwitchingTarget(null);
-    if (result === "ready" || result === "paper") closeDialog();
+    try {
+      const result = await switchLiveProfile(profileId, confirmProduction);
+      if (result === "ready" || result === "paper") {
+        closeDialog();
+      } else if (result === "error") {
+        const current = useLiveStore.getState();
+        setLoadError(current.managerError ?? profileErrorMessage(current.reasonCode));
+      }
+    } catch (error: unknown) {
+      setLoadError(error instanceof LiveApiError ? profileErrorMessage(error.code) : safeLoadError(error));
+    } finally {
+      setSwitchingTarget(null);
+    }
   };
 
   const requestBinanceProfile = async (profileId: Exclude<LiveProfileId, "paper">) => {
@@ -282,7 +293,7 @@ export function BrokerDialog() {
         {livePhase === "degraded" || livePhase === "failed" || livePhase === "detached" ? (
           <div className="mx-5 mb-3 flex items-start gap-2 rounded-[6px] border border-[#f23645]/40 bg-[#1a0b0d] px-3 py-2 text-[12px] text-[#f23645]" role="alert">
             <CircleAlert size={14} className="mt-0.5 shrink-0" />
-            <span>{profileErrorMessage(liveReason)} {profilePhaseLabel(livePhase)}. Normal trading remains disabled until a ready profile is confirmed.</span>
+            <span>{profileErrorMessage(liveReason)}{liveManagerError ? ` ${liveManagerError}.` : ""} {profilePhaseLabel(livePhase)}. Normal trading remains disabled until a ready profile is confirmed.</span>
           </div>
         ) : null}
         {loadError ? <div className="mx-5 mb-3 text-[12px] text-[#f0b90b]">{loadError}</div> : null}

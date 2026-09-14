@@ -140,7 +140,7 @@ export function buildHealthStatus(cfg: EnvConfig): HealthStatus {
     now - signals.clock.updatedAt < CLOCK_STALE_MS &&
     Math.abs(signals.clock.offsetMs) <= CLOCK_MAX_OFFSET_MS;
 
-  const applicationHeartbeatAt = signals.stream?.lastApplicationEventAt ?? signals.stream?.startedAt ?? null;
+  const applicationHeartbeatAt = signals.stream?.lastApplicationEventAt ?? null;
   const heartbeatHealthy = applicationHeartbeatAt == null || now - applicationHeartbeatAt < PRIVATE_STREAM_HEARTBEAT_MS;
   const streamHealthy =
     signals.stream != null &&

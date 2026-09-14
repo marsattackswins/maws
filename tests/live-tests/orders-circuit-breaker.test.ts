@@ -21,6 +21,7 @@ import type { EnvConfig } from "@/lib/server/env/config";
 import {
   BTCUSDT_INFO,
   FakeHttp,
+  FakeWs,
   accountFixture,
   freshEnv,
   installFakes,
@@ -28,6 +29,11 @@ import {
   makeCfg,
   orderFixture,
 } from "./helpers";
+
+/** Let pending stream callbacks (snapshot/lease/health signals) settle. */
+const flush = async (): Promise<void> => {
+  for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+};
 
 describe("POST /api/live/orders with circuit breaker", () => {
   beforeEach(() => {
@@ -169,6 +175,8 @@ describe("POST /api/live/orders end-to-end with REST breaker open", () => {
     http.route("/fapi/v1/listenKey", () => jsonRes({ listenKey: "LK-BRK" }));
     http.route("/fapi/v1/leverageBracket", () => jsonRes([]));
     await getBroker().connect();
+    FakeWs.last()?.emitOpen();
+    await flush();
   }
 
   async function submitOrder(clientOrderId: string): Promise<Response> {

@@ -351,14 +351,16 @@ function ServerTradingCompact({
       </div>
       {loading && !health && !tradingHealth ? <PanelMessage>Loading server trading state…</PanelMessage> : error && !health && !tradingHealth ? <PanelMessage tone="yellow">{error}</PanelMessage> : (
         <div className="rounded-lg border border-[#2a2e39] bg-[#131722] p-4 sm:p-5">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[#2a2e39] pb-4">
-            <div>
-              <div className="text-xs uppercase tracking-wide text-[#787b86]">Order submissions</div>
-              <div className={`mt-1 text-xl font-semibold ${toneText(submission.tone)}`}>{submission.label}</div>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <StatusDot tone={submission.tone} />
-              <span className={toneText(submission.tone)}>{submissionDetail(health)}</span>
+          <div className="mb-4 border-b border-[#2a2e39] pb-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-xs uppercase tracking-wide text-[#787b86]">Order submissions</div>
+                <div className={`mt-1 text-xl font-semibold ${toneText(submission.tone)}`}>{submission.label}</div>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <StatusDot tone={submission.tone} />
+                <span className={toneText(submission.tone)}>{submissionDetail(health)}</span>
+              </div>
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -539,7 +541,12 @@ function getSubmissionStatus(health: HealthSnapshot | null): { label: string; to
 function submissionDetail(health: HealthSnapshot | null): string {
   if (!health) return "Readiness unavailable";
   if (health.env === "local" && health.managerStatus === "idle") return "Orders intentionally blocked in Chart Only mode";
-  return health.execution.reasons[0] ?? (health.execution.canSubmit ? "All execution checks passed" : "Safety checks are blocking orders");
+  const reason = health.execution.reasons[0] ?? "";
+  const normalizedReason = reason.toLowerCase();
+  if (normalizedReason.includes("runtime execution flag")) return "Runtime switch is off — reconnect the profile";
+
+  if (normalizedReason.includes("stream")) return "Private account stream is not ready";
+  return reason || (health.execution.canSubmit ? "All execution checks passed" : "Safety checks are blocking orders");
 }
 
 function getRiskStatus(risk: RiskCockpitSnapshot | null): { label: string; tone: StatusTone; detail: string } {

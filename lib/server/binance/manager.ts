@@ -19,6 +19,7 @@ import { findByClientOrderId, intentsInUncertainStates, updateIntent } from "./i
 import { OrderService, newServerClientOrderId, type ReferencePrice } from "./orders";
 import { RateLimiter } from "./ratelimit";
 import { BinanceRestClient, BinanceApiError } from "./rest";
+import { TransportTimeoutError } from "./transport";
 import { CircuitBreakerOpenError } from "../resilience/circuit-breaker";
 import { realizedSinceUtcMidnight, type RiskSnapshot } from "./risk";
 import { Reconciler, type ReconResult } from "./recon";
@@ -40,7 +41,7 @@ import {
   liveState,
   openPositionCount,
 } from "./state";
-import { UserDataStream } from "./stream";
+import { StreamLeaseUnavailableError, UserDataStream } from "./stream";
 import type { AccountUpdateEvent, OrderTradeUpdateEvent, UserStreamEvent } from "./types";
 import { getDb } from "../db/connection";
 import { trackFillReceived, trackFreezeTriggered, trackOrderFilled, trackSystemStart, trackSystemStop, trackUnfreezeCleared, updateTradingGauges } from "../metrics/instrument";
@@ -288,6 +289,7 @@ export class BinanceLiveManager {
         freeze: (reason) => {
           if (this.isGenerationCurrent(generation)) this.freeze(reason);
         },
+        leaseWaitTimeoutMs: Math.max(5_000, this.cfg.leaseTtlMs + 5_000),
         onStatus: (s) => {
           if (!this.isGenerationCurrent(generation)) return;
           const stream = this.stream?.status();
@@ -336,11 +338,21 @@ export class BinanceLiveManager {
         return;
       }
       this.status = "error";
-      this.error = err instanceof BinanceApiError ? err.exchangeMsg : String(err);
+      this.error = err instanceof BinanceApiError
+        ? err.exchangeMsg
+        : err instanceof TransportTimeoutError
+          ? "Binance request timed out"
+          : err instanceof StreamLeaseUnavailableError
+            ? err.message
+            : err instanceof CircuitBreakerOpenError
+              ? `Circuit ${err.circuitName} is open; wait for it to reset and retry`
+              : err instanceof Error && err.message
+                ? err.message
+                : "Binance connection failed";
       setHealthSignal({ managerRunning: false, brokerStatus: "error", brokerError: this.error });
       audit("system", "live.manager.error", { error: this.error }, undefined, this.persistenceProfile);
       alert("manager_error", { error: this.error });
-      log.error("live manager failed to start", { error: this.error });
+      log.error("live manager failed to start", { error: this.error, raw: String(err) });
       throw err;
     }
   }

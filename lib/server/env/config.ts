@@ -224,14 +224,14 @@ function buildProfiles(
       "Binance Testnet",
       "testnet",
       testnetCredentials,
-      source.MAWS_BINANCE_TESTNET_EXECUTION_ENABLED === "true",
+      isComplete(testnetCredentials),
     ),
     "binance-production": makeProfile(
       "binance-production",
       "Binance Production",
       "production",
       productionCredentials,
-      source.MAWS_BINANCE_PRODUCTION_EXECUTION_ENABLED === "true",
+      isComplete(productionCredentials),
     ),
   };
 }

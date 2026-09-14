@@ -53,4 +53,5 @@ module.exports = {
     '^server-only$': '<rootDir>/__mocks__/server-only.js',
   },
   testPathIgnorePatterns: ['/node_modules/', '/.next/', '/tests/integration/'],
+  setupFiles: ['<rootDir>/tests/jest.setup.ts'],
 };

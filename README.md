@@ -123,12 +123,11 @@ When you are ready to practise:
 1. Create Binance Futures Testnet API credentials.
 2. Put the Testnet key and secret in the two Testnet fields in `.env.local`.
 3. Make sure withdrawals are disabled for the key.
-4. Leave `MAWS_BINANCE_TESTNET_EXECUTION_ENABLED=false` while checking the connection.
-5. Restart MAWS.
-6. Use **Trade** in MAWS and choose **Binance Testnet**.
-7. Enter the operator password and wait for the readiness checks.
+4. Restart MAWS.
+5. Use **Trade** in MAWS and choose **Binance Testnet**.
+6. Enter the operator password and wait for the readiness checks.
 
-A profile can be connected while order execution remains disabled. The execution switches are safety gates, not a replacement for login, account checks, reconciliation, or risk checks.
+Once the profile is authenticated and connected, MAWS enables normal submissions automatically. Health, stream, account, reconciliation, position-mode, freeze, kill-switch, and risk checks still block unsafe orders.
 
 ### 5. Add Binance Production
 
@@ -137,9 +136,8 @@ Only do this after Testnet works as expected:
 1. Create a separate Binance Production API key and secret.
 2. Disable withdrawals on the key.
 3. Put the values in the Production fields in `.env.local`.
-4. Keep `MAWS_BINANCE_PRODUCTION_EXECUTION_ENABLED=false` until you are ready.
-5. Restart MAWS.
-6. Choose **Binance Production** from **Trade**, enter the operator password, and complete the extra Production confirmation.
+4. Restart MAWS.
+5. Choose **Binance Production** from **Trade**, enter the operator password, and complete the extra Production confirmation.
 
 MAWS will still block orders if health, reconciliation, account state, risk limits, or another safety check is not ready.
 
