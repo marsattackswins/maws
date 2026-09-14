@@ -3,6 +3,7 @@ import { accountDto, ordersDto, positionsDto } from "@/lib/server/binance/dto";
 import { realizedSinceUtcMidnight } from "@/lib/server/binance/risk";
 import { aggregateRiskCockpit } from "@/lib/server/risk/cockpit";
 import { serverConfig } from "@/lib/server/env/config";
+import { activeProfileConfig } from "@/lib/server/profile/coordinator";
 import { authenticate, isAuthFailure } from "@/lib/server/http/guards";
 import { compareSecretTokens } from "@/lib/server/auth/token";
 
@@ -15,6 +16,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: NextRequest) {
   const cfg = serverConfig();
+  const runtimeCfg = activeProfileConfig();
 
   if (cfg.env !== "local") {
     const ctx = authenticate(req, cfg);
@@ -24,10 +26,10 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const sourceAvailable = cfg.env !== "local";
+    const sourceAvailable = runtimeCfg.env !== "local";
     const snapshot = aggregateRiskCockpit({
-      env: cfg.env,
-      risk: cfg.risk,
+      env: runtimeCfg.env,
+      risk: runtimeCfg.risk,
       account: sourceAvailable ? accountDto() : null,
       positions: sourceAvailable ? positionsDto() : [],
       orders: sourceAvailable ? ordersDto() : [],
