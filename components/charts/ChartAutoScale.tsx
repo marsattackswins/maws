@@ -50,36 +50,39 @@ function rightAxisWidth(paneId: string) {
   }
 }
 
-/** Measure the LWC bottom-right scale corner cell so the label fills it. */
+/**
+ * Measure the bottom-right corner of the **main price pane** (pane index 0)
+ * so the "auto" label is anchored there — not at the very bottom of the full
+ * chart, which sinks below all indicator sub-panes.
+ */
 function measureAutoCorner(host: HTMLElement, paneId: string): CornerBox {
   const hostRect = host.getBoundingClientRect();
-  const tables = host.querySelectorAll("table");
-  // Prefer the outermost chart table (first match in the host).
-  const table = tables[0];
-  if (table) {
-    const lastRow = table.rows[table.rows.length - 1];
-    const lastCell = lastRow?.cells[lastRow.cells.length - 1];
-    if (lastCell) {
-      const r = lastCell.getBoundingClientRect();
-      if (r.width > 0 && r.height > 0) {
-        return {
-          left: Math.round(r.left - hostRect.left),
-          top: Math.round(r.top - hostRect.top),
-          width: Math.round(r.width),
-          height: Math.round(r.height),
-        };
-      }
+  const axisW = rightAxisWidth(paneId);
+
+  // Primary: use the live main-pane DOM element so we track every resize.
+  const handle = getChart(paneId);
+  const mainPaneEl = handle?.chart.panes()[0]?.getHTMLElement();
+  if (mainPaneEl) {
+    const pr = mainPaneEl.getBoundingClientRect();
+    if (pr.width > 0 && pr.height > 0) {
+      return {
+        left: Math.round(pr.right - hostRect.left - axisW),
+        top: Math.round(pr.bottom - hostRect.top - TIME_AXIS_H),
+        width: axisW,
+        height: TIME_AXIS_H,
+      };
     }
   }
 
-  const width = rightAxisWidth(paneId);
+  // Fallback: geometry only.
   return {
-    left: Math.round(hostRect.width - width),
+    left: Math.round(hostRect.width - axisW),
     top: Math.round(hostRect.height - TIME_AXIS_H),
-    width,
+    width: axisW,
     height: TIME_AXIS_H,
   };
 }
+
 
 function isOnPriceOrTimeScale(
   host: HTMLElement,
@@ -116,10 +119,16 @@ function isInAutoCorner(
 ): boolean {
   const handle = getChart(paneId);
   if (!handle) return false;
-  const rect = host.getBoundingClientRect();
   const rightW = rightAxisWidth(paneId);
-  return clientX >= rect.right - rightW && clientY >= rect.bottom - TIME_AXIS_H;
+  // Use the main pane's bottom so the corner zone matches the repositioned button.
+  const mainPaneEl = handle.chart.panes()[0]?.getHTMLElement();
+  const bottom = mainPaneEl
+    ? mainPaneEl.getBoundingClientRect().bottom
+    : host.getBoundingClientRect().bottom;
+  const right = (mainPaneEl ?? host).getBoundingClientRect().right;
+  return clientX >= right - rightW && clientY >= bottom - TIME_AXIS_H;
 }
+
 
 export function clearAutoFit(paneId: string) {
   const handle = getChart(paneId);
@@ -252,6 +261,8 @@ export function ChartAutoScale({ paneId, mode, hostRef, active, onActiveChange }
     };
   }, [active, hostRef, mode, onActiveChange, paneId]);
 
+  const chartBg = useAppStore((s) => s.chartSettings.backgroundColor) || "#000000";
+
   if (mode === "never") return null;
 
   const visibility =
@@ -259,26 +270,38 @@ export function ChartAutoScale({ paneId, mode, hostRef, active, onActiveChange }
       ? "opacity-100"
       : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto";
 
-
-  // The gear button sits in the RIGHT portion of the corner cell.
-  // Width split: auto label fills the left, gear takes ~20px on the right.
   const GEAR_W = 20;
-  const autoStyle: CSSProperties = {
+
+  const containerStyle: CSSProperties = {
+    position: "absolute",
     left: corner.left,
     top: corner.top,
-    width: corner.width - GEAR_W,
+    width: corner.width,
     height: corner.height,
+    backgroundColor: chartBg,
+    zIndex: 40,
   };
+
+  const autoStyle: CSSProperties = {
+    width: corner.width - GEAR_W,
+    height: "100%",
+  };
+
   const gearStyle: CSSProperties = {
-    left: corner.left + corner.width - GEAR_W,
-    top: corner.top,
     width: GEAR_W,
-    height: corner.height,
-    position: "absolute",
+    height: "100%",
+    position: "relative",
   };
 
   return (
-    <>
+    <div
+      style={containerStyle}
+      className={`flex items-center justify-between transition-opacity duration-100 ${visibility}`}
+      onMouseDown={(e: ReactMouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+    >
       {/* Auto label */}
       <button
         type="button"
@@ -286,15 +309,11 @@ export function ChartAutoScale({ paneId, mode, hostRef, active, onActiveChange }
         aria-label="Auto scale"
         aria-pressed={active}
         style={autoStyle}
-        className={`absolute z-40 flex items-center justify-center border-0 bg-transparent p-0 text-center text-[11px] leading-none transition-colors duration-100 ${visibility} ${
+        className={`flex items-center justify-center border-0 bg-transparent p-0 text-center text-[11px] leading-none transition-colors duration-100 ${
           active
             ? "font-bold text-white"
             : "font-medium text-[#787b86] hover:text-[#d1d4dc]"
         }`}
-        onMouseDown={(e: ReactMouseEvent) => {
-          e.preventDefault();
-          e.stopPropagation();
-        }}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -315,10 +334,10 @@ export function ChartAutoScale({ paneId, mode, hostRef, active, onActiveChange }
       <ChartScaleMenu
         paneId={paneId}
         style={gearStyle}
-        visibility={visibility}
+        visibility="opacity-100"
         autoScaleOn={active}
         onAutoChangeAction={onActiveChange}
       />
-    </>
+    </div>
   );
 }

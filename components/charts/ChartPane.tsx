@@ -5,6 +5,7 @@ import { ChartCanvas, type StudyPaneLayout } from "@/components/charts/ChartCanv
 import { ChartNavigation } from "@/components/charts/ChartNavigation";
 import { CrosshairPlus } from "@/components/charts/CrosshairPlus";
 import { IndicatorLegend } from "@/components/charts/IndicatorLegend";
+import { IndicatorPaneAutoScale } from "@/components/charts/IndicatorPaneAutoScale";
 import { TradeMarks } from "@/components/charts/TradeMarks";
 import { SessionBreaks } from "@/components/charts/SessionBreaks";
 import { OrderBlocks } from "@/components/charts/OrderBlocks";
@@ -150,6 +151,15 @@ export function ChartPane({ pane }: Props) {
                 />
               </div>
             ))}
+        {/* Auto-scale buttons for each indicator sub-pane (hover-visible, one per pane). */}
+        {studyLayouts.map((layout, i) => (
+          <IndicatorPaneAutoScale
+            key={`${pane.id}-${layout.instanceId}-autoscale`}
+            chartPaneId={pane.id}
+            layout={layout}
+            paneIndex={i + 1}
+          />
+        ))}
         {showPlusButton && <CrosshairPlus pane={pane} suppress={overMaximize} />}
         <ChartNavigation
           paneId={pane.id}
