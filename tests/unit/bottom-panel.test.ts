@@ -9,7 +9,7 @@ import { renderToStaticMarkup } from "react-dom/server";import { BottomPanel,
   PANEL_TOOLBAR_HEIGHT,
   panelHeightLimit,
 } from "@/components/shell/BottomPanel";
-import { TradingMetrics } from "@/components/trading/PositionsPanel";
+import { computePosRows, PositionsPanel, TradingMetrics } from "@/components/trading/PositionsPanel";
 import { useLiveStore } from "@/lib/live/store";
 import { disconnectBroker } from "@/lib/trading/mock";
 import { useAppStore } from "@/lib/store";
@@ -230,5 +230,58 @@ describe("bottom trading panel attachment visibility", () => {
     expect(panelHeightLimit(900, 700)).toBe(350);
     expect(panelHeightLimit(300, 1000)).toBe(300);
     expect(panelHeightLimit(900, 200)).toBe(100);
+  });
+
+  test("live position PnL uses mark price, not last-trade price", () => {
+    const livePositions = [
+      {
+        id: "pos-btc",
+        symbol: "BTCUSDT",
+        side: "long" as const,
+        entry: 50_000,
+        qty: 2,
+        leverage: 10,
+        mark: 60_000,
+        unrealized: 15_000, // static server poll snapshot
+        openedAt: Date.now(),
+      },
+    ];
+
+    // Case 1: Mark price is available from the live stream (60,000)
+    // lastOf returns a different last-trade price (62,000), but mark price should be prioritized
+    const rowsLive = computePosRows(livePositions, true, (sym) => (sym === "BTCUSDT" ? 62_000 : 0));
+    expect(rowsLive).toHaveLength(1);
+    const rowLive = rowsLive[0];
+    // Should use mark price (60,000), not last-trade price (62,000)
+    expect(rowLive.last).toBe(60_000);
+    // Notional = qty * mark = 2 * 60,000 = 120,000
+    expect(rowLive.notional).toBe(120_000);
+    // Margin = notional / leverage = 120,000 / 10 = 12,000
+    const mgnLive = rowLive.notional / rowLive.leverage;
+    expect(mgnLive).toBe(12_000);
+    // PnL = (mark - entry) * qty = (60,000 - 50,000) * 2 = 20,000
+    expect(rowLive.pnl).toBe(20_000);
+
+    // Case 2: Mark price is not available, falls back to server-calculated unrealized PnL
+    // to avoid incorrectly zeroing PnL by using entry as market price
+    const rowsNoMark = computePosRows(
+      [{ ...livePositions[0], mark: undefined }],
+      true,
+      () => 0,
+    );
+    expect(rowsNoMark).toHaveLength(1);
+    const rowNoMark = rowsNoMark[0];
+    expect(rowNoMark.last).toBe(50_000);
+    expect(rowNoMark.notional).toBe(100_000);
+    // Should use server-calculated unrealized PnL (15,000), not calculate from entry (which would be 0)
+    expect(rowNoMark.pnl).toBe(15_000);
+
+    // Case 3: Paper mode (live=false) still uses last-trade price for backwards compatibility
+    const rowsPaper = computePosRows(livePositions, false, (sym) => (sym === "BTCUSDT" ? 62_000 : 0));
+    expect(rowsPaper).toHaveLength(1);
+    const rowPaper = rowsPaper[0];
+    expect(rowPaper.last).toBe(62_000);
+    expect(rowPaper.notional).toBe(124_000);
+    expect(rowPaper.pnl).toBe(24_000);
   });
 });

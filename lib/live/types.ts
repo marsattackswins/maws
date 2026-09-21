@@ -72,6 +72,7 @@ export interface PositionDto {
   mark: number;
   unrealized: number;
   openedAt: number;
+  notional?: number; // Add optional notional field from exchange
 }
 
 export interface OrderDto {

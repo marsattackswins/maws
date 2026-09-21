@@ -28,6 +28,7 @@ function position(overrides: Partial<Parameters<typeof aggregateRiskCockpit>[0][
     mark: 100,
     unrealized: 20,
     openedAt: 1,
+    notional: 200,
     ...overrides,
   };
 }

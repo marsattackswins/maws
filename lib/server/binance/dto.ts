@@ -18,6 +18,8 @@ export interface PositionDto {
   mark: number;
   unrealized: number;
   openedAt: number;
+  /** Exchange-reported position value; mirrors Binance's positionNotional. */
+  notional: number;
 }
 
 export interface OrderDto {
@@ -94,6 +96,7 @@ export function positionsDto(): PositionDto[] {
       mark: Number(p.markPrice),
       unrealized: Number(p.unrealizedProfit),
       openedAt: p.updatedAt,
+      notional: Number(p.notional),
     });
   }
   return out;

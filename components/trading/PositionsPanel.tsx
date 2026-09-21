@@ -160,9 +160,7 @@ export function useTradingMetrics() {
     equitySource: "fallback" as const,
   };
   const liveMetricsSafe = liveMetrics ?? { realizedPnl: 0, commission: 0, fundingFee: 0, netRealized: 0, fetchedAt: null };
-  const unrealized = live
-    ? liveAcc.unrealized
-    : positions.reduce((sum, p) => sum + positionPnl(p, lastOf(p.symbol)), 0);
+  const unrealized = live ? liveAcc.unrealized : positions.reduce((sum, p) => sum + positionPnl(p, lastOf(p.symbol)), 0);
   const margin = live ? liveAcc.margin : usedMargin(positions);
   const orderMargin = live ? 0 : ordersMargin(orders, leverage);
   const equity = live ? liveAcc.equity : balance + margin + unrealized;
@@ -240,6 +238,62 @@ export function TradingMetrics() {
   );
 }
 
+export type PosRow = {
+  id: string;
+  symbol: string;
+  side: "long" | "short";
+  entry: number;
+  qty: number;
+  tp: number | null;
+  sl: number | null;
+  leverage: number;
+  last: number;
+  pnl: number;
+  notional: number;
+};
+
+export function computePosRows(
+  positions: Array<Parameters<typeof positionPnl>[0] & { id: string; mark?: number; unrealized?: number; notional?: number }>,
+  live: boolean,
+  lastOf: (symbol: string) => number,
+): PosRow[] {
+  return live
+    ? positions.map((p) => {
+        const last = (p.mark && p.mark > 0) ? p.mark : p.entry;
+        const pnl = (p.mark && p.mark > 0) ? positionPnl(p, last) : (p.unrealized ?? 0);
+        return {
+          id: p.id,
+          symbol: p.symbol,
+          side: p.side,
+          entry: p.entry,
+          qty: p.qty,
+          tp: p.tp,
+          sl: p.sl,
+          leverage: p.leverage,
+          last,
+          pnl,
+          notional: p.qty * last,
+        };
+      })
+    : positions.map((p) => {
+        const streamPrice = lastOf(p.symbol);
+        const last = streamPrice > 0 ? streamPrice : p.entry;
+        return {
+          id: p.id,
+          symbol: p.symbol,
+          side: p.side,
+          entry: p.entry,
+          qty: p.qty,
+          tp: p.tp,
+          sl: p.sl,
+          leverage: p.leverage,
+          last,
+          pnl: positionPnl(p, last),
+          notional: p.qty * last,
+        };
+      });
+}
+
 export function PositionsPanel() {
   const tab = useAppStore((s) => s.bottomTab);
   const orderHistory = useAppStore((s) => s.orderHistory);
@@ -277,46 +331,7 @@ export function PositionsPanel() {
 
   const mutationBlocked = livePhase === "switching";
 
-  type PosRow = {
-    id: string;
-    symbol: string;
-    side: "long" | "short";
-    entry: number;
-    qty: number;
-    tp: number | null;
-    sl: number | null;
-    leverage: number;
-    last: number;
-    pnl: number;
-  };
-  const posRows: PosRow[] = live
-    ? positions.map((p) => ({
-        id: p.id,
-        symbol: p.symbol,
-        side: p.side,
-        entry: p.entry,
-        qty: p.qty,
-        tp: p.tp,
-        sl: p.sl,
-        leverage: p.leverage,
-        last: p.mark ?? lastOf(p.symbol),
-        pnl: p.unrealized ?? positionPnl(p, lastOf(p.symbol)),
-      }))
-    : positions.map((p) => {
-        const last = lastOf(p.symbol);
-        return {
-          id: p.id,
-          symbol: p.symbol,
-          side: p.side,
-          entry: p.entry,
-          qty: p.qty,
-          tp: p.tp,
-          sl: p.sl,
-          leverage: p.leverage,
-          last,
-          pnl: positionPnl(p, last),
-        };
-      });
+  const posRows = computePosRows(positions, live, lastOf);
 
   const ordRows = orders.map((o) => ({
     id: o.id,
@@ -513,7 +528,8 @@ export function PositionsPanel() {
               <tbody>
                 {posRows.map((p) => {
                   const pnl = p.pnl;
-                  const notional = p.qty * p.entry;
+                  // Binance mark price convention: notional and margin driven by current live mark price (p.last)
+                  const notional = p.notional;
                   const mgn = notional / Math.max(1, p.leverage);
                   const pct = notional === 0 ? 0 : (pnl / notional) * 100;
                   return (
@@ -527,7 +543,7 @@ export function PositionsPanel() {
                       <td className="px-2 py-1.5">{p.sl == null ? "—" : formatPrice(p.symbol, p.sl)}</td>
                       <td className="px-2 py-1.5">{formatNum(mgn)}</td>
                       <td className="px-2 py-1.5">{p.leverage}x</td>
-                      <td className="px-2 py-1.5">{formatNum(p.qty * p.last)}</td>
+                      <td className="px-2 py-1.5">{formatNum(notional)}</td>
                       <td className={`px-2 py-1.5 ${pct >= 0 ? "text-[#089981]" : "text-[#f23645]"}`}>
                         {pct >= 0 ? "+" : ""}
                         {formatNum(pct)}%
