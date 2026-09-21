@@ -10,8 +10,8 @@ import { useLiveStore } from "@/lib/live/store";
 import type { OrderDto, PositionDto } from "@/lib/live/types";
 import type { ChartOrder, ChartPosition } from "@/types";
 
-/** Chart-compatible position; live DTOs additionally carry mark/unrealized/notional. */
-export type BookPosition = ChartPosition & Partial<Pick<PositionDto, "mark" | "unrealized" | "notional">>;
+/** Chart-compatible position; live DTOs additionally carry mark/unrealized/notional/margin fields. */
+export type BookPosition = ChartPosition & Partial<Pick<PositionDto, "mark" | "unrealized" | "notional" | "marginType" | "isolatedMargin" | "isolatedWallet">>;
 
 export interface BrokerBook {
   orders: ChartOrder[];

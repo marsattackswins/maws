@@ -30,6 +30,9 @@ export interface LivePosition {
   leverage: string;
   liquidationPrice: string;
   notional: string;
+  marginType?: string;
+  isolatedMargin?: string;
+  isolatedWallet?: string;
   updatedAt: number;
 }
 
@@ -160,6 +163,9 @@ export function applyPositionSnapshot(rows: PositionRiskRow[], now = Date.now())
       leverage: r.leverage,
       liquidationPrice: r.liquidationPrice,
       notional: r.notional ?? "",
+      marginType: r.marginType,
+      isolatedMargin: r.isolatedMargin,
+      isolatedWallet: r.isolatedWallet,
       updatedAt: now,
     });
   }

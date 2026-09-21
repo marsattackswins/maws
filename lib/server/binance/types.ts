@@ -77,6 +77,9 @@ export interface PositionRiskRow {
   leverage: string;
   positionSide: string;
   notional?: string;
+  marginType?: string;
+  isolatedMargin?: string;
+  isolatedWallet?: string;
 }
 
 export interface BinanceOrder {

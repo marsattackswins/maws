@@ -29,6 +29,9 @@ function position(overrides: Partial<Parameters<typeof aggregateRiskCockpit>[0][
     unrealized: 20,
     openedAt: 1,
     notional: 200,
+    marginType: undefined,
+    isolatedMargin: undefined,
+    isolatedWallet: undefined,
     ...overrides,
   };
 }

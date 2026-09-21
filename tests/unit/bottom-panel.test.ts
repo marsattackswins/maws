@@ -244,6 +244,9 @@ describe("bottom trading panel attachment visibility", () => {
         mark: 60_000,
         unrealized: 15_000, // static server poll snapshot
         openedAt: Date.now(),
+        tp: null,
+        sl: null,
+        liq: null,
       },
     ];
 
@@ -256,16 +259,15 @@ describe("bottom trading panel attachment visibility", () => {
     expect(rowLive.last).toBe(60_000);
     // Notional = qty * mark = 2 * 60,000 = 120,000
     expect(rowLive.notional).toBe(120_000);
-    // Margin = notional / leverage = 120,000 / 10 = 12,000
-    const mgnLive = rowLive.notional / rowLive.leverage;
-    expect(mgnLive).toBe(12_000);
+    // Margin = notional / leverage = 120,000 / 10 = 12,000 (estimate since no marginType)
+    expect(rowLive.margin).toBe(12_000);
     // PnL = (mark - entry) * qty = (60,000 - 50,000) * 2 = 20,000
     expect(rowLive.pnl).toBe(20_000);
 
     // Case 2: Mark price is not available, falls back to server-calculated unrealized PnL
     // to avoid incorrectly zeroing PnL by using entry as market price
     const rowsNoMark = computePosRows(
-      [{ ...livePositions[0], mark: undefined }],
+      [{ ...livePositions[0], mark: undefined, tp: null, sl: null, liq: null }],
       true,
       () => 0,
     );
@@ -273,15 +275,112 @@ describe("bottom trading panel attachment visibility", () => {
     const rowNoMark = rowsNoMark[0];
     expect(rowNoMark.last).toBe(50_000);
     expect(rowNoMark.notional).toBe(100_000);
+    expect(rowNoMark.margin).toBe(10_000);
     // Should use server-calculated unrealized PnL (15,000), not calculate from entry (which would be 0)
     expect(rowNoMark.pnl).toBe(15_000);
 
     // Case 3: Paper mode (live=false) still uses last-trade price for backwards compatibility
-    const rowsPaper = computePosRows(livePositions, false, (sym) => (sym === "BTCUSDT" ? 62_000 : 0));
+    const rowsPaper = computePosRows(
+      [{ ...livePositions[0], tp: null, sl: null, liq: null }],
+      false,
+      (sym) => (sym === "BTCUSDT" ? 62_000 : 0),
+    );
     expect(rowsPaper).toHaveLength(1);
     const rowPaper = rowsPaper[0];
     expect(rowPaper.last).toBe(62_000);
     expect(rowPaper.notional).toBe(124_000);
+    expect(rowPaper.margin).toBe(12_400);
     expect(rowPaper.pnl).toBe(24_000);
+  });
+
+  test("live position margin uses Binance isolatedWallet when available (matches Binance UI)", () => {
+    const livePositions = [
+      {
+        id: "pos-btc-isolated",
+        symbol: "BTCUSDT",
+        side: "long" as const,
+        entry: 50_000,
+        qty: 2,
+        leverage: 10,
+        mark: 60_000,
+        unrealized: 15_000,
+        marginType: "isolated" as const,
+        isolatedMargin: 15_000, // Binance-reported isolated margin
+        isolatedWallet: 49.55, // Binance-reported isolated wallet (matches Binance UI display)
+        openedAt: Date.now(),
+        tp: null,
+        sl: null,
+        liq: null,
+      },
+    ];
+
+    // Case 1: Isolated position with Binance isolatedWallet - should use isolatedWallet (matches Binance UI)
+    const rowsIsolated = computePosRows(livePositions, true, () => 0);
+    expect(rowsIsolated).toHaveLength(1);
+    const rowIsolated = rowsIsolated[0];
+    expect(rowIsolated.marginType).toBe("isolated");
+    // Should use Binance isolatedWallet (49.55), not isolatedMargin (15,000) or estimate (12,000)
+    expect(rowIsolated.margin).toBe(49.55);
+    expect(rowIsolated.notional).toBe(120_000);
+
+    // Case 2: Isolated position with isolatedMargin but no isolatedWallet - should use isolatedMargin as fallback
+    const rowsFallbackToMargin = computePosRows(
+      [{ ...livePositions[0], isolatedWallet: undefined, tp: null, sl: null, liq: null }],
+      true,
+      () => 0,
+    );
+    expect(rowsFallbackToMargin).toHaveLength(1);
+    const rowFallback = rowsFallbackToMargin[0];
+    expect(rowFallback.marginType).toBe("isolated");
+    // Should fallback to isolatedMargin (15,000) when isolatedWallet unavailable
+    expect(rowFallback.margin).toBe(15_000);
+
+    // Case 3: Isolated position with zero isolatedWallet - should fallback to isolatedMargin
+    const rowsZeroWallet = computePosRows(
+      [{ ...livePositions[0], isolatedWallet: 0, tp: null, sl: null, liq: null }],
+      true,
+      () => 0,
+    );
+    expect(rowsZeroWallet).toHaveLength(1);
+    const rowZeroWallet = rowsZeroWallet[0];
+    expect(rowZeroWallet.marginType).toBe("isolated");
+    // Should fallback to isolatedMargin (15,000) when isolatedWallet is zero
+    expect(rowZeroWallet.margin).toBe(15_000);
+
+    // Case 4: Isolated position with neither isolatedWallet nor isolatedMargin - should use estimate
+    const rowsNoFields = computePosRows(
+      [{ ...livePositions[0], isolatedWallet: undefined, isolatedMargin: undefined, tp: null, sl: null, liq: null }],
+      true,
+      () => 0,
+    );
+    expect(rowsNoFields).toHaveLength(1);
+    const rowNoFields = rowsNoFields[0];
+    expect(rowNoFields.marginType).toBe("isolated");
+    // Should use estimate: notional / leverage = 120,000 / 10 = 12,000
+    expect(rowNoFields.margin).toBe(12_000);
+
+    // Case 5: Cross position (no isolated fields) - should use estimate
+    const rowsCross = computePosRows(
+      [{ ...livePositions[0], marginType: "cross" as const, isolatedWallet: undefined, isolatedMargin: undefined, tp: null, sl: null, liq: null }],
+      true,
+      () => 0,
+    );
+    expect(rowsCross).toHaveLength(1);
+    const rowCross = rowsCross[0];
+    expect(rowCross.marginType).toBe("cross");
+    // Should use estimate: notional / leverage = 120,000 / 10 = 12,000
+    expect(rowCross.margin).toBe(12_000);
+
+    // Case 6: No marginType - should use estimate
+    const rowsNoType = computePosRows(
+      [{ ...livePositions[0], marginType: undefined, isolatedWallet: undefined, isolatedMargin: undefined, tp: null, sl: null, liq: null }],
+      true,
+      () => 0,
+    );
+    expect(rowsNoType).toHaveLength(1);
+    const rowNoType = rowsNoType[0];
+    expect(rowNoType.marginType).toBeUndefined();
+    // Should use estimate: notional / leverage = 120,000 / 10 = 12,000
+    expect(rowNoType.margin).toBe(12_000);
   });
 });

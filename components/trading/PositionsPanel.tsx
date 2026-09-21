@@ -250,10 +250,12 @@ export type PosRow = {
   last: number;
   pnl: number;
   notional: number;
+  margin: number;
+  marginType?: string;
 };
 
 export function computePosRows(
-  positions: Array<Parameters<typeof positionPnl>[0] & { id: string; mark?: number; unrealized?: number; notional?: number }>,
+  positions: Array<Parameters<typeof positionPnl>[0] & { id: string; mark?: number; unrealized?: number; notional?: number; marginType?: string; isolatedMargin?: number; isolatedWallet?: number }>,
   live: boolean,
   lastOf: (symbol: string) => number,
 ): PosRow[] {
@@ -261,6 +263,14 @@ export function computePosRows(
     ? positions.map((p) => {
         const last = (p.mark && p.mark > 0) ? p.mark : p.entry;
         const pnl = (p.mark && p.mark > 0) ? positionPnl(p, last) : (p.unrealized ?? 0);
+        const notional = p.qty * last;
+        // Use Binance isolatedWallet for isolated positions (matches Binance UI display).
+        // Fallback to isolatedMargin if isolatedWallet unavailable, then estimate.
+        const margin = (p.marginType === "isolated" && p.isolatedWallet != null && p.isolatedWallet > 0)
+          ? p.isolatedWallet
+          : (p.marginType === "isolated" && p.isolatedMargin != null && p.isolatedMargin > 0)
+            ? p.isolatedMargin
+            : notional / Math.max(1, p.leverage);
         return {
           id: p.id,
           symbol: p.symbol,
@@ -272,12 +282,15 @@ export function computePosRows(
           leverage: p.leverage,
           last,
           pnl,
-          notional: p.qty * last,
+          notional,
+          margin,
+          marginType: p.marginType,
         };
       })
     : positions.map((p) => {
         const streamPrice = lastOf(p.symbol);
         const last = streamPrice > 0 ? streamPrice : p.entry;
+        const notional = p.qty * last;
         return {
           id: p.id,
           symbol: p.symbol,
@@ -289,7 +302,8 @@ export function computePosRows(
           leverage: p.leverage,
           last,
           pnl: positionPnl(p, last),
-          notional: p.qty * last,
+          notional,
+          margin: notional / Math.max(1, p.leverage),
         };
       });
 }
@@ -528,9 +542,8 @@ export function PositionsPanel() {
               <tbody>
                 {posRows.map((p) => {
                   const pnl = p.pnl;
-                  // Binance mark price convention: notional and margin driven by current live mark price (p.last)
                   const notional = p.notional;
-                  const mgn = notional / Math.max(1, p.leverage);
+                  const mgn = p.margin;
                   const pct = notional === 0 ? 0 : (pnl / notional) * 100;
                   return (
                     <tr key={p.id} className="border-t border-[#222222] text-[#d1d4dc]">

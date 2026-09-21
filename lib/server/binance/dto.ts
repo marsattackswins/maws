@@ -20,6 +20,12 @@ export interface PositionDto {
   openedAt: number;
   /** Exchange-reported position value; mirrors Binance's positionNotional. */
   notional: number;
+  /** Margin type from Binance positionRisk: "cross" or "isolated". */
+  marginType?: string;
+  /** Isolated margin amount from Binance positionRisk. */
+  isolatedMargin?: number;
+  /** Isolated wallet balance from Binance positionRisk. */
+  isolatedWallet?: number;
 }
 
 export interface OrderDto {
@@ -97,6 +103,9 @@ export function positionsDto(): PositionDto[] {
       unrealized: Number(p.unrealizedProfit),
       openedAt: p.updatedAt,
       notional: Number(p.notional),
+      marginType: p.marginType,
+      isolatedMargin: p.isolatedMargin != null ? Number(p.isolatedMargin) : undefined,
+      isolatedWallet: p.isolatedWallet != null ? Number(p.isolatedWallet) : undefined,
     });
   }
   return out;
