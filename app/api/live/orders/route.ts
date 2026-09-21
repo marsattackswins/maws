@@ -18,6 +18,7 @@ interface SubmitBody {
   price?: unknown;
   stopPrice?: unknown;
   reduceOnly?: unknown;
+  leverage?: unknown;
   clientOrderId?: unknown;
 }
 
@@ -43,7 +44,7 @@ export async function POST(req: Request): Promise<Response> {
 
     const body = await readJson<SubmitBody>(req);
     if (!body) return jsonError(400, "bad_request", "Invalid JSON body");
-    const { symbol, side, type, qty, price, stopPrice, reduceOnly, clientOrderId } = body;
+    const { symbol, side, type, qty, price, stopPrice, reduceOnly, leverage, clientOrderId } = body;
     if (typeof symbol !== "string" || symbol.length === 0 || !VALID_SIDE.has(String(side)) || !VALID_TYPE.has(String(type))) {
       return jsonError(400, "bad_request", "symbol, side (BUY|SELL) and type (MARKET|LIMIT|STOP_MARKET) are required");
     }
@@ -72,6 +73,11 @@ export async function POST(req: Request): Promise<Response> {
           price: typeof price === "string" ? price : undefined,
           stopPrice: typeof stopPrice === "string" ? stopPrice : undefined,
           reduceOnly: reduceOnly === true,
+          // Optional UI-selected leverage; the Binance adapter syncs it to the
+          // exchange (POST /fapi/v1/leverage) before the order is placed.
+          leverage: typeof leverage === "number" && Number.isFinite(leverage) && leverage >= 1 && leverage <= 125
+            ? Math.floor(leverage)
+            : undefined,
           clientOrderId,
         });
         },

@@ -297,6 +297,7 @@ export class BinanceAdapter implements IBroker {
       timeInForce: params.timeInForce,
       clientOrderId: params.clientOrderId,
       kind: params.kind,
+      leverage: params.leverage,
     };
   }
 

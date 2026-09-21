@@ -190,6 +190,26 @@ export function applyMarkPrice(symbol: string, markPrice: string, now = Date.now
   return true;
 }
 
+/**
+ * Records the exchange-side per-symbol leverage announced by
+ * ACCOUNT_CONFIG_UPDATE (fired after POST /fapi/v1/leverage). Positions
+ * created by later ACCOUNT_UPDATE fills have no leverage field, so this map
+ * is the only timely source of the real value between position snapshots.
+ * Returns true when an open position's displayed leverage was patched.
+ */
+export function applySymbolLeverage(symbol: string, leverage: string): boolean {
+  const lev = Number(leverage);
+  if (!Number.isFinite(lev) || lev < 1) return false;
+  const normalized = String(Math.floor(lev));
+  state.symbolLeverage.set(symbol, normalized);
+  const pos = state.positions.get(symbol);
+  if (pos && pos.leverage !== normalized) {
+    state.positions.set(symbol, { ...pos, leverage: normalized });
+    return true;
+  }
+  return false;
+}
+
 export function applyOpenOrdersSnapshot(rows: BinanceOrder[], now = Date.now()): void {
   state.openOrders.clear();
   for (const o of rows) {
@@ -349,6 +369,9 @@ export function applyAccountEvent(ev: AccountUpdateEvent): void {
     }
     const prev = state.positions.get(p.s);
     const absQty = isNegative(amt) ? toStr({ units: -amt.units, scale: amt.scale }) : toStr(amt);
+    // ACCOUNT_UPDATE carries no leverage field, so seed from the last
+    // ACCOUNT_CONFIG_UPDATE instead of guessing 1x.
+    const leverage = state.symbolLeverage.get(p.s) ?? prev?.leverage ?? "1";
     state.positions.set(p.s, {
       symbol: p.s,
       side: isNegative(amt) ? "short" : "long",
@@ -356,7 +379,7 @@ export function applyAccountEvent(ev: AccountUpdateEvent): void {
       entryPrice: p.ep,
       markPrice: prev?.markPrice ?? p.ep,
       unrealizedProfit: p.up,
-      leverage: prev?.leverage ?? "1",
+      leverage,
       liquidationPrice: prev?.liquidationPrice ?? "0",
       notional: prev?.notional ?? "",
       updatedAt: ev.E,

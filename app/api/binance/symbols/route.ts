@@ -4,7 +4,7 @@ import type { SymbolInfo } from "@/types";
 
 export const dynamic = "force-dynamic";
 
-type BinanceFilter = { filterType: string; tickSize?: string };
+type BinanceFilter = { filterType: string; tickSize?: string; stepSize?: string; minQty?: string };
 type BinanceSymbol = {
   symbol: string;
   status: string;
@@ -51,6 +51,7 @@ export async function GET() {
       if (s.contractType !== "PERPETUAL" && s.contractType !== "TRADIFI_PERPETUAL") continue;
       const tick = s.filters?.find((f) => f.filterType === "PRICE_FILTER")?.tickSize;
       const precision = precisionFromTick(tick, s.pricePrecision ?? 4);
+      const lot = s.filters?.find((f) => f.filterType === "LOT_SIZE");
       rows.push({
         symbol: s.symbol,
         base: s.baseAsset,
@@ -59,6 +60,8 @@ export async function GET() {
         precision,
         contractType: s.contractType,
         underlyingType: s.underlyingType,
+        ...(lot?.stepSize ? { stepSize: lot.stepSize } : {}),
+        ...(lot?.minQty ? { minQty: lot.minQty } : {}),
       });
     }
 

@@ -88,6 +88,8 @@ export interface OrderParams {
   timeInForce?: string;
   clientOrderId?: string;
   kind?: "order" | "algo";
+  /** Optional UI-selected leverage to sync on the exchange before placing. */
+  leverage?: number;
 }
 
 export interface OrderResult {

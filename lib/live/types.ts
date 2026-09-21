@@ -143,6 +143,7 @@ export interface HealthDto {
     clock: { offsetMs: number; updatedAt: number } | null;
     recon: { lastRunAt: number | null; lastResult: string | null } | null;
     positionMode?: { mode: string; checkedAt: number | null; error: string | null };
+    markPrice?: { connected: boolean; stale: boolean; symbols: number; lastEventAt: number | null; reconnects: number } | null;
   };
 }
 

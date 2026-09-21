@@ -1,4 +1,4 @@
-import { accountDto, fillsDto, ordersDto, positionsDto } from "@/lib/server/binance/dto";
+import { accountDto, accountMetricsDto, fillsDto, ordersDto, positionsDto } from "@/lib/server/binance/dto";
 import { serverConfig } from "@/lib/server/env/config";
 import { authenticate, isAuthFailure, jsonError, jsonOk } from "@/lib/server/http/guards";
 
@@ -15,6 +15,7 @@ export async function GET(req: Request): Promise<Response> {
   if (isAuthFailure(ctx)) return ctx.response;
   return jsonOk({
     account: accountDto(),
+    accountMetrics: accountMetricsDto(),
     positions: positionsDto(),
     orders: ordersDto(),
     fills: fillsDto(50),

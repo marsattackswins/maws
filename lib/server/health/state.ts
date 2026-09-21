@@ -36,6 +36,15 @@ export interface PositionModeSignal {
   error: string | null;
 }
 
+/** Mark-price stream freshness (drives the client's Live/Stale badge). */
+export interface MarkPriceSignal {
+  connected: boolean;
+  stale: boolean;
+  symbols: number;
+  lastEventAt: number | null;
+  reconnects: number;
+}
+
 export interface HealthSignals {
   managerRunning: boolean;
   brokerStatus: "idle" | "starting" | "ready" | "error";
@@ -45,6 +54,7 @@ export interface HealthSignals {
   snapshot: { fetchedAt: number } | null;
   recon: ReconSignal;
   positionMode: PositionModeSignal;
+  markPrice: MarkPriceSignal | null;
 }
 
 const signals: HealthSignals = {
@@ -56,6 +66,7 @@ const signals: HealthSignals = {
   snapshot: null,
   recon: { lastRunAt: null, lastResult: null, driftCount: 0 },
   positionMode: { mode: "unknown", checkedAt: null, error: null },
+  markPrice: null,
 };
 
 export function healthSignals(): HealthSignals {

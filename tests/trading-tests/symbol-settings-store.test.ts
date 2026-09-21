@@ -1,13 +1,15 @@
-import { describe, it, expect, beforeEach } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterAll } from '@jest/globals';
 import { useAppStore } from '../../lib/store';
 import {
+  quantizeQtyToStep,
   resolveSymbolTrading,
   resolveMarginAmount,
   resolveOrderQty,
   resolvePositionOrderQty,
   formatMarginLabel,
 } from '../../lib/trading/symbol-settings';
-import { DEFAULT_CHART_SETTINGS, DEFAULT_SYMBOL_TRADING } from '../../types';
+import { replaceUniverse, UNIVERSE } from '../../lib/maws/universe';
+import { DEFAULT_CHART_SETTINGS, DEFAULT_SYMBOL_TRADING, type SymbolInfo } from '../../types';
 
 /**
  * Headless tests for the store-dependent production functions in
@@ -17,6 +19,11 @@ import { DEFAULT_CHART_SETTINGS, DEFAULT_SYMBOL_TRADING } from '../../types';
 
 const SYMBOL = 'CFGUSDT';
 const BALANCE = 100_000;
+
+// The step-alignment tests below swap the module-level universe; restore it so
+// later suites (and other test files via a clean registry) see the seed data.
+const universeSnapshot = UNIVERSE.map((s) => ({ ...s }));
+afterAll(() => replaceUniverse(universeSnapshot));
 
 beforeEach(() => {
   useAppStore.setState({
@@ -108,6 +115,55 @@ describe('resolveOrderQty (real store)', () => {
       .setSymbolTrading(SYMBOL, { ...DEFAULT_SYMBOL_TRADING, sizingMode: 'percent', marginPercent: 10, leverage: 2 });
     // margin = 10% of 100_000 = 10_000 → qty = 10_000*2/50 = 400
     expect(resolveOrderQty(SYMBOL, 50)).toBe(400);
+  });
+
+  it('floors margin-derived qty onto the symbol LOT_SIZE step grid', () => {
+    // 100 USDT × 10x at 81_100 → 0.012330678…; the universe entry for this
+    // symbol carries stepSize 0.0001 (testnet BTCUSDT) → 0.0123.
+    const info: SymbolInfo = {
+      symbol: SYMBOL,
+      base: 'CFG',
+      quote: 'USDT',
+      name: 'Config Coin',
+      precision: 1,
+      stepSize: '0.0001',
+    };
+    replaceUniverse([info]);
+    useAppStore
+      .getState()
+      .setSymbolTrading(SYMBOL, { ...DEFAULT_SYMBOL_TRADING, margin: 100, leverage: 10 });
+    expect(resolveOrderQty(SYMBOL, 81_100)).toBe(0.0123);
+  });
+
+  it('falls back to price-tick precision decimals when no stepSize is cached', () => {
+    // No stepSize on the universe entry → precision 1 → step 0.1.
+    const info: SymbolInfo = {
+      symbol: SYMBOL,
+      base: 'CFG',
+      quote: 'USDT',
+      name: 'Config Coin',
+      precision: 1,
+    };
+    replaceUniverse([info]);
+    useAppStore
+      .getState()
+      .setSymbolTrading(SYMBOL, { ...DEFAULT_SYMBOL_TRADING, margin: 100, leverage: 10 });
+    // 1000/81_100 = 0.012330… floors to 0 steps of 0.1 → 0 (rejected cleanly).
+    expect(resolveOrderQty(SYMBOL, 81_100)).toBe(0);
+    // At a lower price the same sizing stays on the 0.1 grid: 1000/900 = 1.11…
+    expect(resolveOrderQty(SYMBOL, 900)).toBe(1.1);
+  });
+
+  it('quantizeQtyToStep floors to the step and floors sub-step sizes to zero', () => {
+    expect(quantizeQtyToStep(0.012331811, '0.0001')).toBe(0.0123);
+    expect(quantizeQtyToStep(0.012331811, '0.001')).toBe(0.012);
+    expect(quantizeQtyToStep(0.0123, '0.0001')).toBe(0.0123); // already on grid
+    expect(quantizeQtyToStep(0.00005, '0.0001')).toBe(0); // below one step
+    expect(quantizeQtyToStep(10, 0.001)).toBe(10); // float dust must not floor a step down
+    expect(quantizeQtyToStep(7, undefined)).toBe(7); // no step → unchanged
+    expect(quantizeQtyToStep(7, 'abc')).toBe(7); // invalid step → unchanged
+    expect(quantizeQtyToStep(0, '0.001')).toBe(0);
+    expect(quantizeQtyToStep(-3, '0.001')).toBe(0);
   });
 });
 

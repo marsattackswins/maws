@@ -2,7 +2,8 @@ import "server-only";
 
 import crypto from "node:crypto";
 
-import { abs, isNegative, isZero, parseDec, toStr } from "./decimal";
+import { abs, isNegative, isZero, parseDec, roundDownToStep, toStr } from "./decimal";
+import { applySymbolLeverage } from "./state";
 import { audit } from "../audit/log";
 import { requireEmergencyActionAllowed, requireSubmissionAllowed, SubmissionBlockedError } from "../gates/execution";
 import type { EnvConfig } from "../env/config";
@@ -57,6 +58,12 @@ export interface SubmitOrderInput {
    * so the order only flattens and must skip the new-exposure risk gate.
    */
   isClose?: boolean;
+  /**
+   * UI-selected leverage (1–125). When present, the exchange-side per-symbol
+   * leverage is synced (POST /fapi/v1/leverage) before the order is placed so
+   * Binance computes initial margin from the same sizing the UI used.
+   */
+  leverage?: number;
 }
 
 export interface ReferencePrice {
@@ -165,6 +172,21 @@ export class OrderService {
     return withRiskMutation(() => this.submitOrderSerialized(input));
   }
 
+  /**
+   * Returns a user-facing rejection when the optional leverage sync fails as
+   * a definite business rejection; returns null when nothing needed syncing.
+   * Transport/breaker failures propagate so timeouts surface as uncertain.
+   */
+  private async syncLeverage(input: SubmitOrderInput): Promise<string | null> {
+    const leverage = normalizeLeverage(input.leverage);
+    // Only an absent value skips the sync. An explicit 1 must still be sent:
+    // the exchange-side per-symbol setting persists whatever was last set, so
+    // skipping 1x would margin the order at the stale value (the drift this
+    // sync exists to prevent).
+    if (leverage == null) return null;
+    return syncLeverageToExchange(this.deps.rest, input.symbol, leverage);
+  }
+
   private async submitOrderSerialized(input: SubmitOrderInput): Promise<OrderResult> {
     const { cfg } = this.deps;
     const clientOrderId = input.clientOrderId ?? newServerClientOrderId(input.kind === "algo" ? "alg" : "ord");
@@ -186,6 +208,14 @@ export class OrderService {
     const constraints = this.deps.getConstraints(input.symbol);
     if (!input.emergencyClose && !constraints) {
       return { ok: false, clientOrderId, error: `No exchange filter data for ${input.symbol}; metadata not ready` };
+    }
+
+    alignQtyToStep(input, constraints);
+
+    const leverageError = await this.syncLeverage(input);
+    if (leverageError) {
+      audit("operator", "order.rejected.leverage", { symbol: input.symbol, clientOrderId, error: leverageError });
+      return { ok: false, clientOrderId, error: leverageError };
     }
 
     const validation = validateOrderInput(input, constraints);
@@ -672,6 +702,63 @@ export class OrderService {
 interface OrderInputValidation {
   errors: string[];
   recordRejection: boolean;
+}
+
+/**
+ * Floors a client-supplied quantity onto the exchange LOT_SIZE step grid so
+ * margin/leverage-derived sizes (e.g. 100 USDT × 10x / price → 0.012331811)
+ * cannot be rejected for "must be a multiple of stepSize". Constraints come
+ * from whichever Binance environment is active, so this protects testnet and
+ * production uniformly. Quantities that floor to zero are left in place for
+ * validateOrderInput to reject cleanly ("qty must be positive").
+ */
+function alignQtyToStep(input: SubmitOrderInput, constraints: SymbolConstraints | null): void {
+  if (!input.qty || input.closePosition || !constraints) return;
+  try {
+    input.qty = toStr(roundDownToStep(parseDec(input.qty), constraints.stepSize));
+  } catch {
+    // Malformed qty or zero step: leave untouched; validation reports it.
+  }
+}
+
+/** Binance -4028: requested leverage outside the symbol's bracket. */
+const ERR_INVALID_LEVERAGE = -4028;
+
+export function normalizeLeverage(raw: unknown): number | null {
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(n)) return null;
+  const whole = Math.floor(n);
+  return whole >= 1 && whole <= 125 ? whole : null;
+}
+
+/**
+ * Syncs the UI-selected leverage to the exchange before submission. Binance
+ * stores leverage per symbol per account, so an unsynced order is margined at
+ * whatever the symbol was last set to (default 1x) — not what the UI showed.
+ * Idempotent submissions re-send the same value, which is a no-op server-side.
+ * Failure semantics: an out-of-bracket value (-4028) is a definite business
+ * rejection; transport/breaker failures propagate to the standard handlers.
+ */
+async function syncLeverageToExchange(
+  rest: Pick<BinanceRestClient, "changeLeverage">,
+  symbol: string,
+  leverage: number,
+): Promise<string | null> {
+  try {
+    await rest.changeLeverage(symbol, leverage);
+    // Record immediately rather than waiting for the ACCOUNT_CONFIG_UPDATE
+    // stream event, so a fill racing the event still seeds the right row.
+    applySymbolLeverage(symbol, String(leverage));
+    return null;
+  } catch (err) {
+    if (err instanceof BinanceApiError) {
+      if (err.code === ERR_INVALID_LEVERAGE) {
+        return `Leverage ${leverage} is not available for ${symbol} on this account tier`;
+      }
+      return `Leverage sync failed: ${err.exchangeMsg}`;
+    }
+    throw err;
+  }
 }
 
 function validateOrderInput(input: SubmitOrderInput, constraints: SymbolConstraints | null): OrderInputValidation | null {

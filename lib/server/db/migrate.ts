@@ -170,6 +170,30 @@ export const MIGRATIONS: Migration[] = [
     name: "M0006 profile-scoped persistence and legacy quarantine",
     up: migrateProfileScopedSchema,
   },
+  {
+    version: 7,
+    name: "M0007 exchange income ledger (realized pnl, commission, funding)",
+    up: [
+      // PROFILE_CHECK is declared below MIGRATIONS (hoisting-safe only for
+      // function-up migrations), so the constraint is inlined here. The
+      // composite (profile_id, income_id) key is the table's only primary
+      // key: SQLite rejects a column-level PK plus a table-level one.
+      `CREATE TABLE IF NOT EXISTS account_income (
+         profile_id TEXT NOT NULL CHECK (profile_id IN ('paper', 'binance-testnet', 'binance-production', 'shadow', 'legacy-unknown')),
+         income_id TEXT NOT NULL,
+         ts INTEGER NOT NULL,
+         income_type TEXT NOT NULL,
+         symbol TEXT,
+         amount TEXT NOT NULL,
+         asset TEXT NOT NULL,
+         info TEXT,
+         source TEXT NOT NULL,
+         PRIMARY KEY (profile_id, income_id)
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_income_profile_time ON account_income(profile_id, ts)`,
+      `CREATE INDEX IF NOT EXISTS idx_income_profile_type ON account_income(profile_id, income_type)`,
+    ],
+  },
 ];
 
 const PROFILE_CHECK =

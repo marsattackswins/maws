@@ -1,4 +1,4 @@
-import { accountDto, fillsDto, ordersDto, positionsDto } from "@/lib/server/binance/dto";
+import { accountDto, accountMetricsDto, fillsDto, ordersDto, positionsDto } from "@/lib/server/binance/dto";
 import { sseBus } from "@/lib/server/binance/sse";
 import { serverConfig } from "@/lib/server/env/config";
 import { buildHealthStatus } from "@/lib/server/health/status";
@@ -39,6 +39,7 @@ export async function GET(req: Request): Promise<Response> {
       send("hello", { at: Date.now(), env: activeProfileConfig().env });
       send("state", {
         account: accountDto(),
+        accountMetrics: accountMetricsDto(),
         positions: positionsDto(),
         orders: ordersDto(),
         fills: fillsDto(50),

@@ -81,6 +81,7 @@ export function makeCfg(overrides: Partial<EnvConfig> = {}): EnvConfig {
     recvWindowMs: 5000,
     rateInternalPerMin: 1_000_000,
     reconIntervalMs: 86_400_000,
+    markPriceIntervalMs: 15_000,
     leaseTtlMs: 60_000,
     snapshotMaxAgeMs: 5 * 60_000,
     alertWebhookUrl: null,

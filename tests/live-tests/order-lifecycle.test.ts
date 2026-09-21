@@ -126,6 +126,83 @@ describe("order submission (testnet lifecycle via fake exchange)", () => {
     expect(findByClientOrderId("rk1")).toBeNull();
   });
 
+  test("unrounded margin-derived qty is floored to stepSize before validation and submission", async () => {
+    // UI sizing produces arbitrary floats like 0.012331811 (100 USDT × 10x /
+    // 81100). The LOT_SIZE step for the harness symbol is 0.001, so the
+    // pre-flight validator must never see the off-grid value.
+    const h = setup({
+      risk: { maxOrderNotionalUsd: 1000, maxGrossExposureUsd: 5000, maxOpenOrders: 10, maxOpenPositions: 3, dailyLossPct: 5, priceCollarPct: 2 },
+    });
+    h.http.route("/fapi/v1/order", () => jsonRes(orderFixture({ clientOrderId: "qt1", type: "MARKET", status: "NEW" })));
+
+    const res = await h.svc.submitOrder({ symbol: "BTCUSDT", side: "BUY", type: "MARKET", qty: "0.012331811", clientOrderId: "qt1" });
+    expect(res.ok).toBe(true);
+
+    const q = queryOf(placeCalls(h)[0]);
+    expect(q.get("quantity")).toBe("0.012");
+    // The persisted intent records the aligned quantity, not the raw input.
+    expect(findByClientOrderId("qt1")?.qty).toBe("0.012");
+  });
+
+  test("qty that floors below minQty is rejected cleanly without exchange traffic", async () => {
+    const h = setup();
+    // 0.0005 floors to zero steps of 0.001 → validation reports minQty.
+    const res = await h.svc.submitOrder({ symbol: "BTCUSDT", side: "BUY", type: "MARKET", qty: "0.0005", clientOrderId: "qt2" });
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain("minQty");
+    expect(res.error).toContain("qty");
+    expect(placeCalls(h)).toHaveLength(0);
+  });
+
+  test("UI-selected leverage is synced to the exchange before the order", async () => {
+    const h = setup();
+    h.http.route("/fapi/v1/leverage", () => jsonRes({ leverage: 20, maxNotionalValue: "1000000" }));
+    h.http.route("/fapi/v1/order", () => jsonRes(orderFixture({ clientOrderId: "lv1", type: "MARKET", status: "NEW" })));
+
+    const res = await h.svc.submitOrder({ symbol: "BTCUSDT", side: "BUY", type: "MARKET", qty: "0.001", leverage: 20, clientOrderId: "lv1" });
+    expect(res.ok).toBe(true);
+
+    const levCalls = h.http.callsTo("/fapi/v1/leverage").filter((c) => c.method === "POST");
+    expect(levCalls).toHaveLength(1);
+    const levQ = new URLSearchParams(levCalls[0].url.split("?")[1]);
+    expect(levQ.get("symbol")).toBe("BTCUSDT");
+    expect(levQ.get("leverage")).toBe("20");
+    // The order still goes out after the successful sync.
+    expect(placeCalls(h)).toHaveLength(1);
+  });
+
+  test("no leverage call when leverage is absent; explicit 1x is still synced", async () => {
+    const h = setup();
+    h.http.route("/fapi/v1/leverage", () => jsonRes({ leverage: 1, maxNotionalValue: "1000000" }));
+    h.http.route("/fapi/v1/order", () => jsonRes(orderFixture({ clientOrderId: "lv2", type: "MARKET", status: "NEW" })));
+
+    await h.svc.submitOrder({ symbol: "BTCUSDT", side: "BUY", type: "MARKET", qty: "0.001", clientOrderId: "lv2" });
+    await h.svc.submitOrder({ symbol: "BTCUSDT", side: "SELL", type: "MARKET", qty: "0.001", leverage: 1, clientOrderId: "lv3" });
+    const levCalls = h.http.callsTo("/fapi/v1/leverage").filter((c) => c.method === "POST");
+    expect(levCalls).toHaveLength(1);
+    const levQ = new URLSearchParams(levCalls[0].url.split("?")[1]);
+    expect(levQ.get("leverage")).toBe("1");
+  });
+
+  test("out-of-bracket leverage (-4028) rejects the order without sending it", async () => {
+    const h = setup();
+    h.http.scriptApiError("/fapi/v1/leverage", -4028, "Leverage 100 is not valid for BTCUSDT", 400);
+
+    const res = await h.svc.submitOrder({ symbol: "BTCUSDT", side: "BUY", type: "MARKET", qty: "0.001", leverage: 100, clientOrderId: "lv4" });
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain("not available");
+    expect(placeCalls(h)).toHaveLength(0);
+  });
+
+  test("invalid leverage values are ignored (no sync, no rejection)", async () => {
+    const h = setup();
+    h.http.route("/fapi/v1/order", () => jsonRes(orderFixture({ clientOrderId: "lv5", type: "MARKET", status: "NEW" })));
+
+    const res = await h.svc.submitOrder({ symbol: "BTCUSDT", side: "BUY", type: "MARKET", qty: "0.001", leverage: 0, clientOrderId: "lv5" });
+    expect(res.ok).toBe(true);
+    expect(h.http.callsTo("/fapi/v1/leverage")).toHaveLength(0);
+  });
+
   test("stale or missing market data rejects orders fail-closed", async () => {
     const stale = setup({}, { getReferencePrice: async () => ({ price: "50000", at: Date.now() - 31_000 }) });
     const staleRes = await stale.svc.submitOrder({ symbol: "BTCUSDT", side: "BUY", type: "MARKET", qty: "0.001", clientOrderId: "st1" });

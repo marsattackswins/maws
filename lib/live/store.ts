@@ -39,6 +39,8 @@ interface LiveStore {
   fills: FillDto[];
   health: HealthDto | null;
   stream: { connected: boolean; leaseOwned?: boolean; phase: string; reconnects: number } | null;
+  /** Mark-price stream freshness: drives the Live/Stale badge. */
+  markPrice: { connected: boolean; stale: boolean; symbols: number; lastEventAt: number | null; reconnects: number } | null;
   notices: LiveNotice[];
 
   setAttached(v: boolean): void;
@@ -79,6 +81,7 @@ export const useLiveStore = create<LiveStore>()((set) => ({
   fills: [],
   health: null,
   stream: null,
+  markPrice: null,
   notices: [],
 
   setAttached: (v) => set({ attached: v }),
@@ -121,14 +124,16 @@ export const useLiveStore = create<LiveStore>()((set) => ({
       managerError: null,
       health: null,
       stream: null,
+      markPrice: null,
     }),
   setEnv: (env, label) => set({ env, envLabel: label }),
   setManager: (status, error) => set({ managerStatus: status, managerError: error }),
   applyState: (s) =>
     set({ account: s.account, accountMetrics: s.accountMetrics ?? null, positions: s.positions, orders: s.orders, fills: s.fills }),
   clearState: () => set({ account: null, accountMetrics: null, positions: [], orders: [], fills: [] }),
-  setHealth: (h) => set({ health: h }),
+  setHealth: (h) => set({ health: h, markPrice: h.signals?.markPrice ?? null }),
   setStream: (s) => set({ stream: s }),
+  setMarkPrice: (s) => set({ markPrice: s }),
   notify: (tone, text) =>
     set((st) => ({ notices: [...st.notices.slice(-4), { id: noticeSeq++, tone, text }] })),
   dismissNotice: (id) => set((st) => ({ notices: st.notices.filter((n) => n.id !== id) })),

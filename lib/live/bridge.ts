@@ -176,6 +176,17 @@ function onSseEvent(name: string, raw: string, expected: { status: ProfileRuntim
       case "health":
         store.setHealth(data as unknown as HealthDto);
         break;
+      case "mark-price": {
+        const mp = data as { connected?: boolean; stale?: boolean; symbols?: number; lastEventAt?: number | null; reconnects?: number };
+        store.setMarkPrice({
+          connected: mp.connected === true,
+          stale: mp.stale === true,
+          symbols: Number(mp.symbols ?? 0),
+          lastEventAt: typeof mp.lastEventAt === "number" ? mp.lastEventAt : null,
+          reconnects: Number(mp.reconnects ?? 0),
+        });
+        break;
+      }
       case "stream-status":
         store.setStream({
           connected: data.connected === true,
@@ -210,7 +221,7 @@ function onSseEvent(name: string, raw: string, expected: { status: ProfileRuntim
 function startSse(status: ProfileRuntimeStatusDto, epoch: number): void {
   if (es) return;
   es = new EventSource("/api/live/events");
-  const names = ["state", "health", "stream-status", "order-update", "account-update", "snapshot", "fills", "uncertainty-cleared"];
+  const names = ["state", "health", "stream-status", "order-update", "account-update", "snapshot", "fills", "uncertainty-cleared", "mark-price"];
   for (const name of names) {
     es.addEventListener(name, (event) => onSseEvent(name, (event as MessageEvent).data, { status, epoch }));
   }

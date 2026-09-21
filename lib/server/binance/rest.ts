@@ -246,6 +246,14 @@ export class BinanceRestClient {
     return this.signedRequest<LeverageBracketRow[]>("GET", "/fapi/v1/leverageBracket", symbol ? { symbol } : {});
   }
 
+  /** Sets the account's per-symbol initial-leverage for new positions. */
+  changeLeverage(symbol: string, leverage: number): Promise<{ leverage: number; maxNotionalValue: string }> {
+    return this.signedRequest<{ leverage: number; maxNotionalValue: string }>("POST", "/fapi/v1/leverage", {
+      symbol,
+      leverage: Math.floor(leverage),
+    });
+  }
+
   /** Returns the account position mode; false is Binance one-way mode. */
   getPositionMode(): Promise<PositionModeResponse> {
     return this.signedRequest<PositionModeResponse>("GET", "/fapi/v1/positionSide/dual");

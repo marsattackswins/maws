@@ -148,7 +148,9 @@ async function bootBroker(http: FakeHttp, opts: { withPosition?: boolean } = {})
   installFakes(http);
   standardFakes(http, opts);
   await getBroker().connect();
-  FakeWs.last()?.emitOpen();
+  // Open every socket the manager created (user-data stream, public
+  // mark-price stream); the harness must not depend on stream ordering.
+  for (const ws of FakeWs.instances) ws.emitOpen();
   await flush();
   return cfg;
 }

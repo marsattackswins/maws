@@ -73,6 +73,10 @@ export type SymbolInfo = {
   contractType?: "PERPETUAL" | "TRADIFI_PERPETUAL";
   /** Binance underlying class when known (COIN, EQUITY, COMMODITY, …). */
   underlyingType?: string;
+  /** LOT_SIZE stepSize from exchangeInfo — quantity must be a multiple of it. */
+  stepSize?: string;
+  /** LOT_SIZE minQty from exchangeInfo — quantity must not fall below it. */
+  minQty?: string;
 };
 
 export type WatchlistGroup = {

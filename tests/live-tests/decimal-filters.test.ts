@@ -81,6 +81,22 @@ describe("decimal math (BigInt-scaled, no floats)", () => {
     expect(toFixedStr(parseDec("1.5"), 4)).toBe("1.5000");
     expect(toFixedStr(parseDec("0"), 2)).toBe("0.00");
   });
+
+  test("margin/leverage-derived quantities floor onto the LOT_SIZE grid", () => {
+    // UI sizing: 100 USDT margin × 10x leverage at 81100.0 → 0.012330678...
+    // Testnet BTCUSDT stepSize is 0.0001; production is 0.001 — both must pass.
+    const testnetStep = parseDec("0.0001");
+    expect(toStr(roundDownToStep(parseDec("0.012331811"), testnetStep))).toBe("0.0123");
+    expect(matchesStep(parseDec("0.0123"), testnetStep)).toBe(true);
+
+    const productionStep = parseDec("0.001");
+    expect(toStr(roundDownToStep(parseDec("0.012331811"), productionStep))).toBe("0.012");
+    expect(matchesStep(parseDec("0.012"), productionStep)).toBe(true);
+
+    // On-grid values are unchanged, and sub-step sizes floor to zero.
+    expect(toStr(roundDownToStep(parseDec("0.0123"), testnetStep))).toBe("0.0123");
+    expect(toStr(roundDownToStep(parseDec("0.00005"), testnetStep))).toBe("0");
+  });
 });
 
 describe("exchange filter extraction and validation", () => {

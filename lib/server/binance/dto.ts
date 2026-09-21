@@ -1,5 +1,6 @@
 import "server-only";
 
+import { incomeTotals, incomeWatermark, type IncomeTotals } from "./income";
 import { liveState } from "./state";
 
 /** DTOs shaped for the existing MAWS UI entities (ChartPosition/ChartOrder style). */
@@ -38,6 +39,24 @@ export interface AccountDto {
   margin: number;
   unrealized: number;
   fetchedAt: number | null;
+}
+
+export interface AccountMetricsDto {
+  /** Lifetime realized trading PnL from the durable exchange income ledger. */
+  realizedPnl: number;
+  /** Lifetime commission cost as a positive magnitude. */
+  commission: number;
+  /** Lifetime funding fees, signed as reported (paid = negative). */
+  fundingFee: number;
+  /** realizedPnl − commission + fundingFee. */
+  netRealized: number;
+  /** Null when the income ledger has not synced yet. */
+  fetchedAt: number | null;
+}
+
+export interface EquitySourceDto {
+  /** Which equity derivation produced the displayed value. */
+  equitySource: "exchange" | "fallback";
 }
 
 export interface FillDto {
@@ -101,12 +120,21 @@ export function ordersDto(): OrderDto[] {
   return out.sort((a, b) => b.time - a.time);
 }
 
-export function accountDto(): AccountDto {
+export function accountDto(): AccountDto & EquitySourceDto {
   const a = liveState().account;
-  if (!a) return { balance: 0, available: 0, equity: 0, margin: 0, unrealized: 0, fetchedAt: null };
+  if (!a) {
+    return { balance: 0, available: 0, equity: 0, margin: 0, unrealized: 0, fetchedAt: null, equitySource: "fallback" };
+  }
   const balance = Number(a.totalWalletBalance);
   const unrealized = Number(a.unrealizedProfit);
-  const equity = Number(a.marginBalance) || balance + unrealized;
+  // Exchange-reported marginBalance is the authoritative equity: it is the
+  // exchange's own wallet + unrealized sum (including funding/commission
+  // effects). The wallet-plus-unrealized recomputation is only an
+  // explicitly-defined fallback, used when no exchange value is known or
+  // after ACCOUNT_UPDATE recomputed the sum locally (tracked provenance).
+  const exchangeEquity = Number(a.marginBalance);
+  const hasExchangeEquity = a.marginFromExchange === true && Number.isFinite(exchangeEquity) && a.marginBalance !== "";
+  const equity = hasExchangeEquity ? exchangeEquity : balance + unrealized;
   const margin = Math.max(0, equity - Number(a.availableBalance));
   return {
     balance,
@@ -115,7 +143,25 @@ export function accountDto(): AccountDto {
     margin,
     unrealized,
     fetchedAt: a.fetchedAt,
+    equitySource: hasExchangeEquity ? "exchange" : "fallback",
   };
+}
+
+/**
+ * Authoritative account metrics from the durable exchange income ledger.
+ * Fills remain the trade-history record; this is the metrics source of truth.
+ */
+export function accountMetricsDto(): AccountMetricsDto & IncomeTotals {
+  try {
+    return {
+      ...incomeTotals(),
+      fetchedAt: incomeWatermark() > 0 ? incomeWatermark() : null,
+    };
+  } catch {
+    // Ledger unavailable (e.g. pre-migration DB): expose zeros rather than
+    // failing the whole state response.
+    return { realizedPnl: 0, commission: 0, fundingFee: 0, netRealized: 0, fetchedAt: null };
+  }
 }
 
 export function fillsDto(limit = 100): FillDto[] {

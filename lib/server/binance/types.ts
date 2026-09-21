@@ -42,6 +42,14 @@ export interface TickerPrice {
   price: string;
 }
 
+/** Premium-index row: mark price + time (used for live PnL refreshes). */
+export interface MarkPriceResponse {
+  symbol: string;
+  markPrice: string;
+  indexPrice: string;
+  time: number;
+}
+
 export interface AccountAsset {
   asset: string;
   walletBalance: string;

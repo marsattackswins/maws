@@ -50,6 +50,7 @@ function configureTestnet(): { manager: BinanceLiveManager; http: FakeHttp } {
   http.route("/fapi/v1/listenKey", () => jsonRes({ listenKey: "LIFECYCLE-LK" }));
   http.route("/fapi/v1/leverageBracket", () => jsonRes([]));
   http.route("/fapi/v1/userTrades", () => jsonRes([]));
+  http.route("/fapi/v1/income", () => jsonRes([]));
   return { manager: liveManager(cfg), http };
 }
 

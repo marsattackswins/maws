@@ -5,6 +5,7 @@ import {
   applyOpenOrdersSnapshot,
   applyOrderEvent,
   applyPositionSnapshot,
+  applySymbolLeverage,
   balanceUsd,
   grossExposureUsd,
   liveState,
@@ -83,6 +84,37 @@ describe("order event application and partial fills", () => {
     expect(liveState().positions.get("BTCUSDT")).toMatchObject({ side: "short", qty: "0.005" });
   });
 
+  test("applySymbolLeverage seeds new positions and repairs the 1x placeholder", () => {
+    // Config event arrives before the fill: the position is created at 20x.
+    expect(applySymbolLeverage("BTCUSDT", "20")).toBe(false);
+    const ev: AccountUpdateEvent = {
+      e: "ACCOUNT_UPDATE",
+      E: 9_999,
+      T: 9_999,
+      a: {
+        B: [{ a: "USDT", wb: "1734.68", cw: "1686.32", bc: "0" }],
+        P: [{ s: "BTCUSDT", pa: "0.012", ep: "81250", cr: "0", up: "0", mt: "isolated", iw: "48.36", ps: "BOTH" }],
+      },
+    };
+    applyAccountEvent(ev);
+    expect(liveState().positions.get("BTCUSDT")?.leverage).toBe("20");
+
+    // A later mark-price refresh must not resurrect a stale placeholder.
+    applyMarkPrice("BTCUSDT", "82000");
+    expect(liveState().positions.get("BTCUSDT")?.leverage).toBe("20");
+
+    // Repair path: a position seeded at the 1x placeholder (fill raced ahead
+    // of the config event) is corrected in place once the config arrives.
+    resetLiveStateForTests();
+    applyAccountEvent(ev);
+    expect(liveState().positions.get("BTCUSDT")?.leverage).toBe("1");
+    expect(applySymbolLeverage("BTCUSDT", "20")).toBe(true);
+    expect(liveState().positions.get("BTCUSDT")?.leverage).toBe("20");
+
+    // Invalid values are ignored.
+    expect(applySymbolLeverage("BTCUSDT", "0")).toBe(false);
+    expect(applySymbolLeverage("BTCUSDT", "nan")).toBe(false);
+    expect(liveState().positions.get("BTCUSDT")?.leverage).toBe("20");
   });
 });
 

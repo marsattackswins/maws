@@ -98,6 +98,8 @@ export const liveApi = {
     qty: string;
     price?: string;
     stopPrice?: string;
+    /** UI-selected leverage; the server syncs it to Binance before the order. */
+    leverage?: number;
     clientOrderId: string;
   }): Promise<OrderActionResult> {
     return call("/api/live/orders", { method: "POST", body: input });

@@ -3,6 +3,7 @@ import { redirectToLogin } from "@/lib/live/bridge";
 import { useLiveStore } from "@/lib/live/store";
 import { mawsFeed } from "@/lib/maws/feed";
 import { useAppStore } from "@/lib/store";
+import { resolveSymbolTrading } from "@/lib/trading/symbol-settings";
 import {
   cancelOrder as mockCancelOrder,
   closePosition as mockClosePosition,
@@ -83,6 +84,10 @@ export async function dispatchSubmitOrder(input: UiOrderInput): Promise<{ ok: bo
       qty: String(input.qty),
       price: input.type === "limit" && input.price != null ? String(input.price) : undefined,
       stopPrice: input.type === "stop" && input.price != null ? String(input.price) : undefined,
+      // Binance computes initial margin from the exchange-side per-symbol
+      // leverage, which is a persisted account setting — the server syncs it
+      // before the order so margin matches the UI (margin × leverage) sizing.
+      leverage: resolveSymbolTrading(input.symbol).leverage,
       clientOrderId: input.clientOrderId,
     });
     if (!res.ok) {

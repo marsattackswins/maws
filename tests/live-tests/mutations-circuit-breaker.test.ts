@@ -77,7 +77,11 @@ async function bootRealBroker(positionRows: unknown[] = [POSITION_RISK_ROW]): Pr
   http.route("/fapi/v1/userTrades", () => jsonRes([]));
   http.route("/fapi/v1/order", () => jsonRes(orderFixture({ type: "MARKET", status: "FILLED", origQty: "0.002" })));
   await getBroker().connect();
-  FakeWs.last().emitOpen();
+  // The live manager runs several sockets (user-data stream, public
+  // mark-price stream); open them all so the harness does not depend on
+  // stream ordering — the private stream must be connected for the
+  // execution gate to allow submissions.
+  for (const ws of FakeWs.instances) ws.emitOpen();
   await flush();
 }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect as useReactEffect, useState as useReactState } from "react";
 import { formatPrice } from "@/lib/maws/feed";
 import { formatTicker } from "@/lib/maws/universe";
 import { disconnectLiveBroker, profileLabel, profilePhaseLabel } from "@/lib/live/bridge";
@@ -22,6 +23,35 @@ import { timezoneIana } from "@/lib/timezone";
 import { useQuotes } from "@/lib/use-quotes";
 import type { BalanceHistoryEntry, OrderHistoryEntry } from "@/types";
 
+/** Re-renders once per second so relative timestamps stay current. */
+function useNowTick(enabled: boolean): number {
+  const [now, setNow] = useReactState(() => Date.now());
+  useReactEffect(() => {
+    if (!enabled) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [enabled]);
+  return now;
+}
+
+/** Live · updated 2s ago / Stale · last update 48s ago */
+export function FreshnessBadge({ live }: { live: boolean }) {
+  const markPrice = useLiveStore((s) => s.markPrice);
+  const now = useNowTick(live && markPrice != null);
+  if (!live || !markPrice) return null;
+  const { connected, stale, lastEventAt } = markPrice;
+  if (!connected && lastEventAt == null) return null;
+  const ageS = lastEventAt == null ? null : Math.max(0, Math.round((now - lastEventAt) / 1000));
+  const isStale = stale || ageS == null || ageS > 15;
+  const label = isStale
+    ? `Stale · last update ${ageS == null ? "—" : `${ageS}s`} ago`
+    : `Live · updated ${ageS}s ago`;
+  return (
+    <span className="whitespace-nowrap text-[11px] font-semibold" style={{ color: isStale ? "#f0b90b" : "#089981" }}>
+      {label}
+    </span>
+  );
+}
 import { ChevronDown, ChevronsDown, Columns3, Download, LogOut, Maximize2, Plug, Settings } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -226,6 +256,7 @@ export function PositionsPanel() {
   const livePhase = useLiveStore((s) => s.phase);
   const liveReady = useLiveStore((s) => s.ready);
   const { connected, live, liveAcc, liveFills, orders, positions, lastOf } = useTradingMetrics();
+  const freshness = <FreshnessBadge live={live} />;
   const [brokerMenuOpen, setBrokerMenuOpen] = useState(false);
   const [orderFilter, setOrderFilter] = useState<OrderFilter>("all");
   const brokerMenuRef = useRef<HTMLDivElement>(null);
@@ -370,6 +401,7 @@ export function PositionsPanel() {
                   : "Binance Futures"
                 : "Trade with your broker"}
             <ChevronDown size={14} className="text-[#787b86]" />
+            {freshness}
             {live && !liveReady ? <span className="ml-1 text-[10px] font-normal text-[#f0b90b]">{profilePhaseLabel(livePhase)}</span> : null}
           </button>
           {brokerMenuOpen && (

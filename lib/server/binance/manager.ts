@@ -38,6 +38,7 @@ import {
   persistFill,
   rememberFill,
   applyPositionSnapshot,
+  applySymbolLeverage,
   balanceUsd,
   grossExposureUsd,
   liveState,
@@ -667,6 +668,15 @@ export class BinanceLiveManager {
           applyAccountEvent(ev as AccountUpdateEvent);
           updateTradingGauges();
           publishLive("account-update", { at: Date.now() });
+        } else if (ev.e === "ACCOUNT_CONFIG_UPDATE") {
+          // Fires after POST /fapi/v1/leverage: record the exchange-side
+          // per-symbol leverage so fill events can seed correct position rows
+          // until the next authoritative position-risk snapshot.
+          const ac = (ev as { ac?: { s?: string; l?: number } }).ac;
+          if (ac?.s && typeof ac.l === "number") {
+            applySymbolLeverage(ac.s, String(ac.l));
+            publishLive("account-update", { at: Date.now() });
+          }
         }
         db.prepare(`UPDATE order_events SET processed = 1 WHERE id = ? AND profile_id = ?`).run(eventId, this.persistenceProfile.id);
       }
