@@ -30,6 +30,7 @@ import { publishLive } from "./sse";
 import {
   applyAccountEvent,
   applyAccountSnapshot,
+  applyMarkPrice,
   applyOpenOrdersSnapshot,
   applyOrderEvent,
   fillExecutionKey,
@@ -43,6 +44,7 @@ import {
   openPositionCount,
 } from "./state";
 import { StreamLeaseUnavailableError, UserDataStream } from "./stream";
+import { MarkPriceStream } from "./mark-price-stream";
 import type { AccountUpdateEvent, OrderTradeUpdateEvent, UserStreamEvent } from "./types";
 import { getDb } from "../db/connection";
 import { trackFillReceived, trackFreezeTriggered, trackOrderFilled, trackSystemStart, trackSystemStop, trackUnfreezeCleared, updateTradingGauges } from "../metrics/instrument";
@@ -50,6 +52,9 @@ import { trackFillReceived, trackFreezeTriggered, trackOrderFilled, trackSystemS
 export type ManagerStatus = "idle" | "starting" | "ready" | "error";
 
 const PRICE_CACHE_MS = 10_000;
+
+/** Mark-price poll cadence for open positions; bounded REST budget. */
+const MARK_PRICE_REFRESH_MS_FALLBACK = 15_000;
 
 /**
  * Clock resync cadence: half of the 5-minute staleness threshold used by
@@ -79,7 +84,23 @@ export class BinanceLiveManager {
    * session longer than five minutes showed "clock degraded" on /status.
    */
   private clockTimer: ReturnType<typeof setInterval> | null = null;
+  /**
+   * Periodic mark-price refresh for open positions. Primary freshness now
+   * comes from the public mark-price stream; this poll is the fallback for
+   * stream outages, symbol-set changes, and missed events.
+   */
+  private markPriceTimer: ReturnType<typeof setTimeout> | null = null;
+  private _markPriceStream: MarkPriceStream | null = null;
+  /** Public mark-price stream (no credentials); drives per-second PnL updates. */
+  get markPriceStream(): MarkPriceStream {
+    if (!this._markPriceStream) {
+      this._markPriceStream = new MarkPriceStream(this.cfg.env, () => this.publishMarkPriceIfChanged());
+    }
+    return this._markPriceStream;
+  }
   private startPromise: Promise<void> | null = null;
+  /** Generation the in-flight startPromise belongs to. */
+  private startPromiseGeneration = 0;
   private priceCache = new Map<string, { price: string; ts: number }>();
 
   constructor(cfg?: EnvConfig) {
@@ -148,6 +169,11 @@ export class BinanceLiveManager {
       clearInterval(this.clockTimer);
       this.clockTimer = null;
     }
+    if (this.markPriceTimer) {
+      clearTimeout(this.markPriceTimer);
+      this.markPriceTimer = null;
+    }
+    this.markPriceStream.stop();
   }
 
   private cleanupRuntime(): void {
@@ -172,23 +198,46 @@ export class BinanceLiveManager {
     );
   }
 
-  /** Idempotent startup with one shared in-flight promise per generation. */
+  /**
+   * Idempotent startup with one shared in-flight promise per generation.
+   * A call racing an in-flight start must NOT return that older promise:
+   * it would complete with timers bound to a superseded generation, which
+   * then no-ops forever (silent recon/PnL stall). Racing calls chain after
+   * the older start settles (it self-cancels via its generation assert)
+   * and then start fresh; the no-race path still begins synchronously.
+   */
   ensureStarted(): Promise<void> {
     if (this.status === "ready") return Promise.resolve();
-    if (this.startPromise) return this.startPromise;
-
+    if (this.startPromise && this.startPromiseGeneration === this.lifecycleGeneration) {
+      return this.startPromise;
+    }
     const generation = ++this.lifecycleGeneration;
-    const startup = this.start(generation);
-    const tracked = startup.finally(() => {
-      if (this.startPromise === tracked) this.startPromise = null;
-    });
+    let tracked: Promise<void>;
+    if (this.startPromise) {
+      const prior = this.startPromise;
+      tracked = prior
+        .catch(() => undefined)
+        .then(() => this.start(generation))
+        .finally(() => {
+          if (this.startPromise === tracked) this.startPromise = null;
+        });
+    } else {
+      const startup = this.start(generation);
+      tracked = startup.finally(() => {
+        if (this.startPromise === tracked) this.startPromise = null;
+      });
+    }
     this.startPromise = tracked;
+    this.startPromiseGeneration = generation;
     return tracked;
   }
 
   private async start(generation: number): Promise<void> {
     if (this.status === "ready") return;
     this.status = "starting";
+    // A superseded in-flight start may have armed timers for a dead
+    // generation; drop them before arming this generation's set.
+    this.clearTimers();
     this.error = null;
     this.recon = this.createReconciler(generation);
     setHealthSignal({ managerRunning: true, brokerStatus: "starting", brokerError: null });
@@ -329,6 +378,15 @@ export class BinanceLiveManager {
       await this.syncIncome("startup", generation);
       this.assertGeneration(generation);
       publishLive("account-update", { at: Date.now() });
+      // Primary: public mark-price stream for every open position.
+      this.markPriceStream.syncSymbols([...liveState().positions.keys()]);
+      setHealthSignal({ markPrice: this.markPriceSignal() });
+      // Fallback: periodic REST poll (slower cadence than before — the
+      // stream is primary now; the poll only heals gaps).
+      this.markPriceTimer = setTimeout(
+        () => this.markPriceLoop(),
+        this.cfg.markPriceIntervalMs ?? MARK_PRICE_REFRESH_MS_FALLBACK,
+      );
       this.status = "ready";
       this.startClockRefresh(generation);
       updateTradingGauges();
@@ -444,6 +502,60 @@ export class BinanceLiveManager {
     if (stream) await stream.stopAndWait();
   }
 
+  /**
+   * Refreshes mark price / unrealized PnL for every open position via a
+   * public premium-index REST call and republishes state. Best-effort:
+   * failures are logged and left to the next tick or a reconciliation.
+   */
+  private async refreshPositionMarkPrices(generation: number): Promise<void> {
+    const positions = [...liveState().positions.values()].filter((p) => Number(p.qty) !== 0);
+    if (positions.length === 0) return;
+    let changed = false;
+    for (const pos of positions) {
+      try {
+        const t = await this.rest.getMarkPrice(pos.symbol);
+        if (!this.isGenerationCurrent(generation)) return;
+        applyMarkPrice(pos.symbol, t.markPrice, t.time ?? Date.now());
+        changed = true;
+      } catch (err) {
+        if (err instanceof CircuitBreakerOpenError) throw err;
+        if (err instanceof BinanceApiError) throw err;
+        // Transport-level hiccup: skip this symbol, retry next tick.
+        log.debug("mark-price fetch failed", { symbol: pos.symbol, error: String(err) });
+      }
+    }
+    if (changed) {
+      updateTradingGauges();
+      publishLive("account-update", { at: Date.now() });
+    }
+    // Keep the stream subscription aligned with the current position set.
+    this.markPriceStream.syncSymbols([...liveState().positions.keys()]);
+    setHealthSignal({ markPrice: this.markPriceSignal() });
+    publishLive("mark-price", this.markPriceSignal());
+  }
+
+  /**
+   * Mark-price poller loop. Self-scheduling (setTimeout chain) instead of a
+   * captured-generation setInterval: each tick re-reads the live generation,
+   * so the loop survives internal generation churn while stopping cleanly
+   * when the manager goes idle and on every shutdown.
+   */
+  private markPriceLoop(): void {
+    if (this.status === "idle") return;
+    const generation = this.lifecycleGeneration;
+    void this.refreshPositionMarkPrices(generation)
+      .catch((err) => {
+        if (this.isGenerationCurrent(generation)) log.debug("mark-price refresh failed", { error: String(err) });
+      })
+      .finally(() => {
+        if (this.status === "idle" || !this.isGenerationCurrent(generation)) return;
+        this.publishMarkPriceIfChanged();
+        this.markPriceTimer = setTimeout(
+          () => this.markPriceLoop(),
+          this.cfg.markPriceIntervalMs ?? MARK_PRICE_REFRESH_MS_FALLBACK,
+        );
+      });
+  }
 
   /** Exchange truth into memory; the authoritative snapshot path. */
   async snapshot(generation = this.lifecycleGeneration): Promise<void> {
@@ -716,6 +828,22 @@ export class BinanceLiveManager {
       await this.syncIncome(trigger, generation);
       return result;
     });
+  }
+
+  private lastMarkPriceSignal: string | null = null;
+
+  private markPriceSignal() {
+    const s = this.markPriceStream.status();
+    return { connected: s.connected, stale: s.stale, symbols: s.symbols.length, lastEventAt: s.lastEventAt, reconnects: s.reconnects } as const;
+  }
+
+  /** Publishes the freshness signal when the stream state changed. */
+  private publishMarkPriceIfChanged(): void {
+    const next = JSON.stringify(this.markPriceSignal());
+    if (next === this.lastMarkPriceSignal) return;
+    this.lastMarkPriceSignal = next;
+    setHealthSignal({ markPrice: this.markPriceSignal() });
+    publishLive("mark-price", this.markPriceSignal());
   }
 
   /**

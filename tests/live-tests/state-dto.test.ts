@@ -1,6 +1,7 @@
 import {
   applyAccountEvent,
   applyAccountSnapshot,
+  applyMarkPrice,
   applyOpenOrdersSnapshot,
   applyOrderEvent,
   applyPositionSnapshot,
@@ -81,6 +82,8 @@ describe("order event application and partial fills", () => {
     applyAccountEvent({ ...ev, a: { B: ev.a.B, P: [{ ...ev.a.P[0], pa: "-0.005" }] } });
     expect(liveState().positions.get("BTCUSDT")).toMatchObject({ side: "short", qty: "0.005" });
   });
+
+  });
 });
 
 describe("snapshots and derived metrics", () => {
@@ -114,6 +117,35 @@ describe("snapshots and derived metrics", () => {
     expect(balanceUsd()).toBe(0);
     applyAccountSnapshot(accountFixture({ totalWalletBalance: "777" }) as never);
     expect(balanceUsd()).toBe(777);
+  });
+
+  test("applyMarkPrice refreshes mark, PnL, and notional without erasing snapshot fields", () => {
+    applyPositionSnapshot([
+      { symbol: "BTCUSDT", positionAmt: "0.002", entryPrice: "50000", markPrice: "50000", unRealizedProfit: "0", liquidationPrice: "42000", leverage: "20", positionSide: "BOTH", notional: "100" },
+    ] as never);
+
+    applyMarkPrice("BTCUSDT", "51000", 1234);
+    const pos = liveState().positions.get("BTCUSDT")!;
+    expect(pos.markPrice).toBe("51000");
+    expect(pos.unrealizedProfit).toBe("2"); // (51000-50000)*0.002
+    expect(pos.notional).toBe("102"); // 51000*0.002
+    expect(pos.leverage).toBe("20");
+    expect(pos.liquidationPrice).toBe("42000");
+    expect(pos.updatedAt).toBe(1234);
+
+    // Short positions flip the PnL sign.
+    applyPositionSnapshot([
+      { symbol: "ETHUSDT", positionAmt: "-2", entryPrice: "3000", markPrice: "3000", unRealizedProfit: "0", liquidationPrice: "0", leverage: "5", positionSide: "BOTH" },
+    ] as never);
+    applyMarkPrice("ETHUSDT", "2900", 2345);
+    expect(liveState().positions.get("ETHUSDT")?.unrealizedProfit).toBe("200");
+
+    // Unknown symbols and invalid marks are no-ops.
+    applyMarkPrice("NOPEUSDT", "51000");
+    applyMarkPrice("ETHUSDT", "nan");
+    applyMarkPrice("ETHUSDT", "0");
+    expect(liveState().positions.get("ETHUSDT")?.unrealizedProfit).toBe("200");
+    expect(liveState().positions.has("NOPEUSDT")).toBe(false);
   });
 });
 

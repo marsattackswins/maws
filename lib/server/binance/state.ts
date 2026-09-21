@@ -73,6 +73,9 @@ export interface LiveState {
   fills: LiveFill[];
   lastEventTime: number | null;
   snapshotAt: number | null;
+  /** Last leverage seen per symbol via ACCOUNT_CONFIG_UPDATE (fill events
+   *  carry no leverage, so this seeds correct rows between snapshots). */
+  symbolLeverage: Map<string, string>;
 }
 
 const WORKING_STATUSES = new Set(["NEW", "PARTIALLY_FILLED"]);
@@ -86,6 +89,7 @@ function createEmpty(): LiveState {
     fills: [],
     lastEventTime: null,
     snapshotAt: null,
+    symbolLeverage: new Map(),
   };
 }
 
@@ -159,6 +163,31 @@ export function applyPositionSnapshot(rows: PositionRiskRow[], now = Date.now())
       updatedAt: now,
     });
   }
+}
+
+/**
+ * Refreshes a position's mark price and recomputes unrealized PnL from the
+ * new mark. Keeps leverage/liquidation/notional from the last authoritative
+ * snapshot so a lightweight poll never erases richer exchange fields.
+ */
+/** Returns true when the position's displayed values changed. */
+export function applyMarkPrice(symbol: string, markPrice: string, now = Date.now()): boolean {
+  const pos = state.positions.get(symbol);
+  if (!pos || !Number.isFinite(Number(markPrice)) || Number(markPrice) <= 0) return false;
+  const notional = Number(pos.qty) * Number(markPrice);
+  const pnl = (Number(markPrice) - Number(pos.entryPrice)) * Number(pos.qty) * (pos.side === "short" ? -1 : 1);
+  // Repair the 1x placeholder left by fill events before the first
+  // authoritative position-risk snapshot arrives.
+  const leverage = state.symbolLeverage.get(symbol) ?? pos.leverage;
+  state.positions.set(symbol, {
+    ...pos,
+    markPrice: String(markPrice),
+    unrealizedProfit: String(Number.isFinite(pnl) ? Number(pnl.toFixed(8)) : 0),
+    notional: Number.isFinite(notional) ? String(Number(notional.toFixed(8))) : pos.notional,
+    leverage,
+    updatedAt: now,
+  });
+  return true;
 }
 
 export function applyOpenOrdersSnapshot(rows: BinanceOrder[], now = Date.now()): void {

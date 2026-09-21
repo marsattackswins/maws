@@ -14,6 +14,7 @@ import type {
   ExchangeInfo,
   LeverageBracketRow,
   ListenKeyResponse,
+  MarkPriceResponse,
   PositionRiskRow,
   PositionModeResponse,
   ServerTime,
@@ -165,6 +166,11 @@ export class BinanceRestClient {
 
   getTickerPrice(symbol: string): Promise<TickerPrice> {
     return this.raw("GET", "/fapi/v1/ticker/price", buildQueryString({ symbol }), {}) as Promise<TickerPrice>;
+  }
+
+  /** Public mark-price (premium index) endpoint used for PnL refreshes. */
+  getMarkPrice(symbol: string): Promise<MarkPriceResponse> {
+    return this.raw("GET", "/fapi/v1/premiumIndex", buildQueryString({ symbol }), {}) as Promise<MarkPriceResponse>;
   }
 
   // ---------------- signed read ----------------
