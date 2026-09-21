@@ -14,6 +14,9 @@ export interface LiveAccount {
   availableBalance: string;
   unrealizedProfit: string;
   marginBalance: string;
+  /** True while marginBalance still holds the exchange-reported value.
+   *  ACCOUNT_UPDATE events recompute it locally, downgrading the source. */
+  marginFromExchange: boolean;
   fetchedAt: number;
 }
 
@@ -132,6 +135,7 @@ export function applyAccountSnapshot(account: AccountResponse, now = Date.now())
     availableBalance: account.availableBalance,
     unrealizedProfit: account.totalUnrealizedProfit,
     marginBalance: account.totalMarginBalance,
+    marginFromExchange: true,
     fetchedAt: now,
   };
 }
@@ -296,11 +300,15 @@ export function applyAccountEvent(ev: AccountUpdateEvent): void {
       fetchedAt: ev.E,
     };
   } else if (usdt) {
+    // No snapshot has arrived yet. ACCOUNT_UPDATE carries no exchange
+    // marginBalance, so it is left empty: the DTO layer falls back to
+    // wallet + unrealized until the next authoritative REST snapshot.
     state.account = {
       totalWalletBalance: usdt.wb,
       availableBalance: usdt.cw,
       unrealizedProfit: "0",
-      marginBalance: usdt.wb,
+      marginBalance: "",
+      marginFromExchange: false,
       fetchedAt: ev.E,
     };
   }
@@ -335,7 +343,10 @@ export function applyAccountEvent(ev: AccountUpdateEvent): void {
     state.account = {
       ...state.account,
       unrealizedProfit: String(unrealized),
+      // The recomputed value is a local estimate, not the exchange's figure:
+      // downgrade the provenance so the DTO reports the fallback source.
       marginBalance: Number.isFinite(wallet) ? String(wallet + unrealized) : state.account.marginBalance,
+      marginFromExchange: false,
       fetchedAt: ev.E,
     };
   }

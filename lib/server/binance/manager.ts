@@ -23,6 +23,7 @@ import { TransportTimeoutError } from "./transport";
 import { CircuitBreakerOpenError } from "../resilience/circuit-breaker";
 import { realizedSinceUtcMidnight, type RiskSnapshot } from "./risk";
 import { Reconciler, type ReconResult } from "./recon";
+import { syncIncomeHistory, type IncomeSyncResult } from "./income";
 import { withRiskMutationSync } from "./mutation-queue";
 import { cancelAllAndFlatten, type EmergencyFlattenSummary } from "./emergency";
 import { publishLive } from "./sse";
@@ -321,6 +322,13 @@ export class BinanceLiveManager {
           if (this.isGenerationCurrent(generation)) log.error("reconciliation crash", { error: String(err) });
         });
       }, this.cfg.reconIntervalMs);
+      // Income ledger backfill: startup + per-recon cadence keeps lifetime
+      // realized PnL, commissions, and funding fees current without touching
+      // the reconciliation safety path itself. Awaited so its account-update
+      // publish settles before start() returns (bounded: ≤5 pages).
+      await this.syncIncome("startup", generation);
+      this.assertGeneration(generation);
+      publishLive("account-update", { at: Date.now() });
       this.status = "ready";
       this.startClockRefresh(generation);
       updateTradingGauges();
@@ -435,6 +443,7 @@ export class BinanceLiveManager {
     });
     if (stream) await stream.stopAndWait();
   }
+
 
   /** Exchange truth into memory; the authoritative snapshot path. */
   async snapshot(generation = this.lifecycleGeneration): Promise<void> {
@@ -701,7 +710,27 @@ export class BinanceLiveManager {
       const now = Date.now();
       return Promise.resolve({ result: "error", diffs: [], startedAt: now, finishedAt: now });
     }
-    return this.recon.run(trigger);
+    return this.recon.run(trigger).then(async (result) => {
+      // Piggy-back the income ledger on the recon cadence (60s default) but
+      // never alter the recon result or its freeze behavior.
+      await this.syncIncome(trigger, generation);
+      return result;
+    });
+  }
+
+  /**
+   * Income-ledger sync (REALIZED_PNL / COMMISSION / FUNDING_FEE).
+   * Best-effort: a failure never blocks trading, and raw exchange error text
+   * is never surfaced — it stays in server logs only.
+   */
+  async syncIncome(trigger: string, generation = this.lifecycleGeneration): Promise<IncomeSyncResult | null> {
+    if (!this.isGenerationCurrent(generation)) return null;
+    try {
+      return await syncIncomeHistory(this.rest, this.persistenceProfile);
+    } catch (err) {
+      log.warn("income history sync failed", { trigger, error: String(err) });
+      return null;
+    }
   }
 
   newClientOrderId(prefix: string): string {

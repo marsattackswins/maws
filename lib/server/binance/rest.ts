@@ -219,6 +219,23 @@ export class BinanceRestClient {
     });
   }
 
+  /**
+   * Account income history: REALIZED_PNL, COMMISSION, FUNDING_FEE rows.
+   * Binance reports `income` (amount), `asset`, `symbol`, `incomeType`,
+   * `time` and `tranId` (unique per income record; 0 for some types).
+   */
+  getIncome(
+    options: { symbol?: string; incomeType?: string; startTime?: number; endTime?: number; limit?: number } = {},
+  ): Promise<Array<{ tranId: number; type: string; symbol: string | null; income: string; asset: string; time: number }>> {
+    return this.signedRequest("GET", "/fapi/v1/income", {
+      ...(options.symbol ? { symbol: options.symbol } : {}),
+      ...(options.incomeType ? { incomeType: options.incomeType } : {}),
+      ...(options.startTime != null ? { startTime: options.startTime } : {}),
+      ...(options.endTime != null ? { endTime: options.endTime } : {}),
+      limit: options.limit ?? 1000,
+    });
+  }
+
   getLeverageBrackets(symbol?: string): Promise<LeverageBracketRow[]> {
     return this.signedRequest<LeverageBracketRow[]>("GET", "/fapi/v1/leverageBracket", symbol ? { symbol } : {});
   }

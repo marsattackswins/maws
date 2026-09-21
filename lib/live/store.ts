@@ -2,6 +2,7 @@ import { create } from "zustand";
 
 import type {
   AccountDto,
+  AccountMetricsDto,
   FillDto,
   HealthDto,
   LiveProfileEnvironment,
@@ -32,6 +33,7 @@ interface LiveStore {
   managerStatus: string;
   managerError: string | null;
   account: AccountDto | null;
+  accountMetrics: AccountMetricsDto | null;
   positions: PositionDto[];
   orders: OrderDto[];
   fills: FillDto[];
@@ -45,10 +47,11 @@ interface LiveStore {
   clearProfileRuntime(): void;
   setEnv(env: string | null, label: string | null): void;
   setManager(status: string, error: string | null): void;
-  applyState(state: { account: AccountDto; positions: PositionDto[]; orders: OrderDto[]; fills: FillDto[] }): void;
+  applyState(state: { account: AccountDto; accountMetrics: AccountMetricsDto | null; positions: PositionDto[]; orders: OrderDto[]; fills: FillDto[] }): void;
   clearState(): void;
   setHealth(h: HealthDto): void;
   setStream(s: { connected: boolean; leaseOwned?: boolean; phase: string; reconnects: number }): void;
+  setMarkPrice(s: { connected: boolean; stale: boolean; symbols: number; lastEventAt: number | null; reconnects: number } | null): void;
   notify(tone: LiveNotice["tone"], text: string): void;
   dismissNotice(id: number): void;
 }
@@ -70,6 +73,7 @@ export const useLiveStore = create<LiveStore>()((set) => ({
   managerStatus: "idle",
   managerError: null,
   account: null,
+  accountMetrics: null,
   positions: [],
   orders: [],
   fills: [],
@@ -121,8 +125,8 @@ export const useLiveStore = create<LiveStore>()((set) => ({
   setEnv: (env, label) => set({ env, envLabel: label }),
   setManager: (status, error) => set({ managerStatus: status, managerError: error }),
   applyState: (s) =>
-    set({ account: s.account, positions: s.positions, orders: s.orders, fills: s.fills }),
-  clearState: () => set({ account: null, positions: [], orders: [], fills: [] }),
+    set({ account: s.account, accountMetrics: s.accountMetrics ?? null, positions: s.positions, orders: s.orders, fills: s.fills }),
+  clearState: () => set({ account: null, accountMetrics: null, positions: [], orders: [], fills: [] }),
   setHealth: (h) => set({ health: h }),
   setStream: (s) => set({ stream: s }),
   notify: (tone, text) =>

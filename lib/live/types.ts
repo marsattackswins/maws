@@ -42,6 +42,21 @@ export interface AccountDto {
   margin: number;
   unrealized: number;
   fetchedAt: number | null;
+  /** Which equity derivation produced the value: exchange marginBalance or fallback sum. */
+  equitySource: "exchange" | "fallback";
+}
+
+export interface AccountMetricsDto {
+  /** Lifetime realized trading PnL from the durable exchange income ledger. */
+  realizedPnl: number;
+  /** Lifetime commission cost as a positive magnitude. */
+  commission: number;
+  /** Lifetime funding fees, signed as reported (paid = negative). */
+  fundingFee: number;
+  /** realizedPnl − commission + fundingFee. */
+  netRealized: number;
+  /** Ledger high-water mark; null when income history has not synced yet. */
+  fetchedAt: number | null;
 }
 
 export interface PositionDto {
@@ -82,6 +97,7 @@ export interface FillDto {
 
 export interface LiveStateDto {
   account: AccountDto;
+  accountMetrics: AccountMetricsDto;
   positions: PositionDto[];
   orders: OrderDto[];
   fills: FillDto[];

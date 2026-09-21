@@ -20,7 +20,8 @@ import {
 } from "@/lib/trading/mock";
 import { timezoneIana } from "@/lib/timezone";
 import { useQuotes } from "@/lib/use-quotes";
-import type { OrderHistoryEntry } from "@/types";
+import type { BalanceHistoryEntry, OrderHistoryEntry } from "@/types";
+
 import { ChevronDown, ChevronsDown, Columns3, Download, LogOut, Maximize2, Plug, Settings } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -110,6 +111,9 @@ export function useTradingMetrics() {
   const realized = useAppStore((s) => s.mockRealized);
   const leverage = useAppStore((s) => s.chartSettings.defaultLeverage);
   const liveAccount = useLiveStore((s) => s.account);
+  // Authoritative lifetime metrics from the server-side exchange income
+  // ledger — NOT the capped latest-50-fill list.
+  const liveMetrics = useLiveStore((s) => s.accountMetrics);
   const liveFills = useLiveStore((s) => s.fills);
   // Exactly one book (live for binance, paper otherwise) — never a mix.
   const { orders, positions } = useBrokerBook();
@@ -123,8 +127,9 @@ export function useTradingMetrics() {
     margin: 0,
     unrealized: 0,
     fetchedAt: null,
+    equitySource: "fallback" as const,
   };
-  const liveRealized = liveFills.reduce((sum, f) => sum + f.realizedPnl, 0);
+  const liveMetricsSafe = liveMetrics ?? { realizedPnl: 0, commission: 0, fundingFee: 0, netRealized: 0, fetchedAt: null };
   const unrealized = live
     ? liveAcc.unrealized
     : positions.reduce((sum, p) => sum + positionPnl(p, lastOf(p.symbol)), 0);
@@ -133,7 +138,7 @@ export function useTradingMetrics() {
   const equity = live ? liveAcc.equity : balance + margin + unrealized;
   const accountBalance = live ? liveAcc.balance : balance + margin;
   const available = live ? liveAcc.available : balance;
-  const realizedShown = live ? liveRealized : realized;
+  const realizedShown = live ? liveMetricsSafe.realizedPnl : realized;
   const buffer = margin + orderMargin <= 0 ? 100 : (equity / (margin + orderMargin)) * 100;
   const pnlTone = (v: number): "up" | "down" | "muted" =>
     v > 0 ? "up" : v < 0 ? "down" : "muted";
@@ -141,6 +146,8 @@ export function useTradingMetrics() {
   return {
     connected,
     live,
+    liveAcc,
+    liveMetrics: liveMetricsSafe,
     liveFills,
     orders,
     positions,
@@ -159,6 +166,9 @@ export function useTradingMetrics() {
 
 export function TradingMetrics() {
   const {
+    connected,
+    live,
+    liveMetrics,
     accountBalance,
     equity,
     realizedShown,
@@ -171,7 +181,28 @@ export function TradingMetrics() {
     <div className="ml-auto flex shrink-0 items-stretch">
       <Metric label="Balance" value={formatNum(accountBalance)} />
       <Metric label="Equity" value={formatNum(equity)} />
-      <Metric label="Realized" value={formatSigned(realizedShown)} tone={realizedShown >= 0 ? "up" : "down"} />
+      {live ? (
+        <>
+          <Metric
+            label="Realized"
+            value={formatSigned(liveMetrics.realizedPnl)}
+            tone={liveMetrics.realizedPnl >= 0 ? "up" : "down"}
+          />
+          <Metric label="Commission" value={formatNum(liveMetrics.commission)} />
+          <Metric
+            label="Funding"
+            value={formatSigned(liveMetrics.fundingFee)}
+            tone={liveMetrics.fundingFee >= 0 ? "up" : "down"}
+          />
+          <Metric
+            label="Net Realized"
+            value={formatSigned(liveMetrics.netRealized)}
+            tone={liveMetrics.netRealized >= 0 ? "up" : "down"}
+          />
+        </>
+      ) : (
+        <Metric label="Realized" value={formatSigned(realizedShown)} tone={realizedShown >= 0 ? "up" : "down"} />
+      )}
       <Metric label="Unrealized" value={formatSigned(unrealized)} tone={unrealized >= 0 ? "up" : "down"} />
       <Metric label="Available" value={formatNum(available)} />
       <Metric label="Buffer" value={`${formatNum(buffer, 0)}%`} />
@@ -194,7 +225,7 @@ export function PositionsPanel() {
   const liveProfileId = useLiveStore((s) => s.profileId);
   const livePhase = useLiveStore((s) => s.phase);
   const liveReady = useLiveStore((s) => s.ready);
-  const { connected, live, liveFills, orders, positions, lastOf } = useTradingMetrics();
+  const { connected, live, liveAcc, liveFills, orders, positions, lastOf } = useTradingMetrics();
   const [brokerMenuOpen, setBrokerMenuOpen] = useState(false);
   const [orderFilter, setOrderFilter] = useState<OrderFilter>("all");
   const brokerMenuRef = useRef<HTMLDivElement>(null);
@@ -290,13 +321,37 @@ export function PositionsPanel() {
       ? histRows
       : histRows.filter((o) => o.status === orderFilter);
 
+  // Live fills are the exchange-side record of every execution, including
+  // closing ones (non-zero realized P&L). Derive balance-history and journal
+  // rows from them so closes are recorded in both tabs, mirroring paper mode.
+  const liveBalanceRows: BalanceHistoryEntry[] = live
+    ? liveFills.map((f) => ({
+        id: `fill-${f.ts}-${f.symbol}-${f.side}-${f.qty}-${f.price}`,
+        time: f.ts,
+        type: "realized_pnl" as const,
+        amount: f.realizedPnl,
+        balanceAfter: liveAcc.balance,
+        note: `${f.realizedPnl !== 0 ? "Close" : "Open"} fill for symbol ${f.symbol} at price ${f.price} for ${f.qty} units${f.realizedPnl !== 0 ? `. Realized P&L ${f.realizedPnl >= 0 ? "+" : ""}${f.realizedPnl.toFixed(2)} USD` : ""}.`,
+        symbol: f.symbol,
+      }))
+    : [];
+  const liveJournalRows = live
+    ? liveFills
+        .filter((f) => f.realizedPnl !== 0)
+        .map((f) => ({
+          id: `live-journal-${f.ts}-${f.symbol}-${f.side}-${f.qty}-${f.price}`,
+          time: f.ts,
+          text: `Close position for symbol ${f.symbol} at price ${f.price} for ${f.qty} units. Realized P&L ${f.realizedPnl >= 0 ? "+" : ""}${f.realizedPnl.toFixed(2)} USD.`,
+        }))
+    : [];
+
   const balanceRows = live
-    ? []
+    ? liveBalanceRows
     : balanceHistory.filter(
         (b) =>
           b.type === "realized_pnl" || b.type === "deposit" || b.type === "withdrawal",
       );
-  const journalRows = live ? [] : journal;
+  const journalRows = live ? liveJournalRows : journal;
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--maws-panel)]">
@@ -703,7 +758,7 @@ export function PositionsPanel() {
                     </tr>
                   </thead>
                   <tbody>
-                    {journal.map((j) => (
+                    {journalRows.map((j) => (
                       <tr key={j.id} className="border-t border-[#222222] text-[#d1d4dc]">
                         <td className="px-2 py-1.5 whitespace-nowrap align-top">
                           {formatStamp(j.time, stampTz)}
