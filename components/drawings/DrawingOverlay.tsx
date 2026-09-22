@@ -851,9 +851,15 @@ export const DrawingOverlay = memo(function DrawingOverlay({
         const pT = xy(anchors.target);
         const pS = xy(anchors.stop);
         if (!pE || !pT || !pS) return;
-        const x0 = Math.min(pE.x, pT.x);
-        const x1 = Math.max(pE.x, pT.x);
-        const bw = x1 - x0;
+        const x0raw = Math.min(pE.x, pT.x);
+        const x1raw = Math.max(pE.x, pT.x);
+        // Clamp the zone width to the plot area. A tool anchored at the live
+        // tip (or dragged past the last bar) can resolve its right edge far
+        // beyond the series; unclamped, the TP/SL fills paint one wide shaded
+        // rectangle over every candle to the right of the entry.
+        const x0 = Math.max(plot.left, x0raw);
+        const x1 = Math.min(plot.right, x1raw);
+        const bw = Math.max(0, x1 - x0);
         const yE = pE.y;
         const yT = pT.y;
         const yS = pS.y;
@@ -863,16 +869,18 @@ export const DrawingOverlay = memo(function DrawingOverlay({
         const stopFill = d.stopColor || DEFAULT_POSITION_STOP_COLOR;
         const targetFill = d.targetColor || DEFAULT_POSITION_TARGET_COLOR;
         const lineW = d.lineWidth ?? 1;
-        hitLine(x0, Math.min(yE, yT), x1, Math.min(yE, yT));
-        hitLine(x0, Math.max(yE, yT), x1, Math.max(yE, yT));
-        hitLine(x0, Math.min(yE, yS), x1, Math.min(yE, yS));
-        hitLine(x0, Math.max(yE, yS), x1, Math.max(yE, yS));
-        hitLine(x0, yE, x1, yE);
-        nodes.push(
-          `<rect ${fillPe} x="${x0}" y="${Math.min(yE, yT)}" width="${bw}" height="${tpH}" fill="${targetFill}" stroke="none"/>
-           <rect ${fillPe} x="${x0}" y="${Math.min(yE, yS)}" width="${bw}" height="${slH}" fill="${stopFill}" stroke="none"/>
-           <line pointer-events="none" x1="${x0}" x2="${x1}" y1="${yE}" y2="${yE}" stroke="#808080" stroke-width="1"/>`,
-        );
+        if (bw > 0) {
+          hitLine(x0, Math.min(yE, yT), x1, Math.min(yE, yT));
+          hitLine(x0, Math.max(yE, yT), x1, Math.max(yE, yT));
+          hitLine(x0, Math.min(yE, yS), x1, Math.min(yE, yS));
+          hitLine(x0, Math.max(yE, yS), x1, Math.max(yE, yS));
+          hitLine(x0, yE, x1, yE);
+          nodes.push(
+            `<rect ${fillPe} x="${x0}" y="${Math.min(yE, yT)}" width="${bw}" height="${tpH}" fill="${targetFill}" stroke="none"/>
+             <rect ${fillPe} x="${x0}" y="${Math.min(yE, yS)}" width="${bw}" height="${slH}" fill="${stopFill}" stroke="none"/>
+             <line pointer-events="none" x1="${x0}" x2="${x1}" y1="${yE}" y2="${yE}" stroke="#808080" stroke-width="1"/>`,
+          );
+        }
         // Dashed P&L:
         // Open → tip on the current candle @ LastPrice (tracks price, not the box's right edge).
         // Closed → tip on the exit candle inside the box @ TP or SL price.
@@ -885,7 +893,10 @@ export const DrawingOverlay = memo(function DrawingOverlay({
           const entryPrice = anchors.entry.price;
           
           // Find if there's a candle at the entry time
-          const candleAtEntry = candles.find(c => Math.abs(c.time - entryTime) < 1);
+          const candleAtEntry = candles.find(
+            (c) => Math.abs(c.time - entryTime) < 1 ||
+              Math.abs(c.time - entryTime / 1000) < 1,
+          );
           
           // Check if the entry price is within the candle's range (body or wick)
           const isOnCandle = candleAtEntry && 
@@ -914,14 +925,14 @@ export const DrawingOverlay = memo(function DrawingOverlay({
             if (tip) {
               const at = xy({ time: tip.time, price: tip.price });
               if (at) {
-                tipX = Math.min(Math.max(at.x, pE.x), x1);
+                tipX = Math.min(Math.max(at.x, x0), x1);
                 tipY = at.y;
               } else if (tip.exit == null) {
                 tipY = getChart(pane.id)?.series.priceToCoordinate(tip.price) ?? null;
                 const atLast = candles.length
                   ? xy({ time: candles[candles.length - 1].time, price: tip.price })
                   : null;
-                tipX = atLast ? Math.min(Math.max(atLast.x, pE.x), x1) : null;
+                tipX = atLast ? Math.min(Math.max(atLast.x, x0), x1) : null;
               }
             }
 

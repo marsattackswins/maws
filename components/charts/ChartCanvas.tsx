@@ -1671,6 +1671,7 @@ export const ChartCanvas = memo(function ChartCanvas({
     const setMainData = (candles: Candle[]) => {
       chartHandle.candles = candles;
       const settings = settingsRef.current;
+
       if (lineLike) {
         (main as ISeriesApi<"Line">).setData(
           candles.map((c) => ({ time: c.time as UTCTimestamp, value: c.close })),
@@ -1899,7 +1900,17 @@ export const ChartCanvas = memo(function ChartCanvas({
     /** TV-like default: fixed bar width + last N bars (never fitContent on sparse data). */
     const frameRecentBars = (count: number) => {
       const right = settings.marginRightBars;
-      const barSpacing = chartOptions.timeScale?.barSpacing ?? 7;
+      // Derive spacing from the actual visible scale when it is live; fall
+      // back to the configured default only when the chart has no geometry
+      // yet (fresh mount). Freezing a constant here is what oversized bars
+      // after resize look like.
+      let barSpacing = chartOptions.timeScale?.barSpacing ?? 7;
+      try {
+        const live = chart.timeScale().options().barSpacing;
+        if (Number.isFinite(live) && (live ?? 0) > 1) barSpacing = live!;
+      } catch {
+        /* chart may be mid-teardown */
+      }
       const ts = chart.timeScale();
       ts.applyOptions({ barSpacing, rightOffset: right });
       if (count <= 0) return;

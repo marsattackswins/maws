@@ -86,14 +86,27 @@ export function mapToSortedCandles(map: Map<number, Candle>): Candle[] {
 }
 
 /**
+ * Normalize a candle timestamp to unix seconds — the unit Lightweight Charts
+ * expects for UTCTimestamp data and the unit every series in this app stores.
+ * Providers (and some replays) emit ms; a mixed-unit series renders as a
+ * cluster of compressed bars at the far right of the chart plus a long dead
+ * span, because ms values are ~1000× larger than s values.
+ */
+export function normalizeCandleTime(c: Candle): Candle {
+  if (!Number.isFinite(c.time)) return c;
+  return c.time > 1e12 ? { ...c, time: Math.floor(c.time / 1000) } : c;
+}
+
+/**
  * Merge one incoming candle into an existing Map.
  * - If the timestamp doesn't exist, insert it
  * - If the timestamp exists, replace the entire candle
  * Returns true if the map was modified, false if the candle was invalid.
  */
 export function upsertCandle(map: Map<number, Candle>, incoming: Candle): boolean {
-  if (validateCandle(incoming) !== null) return false;
-  map.set(incoming.time, { ...incoming });
+  const c = normalizeCandleTime(incoming);
+  if (validateCandle(c) !== null) return false;
+  map.set(c.time, { ...c });
   return true;
 }
 
@@ -166,16 +179,43 @@ export type LiveMergeResult = "tip" | "append" | "replaced" | "invalid" | "dupli
 
 export function mergeLiveCandle(
   series: Candle[],
-  incoming: Candle,
+  rawIncoming: Candle,
   isFinal: boolean,
   cap: number,
+  intervalSec?: number,
 ): LiveMergeResult {
+  // Normalize ms → s first: a ms-unit tip colliding with a s-unit series is
+  // the exact corruption that compresses candles into the right edge.
+  const incoming = normalizeCandleTime(rawIncoming);
+
   // Validate first
   if (validateCandle(incoming) !== null) {
     return "invalid";
   }
 
   const last = series[series.length - 1];
+
+  // Case 0: Interval-aware merge (when the caller knows the bar spacing).
+  // A frame opening at/after the next interval boundary always appends a new
+  // bar; a frame inside the current bar's window updates the tip in place
+  // (keeping the on-grid open time); anything at or before the tip falls
+  // through to the exact-match / final-patch logic below so a late FINAL
+  // frame for the just-closed bar can still patch history.
+  if (intervalSec != null && intervalSec > 0 && last) {
+    const diff = incoming.time - last.time;
+    if (diff >= intervalSec) {
+      series.push({ ...incoming });
+      if (series.length > cap) {
+        series.shift();
+      }
+      return "append";
+    }
+    if (diff > 0) {
+      // Mid-interval frame for the forming bar — same bar, keep grid time.
+      series[series.length - 1] = { ...incoming, time: last.time };
+      return "tip";
+    }
+  }
 
   // Case 1: Update to the current forming candle (most common)
   if (last && last.time === incoming.time) {
@@ -236,6 +276,20 @@ export function countDuplicateTimestamps(candles: Candle[]): number {
     }
   }
   return duplicates;
+}
+
+/**
+ * Detect a mixed-unit series: a run of s-unit bars followed by ms-unit bars
+ * (or the reverse). This is the exact shape produced when one code path
+ * stores seconds and another stores milliseconds — on the chart it shows as
+ * all candles compressed against one edge. Mixed units can never be a valid
+ * strictly-increasing series at real bar spacing, so any overlap in the
+ * sorted timestamp distribution is suspicious.
+ */
+export function hasMixedTimeUnits(candles: Candle[]): boolean {
+  if (candles.length < 2) return false;
+  const ms = candles.filter((c) => c.time > 1e12).length;
+  return ms > 0 && ms < candles.length;
 }
 
 /**

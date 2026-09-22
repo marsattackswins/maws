@@ -437,11 +437,15 @@ describe('Candle Reconciliation - Core Invariants', () => {
       expect(validateCandle(secondsCandle)).toBeNull();
       expect(validateCandle(msCandle)).toBeNull();
 
-      // They should be treated as different timestamps
+      // Mixed ms/s units compress all candles against the chart edge, so an
+      // ms-unit frame must normalize onto the s-unit bar it duplicates —
+      // NOT be stored as a second, far-future timestamp (the pre-fix behavior
+      // this test previously asserted).
       const map = new Map<number, Candle>();
       upsertCandle(map, secondsCandle);
       upsertCandle(map, msCandle);
-      expect(map.size).toBe(2); // Different times
+      expect(map.size).toBe(1); // normalized to the same unix-second bar
+      expect(map.get(baseTime)?.close).toBe(101);
     });
 
     it('should maintain exact candle count after sequences', () => {

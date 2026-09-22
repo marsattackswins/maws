@@ -1242,7 +1242,13 @@ class BinanceFuturesFeed {
         this.series.set(key, candles);
       }
 
-      const merged = mergeLiveCandle(candles, candle, msg.k.x, historyLimit(tf));
+      const merged = mergeLiveCandle(
+        candles,
+        candle,
+        msg.k.x,
+        historyLimit(tf),
+        tfSeconds(tf),
+      );
       if (merged === "invalid" || merged === "duplicate") {
         // Diagnostics for rejected/duplicate candles
         if (merged === "invalid") {
