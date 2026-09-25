@@ -24,6 +24,7 @@ import { CircuitBreakerOpenError } from "../resilience/circuit-breaker";
 import { realizedSinceUtcMidnight, type RiskSnapshot } from "./risk";
 import { Reconciler, type ReconResult } from "./recon";
 import { syncIncomeHistory, type IncomeSyncResult } from "./income";
+import { markIncomeSyncFailed, markIncomeSyncSucceeded } from "./metrics-freshness";
 import { withRiskMutationSync } from "./mutation-queue";
 import { cancelAllAndFlatten, type EmergencyFlattenSummary } from "./emergency";
 import { publishLive } from "./sse";
@@ -37,6 +38,8 @@ import {
   fillExists,
   persistFill,
   rememberFill,
+  hydrateFillsFromLog,
+  rememberHistoricalOrder,
   applyPositionSnapshot,
   applySymbolLeverage,
   balanceUsd,
@@ -44,6 +47,7 @@ import {
   liveState,
   openPositionCount,
 } from "./state";
+import { backfillHistoricalOrders, historySymbols, hydrateHistoricalOrders } from "./order-history";
 import { StreamLeaseUnavailableError, UserDataStream } from "./stream";
 import { MarkPriceStream } from "./mark-price-stream";
 import type { AccountUpdateEvent, OrderTradeUpdateEvent, UserStreamEvent } from "./types";
@@ -366,6 +370,20 @@ export class BinanceLiveManager {
       this.assertGeneration(generation);
       await this.recon.run("startup");
       this.assertGeneration(generation);
+      // History hydration runs after reconciliation (whose backfill just
+      // persisted fresh rows) and before the first state publish, so a
+      // restart immediately exposes persisted fills and orders to
+      // /api/live/state and the SSE initial snapshot. Failures are
+      // non-fatal: the next recon pass persists the same rows again.
+      try {
+        hydrateFillsFromLog(this.persistenceProfile);
+        const symbols = historySymbols(this.persistenceProfile, liveState().positions.keys());
+        await backfillHistoricalOrders(this.rest, symbols, this.persistenceProfile);
+        this.assertGeneration(generation);
+        hydrateHistoricalOrders(this.persistenceProfile);
+      } catch (err) {
+        log.warn("history hydration failed", { error: String(err) });
+      }
       this.reconTimer = setInterval(() => {
         if (!this.isGenerationCurrent(generation)) return;
         void this.recon.run("interval").catch((err) => {
@@ -647,10 +665,22 @@ export class BinanceLiveManager {
           this.syncIntentFromEvent(orderEv);
           db.prepare(`UPDATE order_events SET processed = 1 WHERE id = ? AND profile_id = ?`).run(eventId, this.persistenceProfile.id);
         })();
+        const closedWithPnl =
+          o.X === "FILLED" &&
+          persistedFills.some((f) => f.realizedPnl !== "" && Number(f.realizedPnl) !== 0);
         for (const fill of persistedFills) {
           rememberFill(fill);
           trackFillReceived(fill.clientOrderId, fill.symbol, fill.side, fill.qty, fill.price);
           alert("fill", { symbol: fill.symbol, side: fill.side, qty: fill.qty, price: fill.price, realizedPnl: fill.realizedPnl });
+        }
+        // Realized PnL freshness: a persisted closing fill moves account
+        // metrics only when the income ledger catches up. Nudge the sync
+        // without blocking the fill transaction or the event loop; the
+        // periodic sync remains the fallback and the sync itself is
+        // idempotent (dedup by tranId), so a nudge racing a recon pass is
+        // harmless.
+        if (closedWithPnl) {
+          void this.syncIncome("closing-fill").catch(() => undefined);
         }
         if (o.X === "FILLED") {
           trackOrderFilled(o.c, o.s, o.z, o.L);
@@ -864,8 +894,15 @@ export class BinanceLiveManager {
   async syncIncome(trigger: string, generation = this.lifecycleGeneration): Promise<IncomeSyncResult | null> {
     if (!this.isGenerationCurrent(generation)) return null;
     try {
-      return await syncIncomeHistory(this.rest, this.persistenceProfile);
+      const result = await syncIncomeHistory(this.rest, this.persistenceProfile);
+      // Success (even with zero new rows) clears the stale flag: retained
+      // historical totals are current again.
+      markIncomeSyncSucceeded();
+      return result;
     } catch (err) {
+      // A failed sync must never erase the durable ledger; it only marks the
+      // retained totals stale so the UI does not imply freshness it lacks.
+      markIncomeSyncFailed();
       log.warn("income history sync failed", { trigger, error: String(err) });
       return null;
     }

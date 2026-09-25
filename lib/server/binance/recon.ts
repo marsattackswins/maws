@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getDb } from "../db/connection";
+import { serverConfig } from "../env/config";
 import { redactJson } from "../audit/redact";
 import { setHealthSignal } from "../health/state";
 import { log } from "../log/logger";
@@ -37,6 +38,13 @@ export interface ReconDeps {
 }
 
 const UNCERTAIN = new Set(["CANCEL_REQUESTED", "CANCEL_UNKNOWN", "TIMEOUT_UNKNOWN", "UNCERTAIN", "SUBMITTING", "CREATED"]);
+
+/**
+ * Backfill window when a symbol has no persisted anchor. Configurable via
+ * MAWS_HISTORY_BACKFILL_MS (default 3 days) — it must comfortably exceed the
+ * observed 24h-fixed window so positions opened before a restart hydrate.
+ */
+const DEFAULT_BACKFILL_MS = serverConfig().historyBackfillMs;
 
 /**
  * Settlement of record: exchange REST truth vs. persisted intents and local
@@ -210,18 +218,24 @@ export class Reconciler {
    */
   private async backfillMissedFills(diffs: string[]): Promise<void> {
     const now = Date.now();
+    // Lookback: a symbol with persisted history starts from its earliest
+    // record (the observed case of a position opened two days before startup
+    // has no intent to anchor it, so the fallback window must cover it).
+    // The window is configurable (MAWS_HISTORY_BACKFILL_MS, default 3 days —
+    // Binance caps userTrades at 7-day windows anyway) and the request set is
+    // symbol-scoped, so a fresh deploy does not sweep the whole account.
     const startBySymbol = new Map<string, number>();
     const intentRows = getDb()
       .prepare(`SELECT symbol, MIN(created_at) AS start_time FROM order_intents WHERE profile_id = ? GROUP BY symbol`)
       .all(this.persistenceProfile.id) as Array<{ symbol: string; start_time: number | null }>;
     for (const row of intentRows) {
-      startBySymbol.set(row.symbol, row.start_time ?? now - 24 * 60 * 60 * 1000);
+      startBySymbol.set(row.symbol, row.start_time ?? now - DEFAULT_BACKFILL_MS);
     }
     for (const symbol of liveState().positions.keys()) {
-      if (!startBySymbol.has(symbol)) startBySymbol.set(symbol, now - 24 * 60 * 60 * 1000);
+      if (!startBySymbol.has(symbol)) startBySymbol.set(symbol, now - DEFAULT_BACKFILL_MS);
     }
     for (const order of liveState().orders.values()) {
-      if (!startBySymbol.has(order.symbol)) startBySymbol.set(order.symbol, now - 24 * 60 * 60 * 1000);
+      if (!startBySymbol.has(order.symbol)) startBySymbol.set(order.symbol, now - DEFAULT_BACKFILL_MS);
     }
 
     for (const [symbol, startTime] of startBySymbol) {

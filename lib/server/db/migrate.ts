@@ -194,6 +194,40 @@ export const MIGRATIONS: Migration[] = [
       `CREATE INDEX IF NOT EXISTS idx_income_profile_type ON account_income(profile_id, income_type)`,
     ],
   },
+  {
+    version: 8,
+    name: "M0008 durable historical order log",
+    up: [
+      // Read-only record of exchange orders imported from /fapi/v1/allOrders.
+      // Kept separate from order_intents: imported history must never carry
+      // intent lifecycle semantics (uncertainty, freeze, drift) or be treated
+      // as an execution command this server issued.
+      `CREATE TABLE IF NOT EXISTS orders_log (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         profile_id TEXT NOT NULL CHECK (profile_id IN ('paper', 'binance-testnet', 'binance-production', 'shadow', 'legacy-unknown')),
+         exchange_order_id TEXT NOT NULL,
+         client_order_id TEXT,
+         symbol TEXT NOT NULL,
+         side TEXT NOT NULL,
+         type TEXT NOT NULL,
+         status TEXT NOT NULL,
+         price TEXT,
+         stop_price TEXT,
+         orig_qty TEXT,
+         executed_qty TEXT,
+         avg_price TEXT,
+         reduce_only INTEGER NOT NULL DEFAULT 0,
+         close_position INTEGER NOT NULL DEFAULT 0,
+         time INTEGER NOT NULL,
+         update_time INTEGER NOT NULL,
+         source TEXT NOT NULL,
+         UNIQUE (profile_id, exchange_order_id)
+       )`,
+      `CREATE INDEX IF NOT EXISTS idx_orders_profile_time ON orders_log(profile_id, time)`,
+      `CREATE INDEX IF NOT EXISTS idx_orders_profile_symbol ON orders_log(profile_id, symbol)`,
+      `CREATE INDEX IF NOT EXISTS idx_orders_profile_client ON orders_log(profile_id, client_order_id)`,
+    ],
+  },
 ];
 
 const PROFILE_CHECK =

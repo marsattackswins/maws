@@ -233,6 +233,50 @@ export function rememberOrder(o: BinanceOrder): void {
   else state.openOrders.delete(live.clientOrderId);
 }
 
+/**
+ * Records a terminal order imported from durable history (orders_log).
+ * History is read-only: entries land in `orders` only, never `openOrders`,
+ * and can therefore never act as execution commands or drift triggers.
+ * Deferred import: avoids a state.ts <-> order-history.ts cycle.
+ */
+export function rememberHistoricalOrder(o: {
+  clientOrderId: string;
+  exchangeOrderId: number;
+  symbol: string;
+  side: "BUY" | "SELL";
+  type: string;
+  status: string;
+  price: string;
+  stopPrice: string;
+  origQty: string;
+  executedQty: string;
+  avgPrice: string;
+  reduceOnly: boolean;
+  closePosition: boolean;
+  time: number;
+  updateTime: number;
+}): boolean {
+  if (state.orders.has(o.clientOrderId)) return false;
+  state.orders.set(o.clientOrderId, {
+    clientOrderId: o.clientOrderId,
+    exchangeOrderId: o.exchangeOrderId,
+    symbol: o.symbol,
+    side: o.side,
+    type: o.type,
+    status: o.status,
+    price: o.price,
+    stopPrice: o.stopPrice,
+    origQty: o.origQty,
+    executedQty: o.executedQty,
+    avgPrice: o.avgPrice,
+    reduceOnly: o.reduceOnly,
+    closePosition: o.closePosition,
+    time: o.time,
+    updateTime: o.updateTime,
+  });
+  return true;
+}
+
 export function normalizeBinanceOrder(o: BinanceOrder): LiveOrder {
   return {
     clientOrderId: o.clientOrderId,
@@ -279,6 +323,48 @@ export function persistFill(fill: LiveFill, profile: PersistenceProfile = active
     )
     .run(profile.id, fill.ts, fill.tradeId, fill.exchangeOrderId, fill.clientOrderId || null, fill.symbol, fill.side, fill.qty, fill.price, fill.realizedPnl, fill.source);
   return result.changes > 0;
+}
+
+/**
+ * Loads recent persisted fills into the live fill ring after a restart so
+ * /api/live/state and the SSE initial state expose fills that predate the
+ * current process. Rows are read newest-first and deduplicated by trade ID
+ * (the DB unique index guarantees at most one row per trade ID per profile,
+ * but hydration must also survive legacy rows without a trade_id key).
+ */
+export function hydrateFillsFromLog(profile: PersistenceProfile = activePersistenceProfile(), limit = 500): number {
+  assertPersistenceProfile(profile);
+  const rows = getDb()
+    .prepare(
+      `SELECT ts, trade_id, exchange_order_id, client_order_id, symbol, side, qty, price, realized_pnl, source
+       FROM fills_log WHERE profile_id = ? ORDER BY ts DESC, id DESC LIMIT ?`,
+    )
+    .all(profile.id, limit) as Array<Record<string, unknown>>;
+  const seen = new Set<string>();
+  let hydrated = 0;
+  // Rows arrive newest-first; apply oldest-first so the live ring keeps its
+  // append-order invariant (fillsDto relies on it for newest-first display).
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const row = rows[i];
+    const tradeId = typeof row.trade_id === "string" && row.trade_id !== "" ? row.trade_id : null;
+    if (!tradeId || seen.has(tradeId)) continue;
+    seen.add(tradeId);
+    const before = state.fills.length;
+    rememberFill({
+      tradeId,
+      ts: row.ts as number,
+      exchangeOrderId: row.exchange_order_id != null ? Number(row.exchange_order_id) : null,
+      clientOrderId: (row.client_order_id as string | null) ?? "",
+      symbol: row.symbol as string,
+      side: row.side === "SELL" ? "SELL" : "BUY",
+      qty: row.qty as string,
+      price: row.price as string,
+      realizedPnl: (row.realized_pnl as string | null) ?? "0",
+      source: row.source === "rest" ? "rest" : "stream",
+    });
+    if (state.fills.length > before) hydrated += 1;
+  }
+  return hydrated;
 }
 
 export function rememberFill(fill: LiveFill): void {

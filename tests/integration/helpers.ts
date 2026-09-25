@@ -110,6 +110,7 @@ export function loadTestnetConfig(): EnvConfig {
     recvWindowMs: 5000,
     rateInternalPerMin: 60, // respect testnet rate limits
     reconIntervalMs: 10_000, // faster recon for tests
+    historyBackfillMs: 3 * 24 * 60 * 60 * 1000,
     markPriceIntervalMs: 15_000,
     leaseTtlMs: 60_000,
     snapshotMaxAgeMs: 5 * 60_000,

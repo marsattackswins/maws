@@ -1,6 +1,7 @@
 import "server-only";
 
 import { incomeTotals, incomeWatermark, type IncomeTotals } from "./income";
+import { incomeSyncIsStale } from "./metrics-freshness";
 import { liveState } from "./state";
 
 /** DTOs shaped for the existing MAWS UI entities (ChartPosition/ChartOrder style). */
@@ -60,6 +61,8 @@ export interface AccountMetricsDto {
   netRealized: number;
   /** Null when the income ledger has not synced yet. */
   fetchedAt: number | null;
+  /** True when the last income sync failed: totals are retained but may be outdated. */
+  stale?: boolean;
 }
 
 export interface EquitySourceDto {
@@ -74,6 +77,26 @@ export interface FillDto {
   qty: number;
   price: number;
   realizedPnl: number;
+}
+
+/**
+ * Earliest reliable open/fill timestamp for a position, derived from the
+ * symbol's fills (live or hydrated) and historical orders. Startup or
+ * first-observation time is never used: a position opened before the process
+ * started must keep its real age after a restart. Returns null when no
+ * pre-startup evidence exists, in which case the caller keeps its default.
+ */
+export function positionOpenedAt(symbol: string): number | null {
+  let earliest: number | null = null;
+  for (const f of liveState().fills) {
+    if (f.symbol !== symbol || f.ts <= 0) continue;
+    if (earliest == null || f.ts < earliest) earliest = f.ts;
+  }
+  for (const o of liveState().orders.values()) {
+    if (o.symbol !== symbol || o.time <= 0) continue;
+    if (earliest == null || o.time < earliest) earliest = o.time;
+  }
+  return earliest;
 }
 
 export function positionsDto(): PositionDto[] {
@@ -101,7 +124,7 @@ export function positionsDto(): PositionDto[] {
       liq: Number(p.liquidationPrice) > 0 ? Number(p.liquidationPrice) : null,
       mark: Number(p.markPrice),
       unrealized: Number(p.unrealizedProfit),
-      openedAt: p.updatedAt,
+      openedAt: positionOpenedAt(p.symbol) ?? p.updatedAt,
       notional: Number(p.notional),
       marginType: p.marginType,
       isolatedMargin: p.isolatedMargin != null ? Number(p.isolatedMargin) : undefined,
@@ -168,11 +191,12 @@ export function accountMetricsDto(): AccountMetricsDto & IncomeTotals {
     return {
       ...incomeTotals(),
       fetchedAt: incomeWatermark() > 0 ? incomeWatermark() : null,
+      stale: incomeSyncIsStale(),
     };
   } catch {
     // Ledger unavailable (e.g. pre-migration DB): expose zeros rather than
     // failing the whole state response.
-    return { realizedPnl: 0, commission: 0, fundingFee: 0, netRealized: 0, fetchedAt: null };
+    return { realizedPnl: 0, commission: 0, fundingFee: 0, netRealized: 0, fetchedAt: null, stale: false };
   }
 }
 

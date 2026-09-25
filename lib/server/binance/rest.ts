@@ -197,6 +197,23 @@ export class BinanceRestClient {
     return this.signedRequest<BinanceOrder[]>("GET", "/fapi/v1/openOrders", symbol ? { symbol } : {});
   }
 
+  /**
+   * Historical orders for one symbol, newest first. Read-only history used
+   * for durable order backfill and hydration; results never drive execution.
+   */
+  getAllOrders(
+    symbol: string,
+    options: { orderId?: number; startTime?: number; endTime?: number; limit?: number } = {},
+  ): Promise<BinanceOrder[]> {
+    return this.signedRequest<BinanceOrder[]>("GET", "/fapi/v1/allOrders", {
+      symbol,
+      limit: options.limit ?? 1000,
+      ...(options.orderId != null ? { orderId: options.orderId } : {}),
+      ...(options.startTime != null ? { startTime: options.startTime } : {}),
+      ...(options.endTime != null ? { endTime: options.endTime } : {}),
+    });
+  }
+
   /** Returns null when the exchange reports the order does not exist (-2013). */
   async getOrder(symbol: string, orderId?: number, origClientOrderId?: string): Promise<BinanceOrder | null> {
     try {

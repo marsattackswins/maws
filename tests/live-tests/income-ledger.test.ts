@@ -232,7 +232,7 @@ describe("account metrics DTO and equity sources", () => {
 
   test("accountMetricsDto returns zeros before the ledger has synced", () => {
     const dto = accountMetricsDto();
-    expect(dto).toEqual({ realizedPnl: 0, commission: 0, fundingFee: 0, netRealized: 0, fetchedAt: null });
+    expect(dto).toEqual({ realizedPnl: 0, commission: 0, fundingFee: 0, netRealized: 0, fetchedAt: null, stale: false });
   });
 
   test("equity uses exchange marginBalance when available", () => {

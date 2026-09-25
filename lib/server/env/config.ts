@@ -55,6 +55,13 @@ export interface EnvConfig {
   reconIntervalMs: number;
   /** Mark-price poll cadence for open positions (unrealized PnL refresh). */
   markPriceIntervalMs: number;
+  /**
+   * Lookback window for REST history backfill (fills + orders) when no
+   * intent or order timestamps exist for a symbol. Covers positions opened
+   * before process startup; Binance caps userTrades/allOrders at 7-day
+   * windows, so anything beyond this is unreachable anyway.
+   */
+  historyBackfillMs: number;
   leaseTtlMs: number;
   /** Maximum age of the last authoritative account/positions/orders snapshot. */
   snapshotMaxAgeMs: number;
@@ -361,6 +368,7 @@ export function loadEnvConfig(source: NodeJS.ProcessEnv = process.env): EnvConfi
     rateInternalPerMin: num(source.MAWS_RATE_INTERNAL_PER_MIN, 60),
     reconIntervalMs: num(source.MAWS_RECON_INTERVAL_MS, 60_000),
     markPriceIntervalMs: num(source.MAWS_MARK_PRICE_INTERVAL_MS, 15_000),
+    historyBackfillMs: num(source.MAWS_HISTORY_BACKFILL_MS, 3 * 24 * 60 * 60 * 1000),
     leaseTtlMs: num(source.MAWS_LEASE_TTL_MS, 5 * 60_000),
     snapshotMaxAgeMs: num(source.MAWS_SNAPSHOT_MAX_AGE_MS, 5 * 60_000),
     alertWebhookUrl: source.MAWS_ALERT_WEBHOOK_URL?.trim() || null,

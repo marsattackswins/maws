@@ -21,6 +21,7 @@ import {
   type WsLike,
 } from "@/lib/server/binance/transport";
 import { resetCircuitBreakersForTests } from "@/lib/server/resilience/breakers";
+import { resetIncomeSyncFreshnessForTests } from "@/lib/server/binance/metrics-freshness";
 import { resetHealthSignalsForTests, setHealthSignal } from "@/lib/server/health/state";
 
 export function tempDbPath(): string {
@@ -82,6 +83,7 @@ export function makeCfg(overrides: Partial<EnvConfig> = {}): EnvConfig {
     rateInternalPerMin: 1_000_000,
     reconIntervalMs: 86_400_000,
     markPriceIntervalMs: 15_000,
+    historyBackfillMs: 3 * 24 * 60 * 60 * 1000,
     leaseTtlMs: 60_000,
     snapshotMaxAgeMs: 5 * 60_000,
     alertWebhookUrl: null,
@@ -119,6 +121,7 @@ export function freshEnv(cfg: EnvConfig): EnvConfig {
   resetLiveStateForTests();
   resetBrokerClientsForTests();
   resetCircuitBreakersForTests();
+  resetIncomeSyncFreshnessForTests();
   // Test harnesses that exercise an isolated service start from a confirmed
   // healthy manager; dedicated gate tests override these signals explicitly.
   resetHealthSignalsForTests();
