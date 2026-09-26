@@ -146,6 +146,34 @@ describe("income ledger: persistence, duplicates, aggregation", () => {
     expect(incomeTotals().realizedPnl).toBeCloseTo(-4.5);
   });
 
+  test("Binance's real incomeType field is normalized (regression: rows were silently dropped)", () => {
+    // The exchange returns `incomeType`, not `type`. Reading only `type`
+    // dropped every real row, keeping the ledger empty and the panel at $0.
+    const row = normalizeIncomeRow({ tranId: 60, incomeType: "REALIZED_PNL", symbol: "BTCUSDT", income: "-0.0693", asset: "USDT", time: 1_700_000_100_000 });
+    expect(row).not.toBeNull();
+    expect(row!.incomeType).toBe("REALIZED_PNL");
+    expect(persistIncomeRow(row!, "rest")).toBe(true);
+    expect(incomeTotals().realizedPnl).toBeCloseTo(-0.0693, 8);
+  });
+
+  test("syncIncomeHistory persists rows shaped like the real exchange payload", async () => {
+    const cfg = freshEnv(makeCfg());
+    const http = new FakeHttp();
+    installFakes(http);
+    http.route("/fapi/v1/income", () => jsonRes([
+      { tranId: 70, incomeType: "REALIZED_PNL", symbol: "BTCUSDT", income: "-0.0149", asset: "USDT", time: 1_700_000_200_000 },
+      { tranId: 71, incomeType: "COMMISSION", symbol: "BTCUSDT", income: "-0.0336", asset: "USDT", time: 1_700_000_200_000 },
+    ]));
+    const rest = new BinanceRestClient(cfg, new RateLimiter(cfg.rateInternalPerMin), async () => undefined);
+    rest.setTransportForTests(http);
+    const result = await syncIncomeHistory(rest);
+    expect(result.inserted).toBe(2);
+    const totals = incomeTotals();
+    expect(totals.realizedPnl).toBeCloseTo(-0.0149, 8);
+    expect(totals.commission).toBeCloseTo(0.0336, 8);
+    expect(totals.netRealized).toBeCloseTo(-0.0485, 8);
+  });
+
   test("watermark tracks the newest income time and survives empty syncs", async () => {
     expect(incomeWatermark()).toBe(0);
     persistIncomeRow(toLedger(incomeRow({ tranId: 50, time: 1_700_000_000_500 })), "rest");

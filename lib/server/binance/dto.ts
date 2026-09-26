@@ -3,6 +3,8 @@ import "server-only";
 import { incomeTotals, incomeWatermark, type IncomeTotals } from "./income";
 import { incomeSyncIsStale } from "./metrics-freshness";
 import { liveState } from "./state";
+import { persistenceProfileFromConfig } from "../profile/context";
+import { activeProfileConfig } from "../profile/coordinator";
 
 /** DTOs shaped for the existing MAWS UI entities (ChartPosition/ChartOrder style). */
 
@@ -195,9 +197,18 @@ export function accountDto(): AccountDto & EquitySourceDto {
  */
 export function accountMetricsDto(): AccountMetricsDto & IncomeTotals {
   try {
+    // Read the ledger under the ACTIVE runtime profile, not the boot-time base
+    // config. The coordinator runs the manager under its own profileConfig
+    // (e.g. MAWS_ENV=local booting, then switching to binance-testnet), so
+    // ingestion persists income rows under profile_id='binance-testnet' while
+    // the default activePersistenceProfile() still resolves to 'paper' —
+    // querying the wrong scope returned zeros forever. Mirrors the manager,
+    // which persists under persistenceProfileFromConfig(this.cfg).
+    const profile = persistenceProfileFromConfig(activeProfileConfig());
+    const watermark = incomeWatermark(profile);
     return {
-      ...incomeTotals(),
-      fetchedAt: incomeWatermark() > 0 ? incomeWatermark() : null,
+      ...incomeTotals(profile),
+      fetchedAt: watermark > 0 ? watermark : null,
       stale: incomeSyncIsStale(),
     };
   } catch {

@@ -64,16 +64,22 @@ export function parseIncomeAmount(raw: string): number | null {
 
 /**
  * Normalizes a raw /fapi/v1/income entry. Returns null for entries without a
- * parsable amount (ignored rather than partially recorded).
+ * parsable amount or income type (ignored rather than partially recorded).
+ * Binance names the field `incomeType`; `type` is accepted for legacy test
+ * fixtures. Reading only `type` silently dropped EVERY real exchange row
+ * (ledger stayed empty while syncs reported success) — realized PnL never
+ * reached the UI.
  */
 export function normalizeIncomeRow(
-  raw: { tranId: number; type: string; symbol?: string | null; income: string; asset: string; time: number },
+  raw: { tranId: number; type?: string; incomeType?: string; symbol?: string | null; income: string; asset: string; time: number },
 ): IncomeRow | null {
   if (typeof raw.time !== "number" || !Number.isFinite(raw.time)) return null;
+  const incomeType = raw.incomeType ?? raw.type;
+  if (!incomeType) return null;
   if (parseIncomeAmount(raw.income) == null) return null;
   return {
     tranId: raw.tranId,
-    incomeType: raw.type,
+    incomeType,
     symbol: raw.symbol || null,
     amount: raw.income,
     asset: raw.asset,

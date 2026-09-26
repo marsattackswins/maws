@@ -249,7 +249,7 @@ export class BinanceRestClient {
    */
   getIncome(
     options: { symbol?: string; incomeType?: string; startTime?: number; endTime?: number; limit?: number } = {},
-  ): Promise<Array<{ tranId: number; type: string; symbol: string | null; income: string; asset: string; time: number }>> {
+  ): Promise<Array<{ tranId: number; incomeType?: string; type?: string; symbol: string | null; income: string; asset: string; time: number }>> {
     return this.signedRequest("GET", "/fapi/v1/income", {
       ...(options.symbol ? { symbol: options.symbol } : {}),
       ...(options.incomeType ? { incomeType: options.incomeType } : {}),
