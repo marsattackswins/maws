@@ -71,6 +71,10 @@ export interface PositionDto {
   liq: number | null;
   mark: number;
   unrealized: number;
+  /** Age of the mark behind `unrealized`, in ms, at DTO build time. */
+  markAgeMs?: number;
+  /** True when unrealized still holds the fill-time ACCOUNT_UPDATE snapshot. */
+  markPriceStale?: boolean;
   openedAt: number;
   notional?: number;
   marginType?: string;

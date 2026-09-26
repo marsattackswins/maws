@@ -79,6 +79,39 @@ function formatSigned(value: number): string {
   return `${value >= 0 ? "+" : ""}${formatNum(value)}`;
 }
 
+/**
+ * Unrealized P&L cell: value plus a non-intrusive "stale" marker when the
+ * number is still the fill-time ACCOUNT_UPDATE snapshot (markPriceStale).
+ * Display only — never recomputes PnL.
+ */
+export function PnlCell({
+  pnl,
+  markPriceStale,
+  markAgeMs,
+}: {
+  pnl: number;
+  markPriceStale?: boolean;
+  markAgeMs?: number;
+}) {
+  const ageS = markAgeMs != null ? Math.max(0, Math.round(markAgeMs / 1000)) : null;
+  return (
+    <span
+      title={markPriceStale && ageS != null ? `PnL from fill snapshot; mark age ${ageS}s` : undefined}
+    >
+      {formatUsd(pnl)}
+      {markPriceStale ? (
+        <span
+          role="status"
+          aria-label={ageS != null ? `Unrealized PnL is a fill-time snapshot, mark age ${ageS} seconds` : "Unrealized PnL is a fill-time snapshot"}
+          className="ml-1 align-[2px] text-[9px] font-bold uppercase text-[#f0b90b]"
+        >
+          stale
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 function Empty({ text }: { text: string }) {
   return (
     <div className="flex h-full min-h-[120px] items-center justify-center text-[13px] text-[#787b86]">
@@ -252,10 +285,13 @@ export type PosRow = {
   notional: number;
   margin: number;
   marginType?: string;
+  /** PnL-freshness provenance from the live DTO (live branch only). */
+  markAgeMs?: number;
+  markPriceStale?: boolean;
 };
 
 export function computePosRows(
-  positions: Array<Parameters<typeof positionPnl>[0] & { id: string; mark?: number; unrealized?: number; notional?: number; marginType?: string; isolatedMargin?: number; isolatedWallet?: number }>,
+  positions: Array<Parameters<typeof positionPnl>[0] & { id: string; mark?: number; unrealized?: number; notional?: number; marginType?: string; isolatedMargin?: number; isolatedWallet?: number; markAgeMs?: number; markPriceStale?: boolean }>,
   live: boolean,
   lastOf: (symbol: string) => number,
 ): PosRow[] {
@@ -285,6 +321,8 @@ export function computePosRows(
           notional,
           margin,
           marginType: p.marginType,
+          markAgeMs: p.markAgeMs,
+          markPriceStale: p.markPriceStale === true,
         };
       })
     : positions.map((p) => {
@@ -566,7 +604,7 @@ export function PositionsPanel() {
                         {formatNum(pct)}%
                       </td>
                       <td className={`px-2 py-1.5 ${pnl >= 0 ? "text-[#089981]" : "text-[#f23645]"}`}>
-                        {formatUsd(pnl)}
+                        <PnlCell pnl={pnl} markPriceStale={p.markPriceStale} markAgeMs={p.markAgeMs} />
                       </td>
                       <td className="px-2 py-1.5 text-[#787b86]">—</td>
                       <td className="px-2 py-1.5 text-right">

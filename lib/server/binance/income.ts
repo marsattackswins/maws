@@ -151,6 +151,27 @@ export interface IncomeSyncResult {
   watermark: number | null;
 }
 
+/**
+ * True when the durable ledger already contains a REALIZED_PNL row whose
+ * amount equals `pnl` (exactly the value Binance's closing trades reported).
+ * Bounded: at most 200 scanned rows per call, called only from the short
+ * closing-fill retry path — never in a hot loop.
+ */
+export function incomeLedgerIncludes(pnl: number, profile: PersistenceProfile = activePersistenceProfile()): boolean {
+  assertPersistenceProfile(profile);
+  const rows = getDb()
+    .prepare(
+      `SELECT amount FROM account_income
+       WHERE profile_id = ? AND income_type = 'REALIZED_PNL'
+       ORDER BY ts DESC LIMIT 200`,
+    )
+    .all(profile.id) as Array<{ amount: string }>;
+  return rows.some((row) => {
+    const amount = parseIncomeAmount(row.amount);
+    return amount != null && Math.abs(amount - pnl) < 5e-9;
+  });
+}
+
 /** Ledger high-water mark: newest income row time already persisted. */
 export function incomeWatermark(profile: PersistenceProfile = activePersistenceProfile()): number {
   assertPersistenceProfile(profile);

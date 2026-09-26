@@ -23,7 +23,7 @@ import { TransportTimeoutError } from "./transport";
 import { CircuitBreakerOpenError } from "../resilience/circuit-breaker";
 import { realizedSinceUtcMidnight, type RiskSnapshot } from "./risk";
 import { Reconciler, type ReconResult } from "./recon";
-import { syncIncomeHistory, type IncomeSyncResult } from "./income";
+import { incomeLedgerIncludes, syncIncomeHistory, type IncomeSyncResult } from "./income";
 import { markIncomeSyncFailed, markIncomeSyncSucceeded } from "./metrics-freshness";
 import { withRiskMutationSync } from "./mutation-queue";
 import { cancelAllAndFlatten, type EmergencyFlattenSummary } from "./emergency";
@@ -46,6 +46,7 @@ import {
   grossExposureUsd,
   liveState,
   openPositionCount,
+  refreshPositionMarkAfterAccountUpdate,
 } from "./state";
 import { backfillHistoricalOrders, historySymbols, hydrateHistoricalOrders } from "./order-history";
 import { StreamLeaseUnavailableError, UserDataStream } from "./stream";
@@ -668,6 +669,11 @@ export class BinanceLiveManager {
         const closedWithPnl =
           o.X === "FILLED" &&
           persistedFills.some((f) => f.realizedPnl !== "" && Number(f.realizedPnl) !== 0);
+        // The realized PnL of the closing fill(s): ORDER_TRADE_UPDATE `rp`,
+        // positive or negative. Used only to verify the ledger caught up.
+        const closedPnlValue = persistedFills
+          .map((f) => Number(f.realizedPnl))
+          .find((n) => Number.isFinite(n) && n !== 0);
         for (const fill of persistedFills) {
           rememberFill(fill);
           trackFillReceived(fill.clientOrderId, fill.symbol, fill.side, fill.qty, fill.price);
@@ -680,7 +686,12 @@ export class BinanceLiveManager {
         // idempotent (dedup by tranId), so a nudge racing a recon pass is
         // harmless.
         if (closedWithPnl) {
-          void this.syncIncome("closing-fill").catch(() => undefined);
+          // Carry the fill's realized PnL (ORDER_TRADE_UPDATE `rp`) into the
+          // sync: positive or negative, it is the exchange's own closing-trade
+          // figure and it must reach the bottom-panel Realized total without
+          // waiting for the next periodic sync pass. The ledger stays the
+          // source of truth; `rp` only guarantees a timely first sync.
+          void this.syncIncome("closing-fill", this.lifecycleGeneration, closedPnlValue).catch(() => undefined);
         }
         if (o.X === "FILLED") {
           trackOrderFilled(o.c, o.s, o.z, o.L);
@@ -695,9 +706,31 @@ export class BinanceLiveManager {
         if (persistedFills.length > 0) publishLive("fills", persistedFills);
       } else {
         if (ev.e === "ACCOUNT_UPDATE") {
-          applyAccountEvent(ev as AccountUpdateEvent);
+          const accountEv = ev as AccountUpdateEvent;
+          applyAccountEvent(accountEv);
           updateTradingGauges();
           publishLive("account-update", { at: Date.now() });
+          // ACCOUNT_UPDATE `up` values are fill-time snapshots, not current
+          // quotes. Immediately refresh the mark for every touched symbol so
+          // the position's PnL becomes mark-derived again (applyMarkPrice).
+          // Best-effort and async: a failed refresh leaves the safe
+          // fill-fallback snapshot in place and the next mark event, premium
+          // poll, or reconciliation advances it.
+          const touched = accountEv.a.P.map((p) => p.s);
+          void refreshPositionMarkAfterAccountUpdate(touched, async (symbol) => {
+            const t = await this.rest.getMarkPrice(symbol);
+            return t.markPrice;
+          }).then((refreshed) => {
+            if (refreshed > 0) {
+              updateTradingGauges();
+              publishLive("account-update", { at: Date.now() });
+            }
+          }).catch((err: unknown) => {
+            // Fire-and-forget safety: the refresh helper already swallows
+            // per-symbol fetch errors; this guards the publish step so a
+            // failure here can never crash the live event loop.
+            log.warn("post-ACCOUNT_UPDATE mark refresh publish failed", { error: String(err) });
+          });
         } else if (ev.e === "ACCOUNT_CONFIG_UPDATE") {
           // Fires after POST /fapi/v1/leverage: record the exchange-side
           // per-symbol leverage so fill events can seed correct position rows
@@ -891,10 +924,32 @@ export class BinanceLiveManager {
    * Best-effort: a failure never blocks trading, and raw exchange error text
    * is never surfaced — it stays in server logs only.
    */
-  async syncIncome(trigger: string, generation = this.lifecycleGeneration): Promise<IncomeSyncResult | null> {
+  async syncIncome(
+    trigger: string,
+    generation = this.lifecycleGeneration,
+    /** Optional realized PnL (stream `rp`) that must land in this pass. */
+    mustIncludePnl?: number,
+  ): Promise<IncomeSyncResult | null> {
     if (!this.isGenerationCurrent(generation)) return null;
     try {
       const result = await syncIncomeHistory(this.rest, this.persistenceProfile);
+      // New ledger rows change accountMetrics (Realized/Commission/Funding).
+      // Republish so connected browsers refetch state and the bottom-panel
+      // totals update without waiting for an unrelated event.
+      let inserted = result.inserted;
+      if (inserted > 0) publishLive("account-update", { at: Date.now() });
+      // Timeliness guarantee for closing fills: when the exchange ledger has
+      // not yet caught up with the stream's realized PnL (e.g. a write-lagging
+      // testnet REST ledger), re-query until the closing figure is present or
+      // the short retry budget is spent. The ledger remains authoritative —
+      // this never fabricates or overrides persisted rows.
+      if (mustIncludePnl != null && Number.isFinite(mustIncludePnl) && mustIncludePnl !== 0) {
+        for (let attempt = 0; attempt < 3 && !incomeLedgerIncludes(mustIncludePnl); attempt += 1) {
+          const retry = await syncIncomeHistory(this.rest, this.persistenceProfile);
+          inserted += retry.inserted;
+        }
+        if (inserted > 0) publishLive("account-update", { at: Date.now() });
+      }
       // Success (even with zero new rows) clears the stale flag: retained
       // historical totals are current again.
       markIncomeSyncSucceeded();

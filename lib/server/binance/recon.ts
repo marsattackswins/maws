@@ -46,6 +46,49 @@ const UNCERTAIN = new Set(["CANCEL_REQUESTED", "CANCEL_UNKNOWN", "TIMEOUT_UNKNOW
  */
 const DEFAULT_BACKFILL_MS = serverConfig().historyBackfillMs;
 
+/** Binance /fapi/v1/userTrades rejects (endTime − startTime) > 7 days with -4165. */
+export const USER_TRADES_MAX_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+/** Safety cap on backfill chunks (~182 days); wider anchors are clamped, not errored. */
+export const USER_TRADES_MAX_CHUNKS = 26;
+
+export interface UserTradesWindow {
+  start: number;
+  end: number;
+}
+
+/**
+ * Splits a lookback range into sequential userTrades windows of at most 7
+ * days each. Binance treats startTime and endTime as INCLUSIVE, so chunk k
+ * ends at chunk k+1's start minus 1ms: no trade is duplicated or skipped at
+ * a boundary. A range within the limit stays a single unchanged request;
+ * a range so wide it exceeds maxChunks is clamped from the left (recent
+ * history wins) rather than silently issuing an invalid interval.
+ */
+export function chunkUserTradeWindows(
+  startTime: number,
+  endTime: number,
+  maxChunks = USER_TRADES_MAX_CHUNKS,
+): UserTradesWindow[] {
+  if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) return [];
+  const span = endTime - startTime;
+  if (span <= USER_TRADES_MAX_WINDOW_MS) return [{ start: startTime, end: endTime }];
+  let count = Math.ceil(span / USER_TRADES_MAX_WINDOW_MS);
+  let effectiveStart = startTime;
+  if (count > maxChunks) {
+    count = maxChunks;
+    effectiveStart = endTime - count * USER_TRADES_MAX_WINDOW_MS;
+  }
+  const windows: UserTradesWindow[] = [];
+  for (let i = 0; i < count; i++) {
+    const start = effectiveStart + i * USER_TRADES_MAX_WINDOW_MS;
+    // The final window closes exactly at endTime so the range is fully
+    // covered even when the span is an exact multiple of 7 days.
+    const end = i === count - 1 ? endTime : Math.min(start + USER_TRADES_MAX_WINDOW_MS - 1, endTime);
+    windows.push({ start, end });
+  }
+  return windows;
+}
+
 /**
  * Settlement of record: exchange REST truth vs. persisted intents and local
  * state. Any mismatch freezes submissions until resolved.
@@ -238,36 +281,50 @@ export class Reconciler {
       if (!startBySymbol.has(order.symbol)) startBySymbol.set(order.symbol, now - DEFAULT_BACKFILL_MS);
     }
 
-    for (const [symbol, startTime] of startBySymbol) {
+    for (const [symbol, anchorStart] of startBySymbol) {
       if (!this.isCurrent()) return;
+      // Binance caps userTrades at 7-day windows (-4165): split the anchor
+      // range into sequential <=7d chunks. Anchors within the cap produce a
+      // single unchanged request; over-wide legacy anchors are clamped.
+      const windows = chunkUserTradeWindows(anchorStart, now);
+      if (windows.length === 0) continue;
+      if (windows.length > 1) {
+        log.warn("userTrades backfill chunked to respect the 7-day API cap", { symbol, windows: windows.length });
+      }
       let fromId: number | undefined;
-      for (;;) {
-        const trades = await this.deps.rest.getUserTrades(symbol, { startTime, endTime: now, limit: 1000, fromId });
-        if (!this.isCurrent()) return;
-        for (const trade of trades) {
-          const liveOrder = [...liveState().orders.values()].find((order) => order.exchangeOrderId === trade.orderId);
-          const intent = findByExchangeOrderId(trade.orderId, this.persistenceProfile);
-          const fill: LiveFill = {
-            tradeId: String(trade.id),
-            ts: trade.time,
-            exchangeOrderId: trade.orderId,
-            clientOrderId: liveOrder?.clientOrderId ?? intent?.clientOrderId ?? "",
-            symbol,
-            side: trade.side === "SELL" ? "SELL" : "BUY",
-            qty: trade.qty,
-            price: trade.price,
-            realizedPnl: trade.realizedPnl,
-            source: "rest",
-          };
-          if (fillExists(fill.tradeId, this.persistenceProfile)) continue;
-          if (!persistFill(fill, this.persistenceProfile)) continue;
-          rememberFill(fill);
-          diffs.push(`backfilled fill ${fill.tradeId} for ${symbol}`);
+      for (const window of windows) {
+        // fromId takes precedence over the time window on Binance's side, so
+        // it must be reset per window or the next window would re-fetch the
+        // previous one and break before reaching its own trades.
+        fromId = undefined;
+        for (;;) {
+          const trades = await this.deps.rest.getUserTrades(symbol, { startTime: window.start, endTime: window.end, limit: 1000, fromId });
+          if (!this.isCurrent()) return;
+          for (const trade of trades) {
+            const liveOrder = [...liveState().orders.values()].find((order) => order.exchangeOrderId === trade.orderId);
+            const intent = findByExchangeOrderId(trade.orderId, this.persistenceProfile);
+            const fill: LiveFill = {
+              tradeId: String(trade.id),
+              ts: trade.time,
+              exchangeOrderId: trade.orderId,
+              clientOrderId: liveOrder?.clientOrderId ?? intent?.clientOrderId ?? "",
+              symbol,
+              side: trade.side === "SELL" ? "SELL" : "BUY",
+              qty: trade.qty,
+              price: trade.price,
+              realizedPnl: trade.realizedPnl,
+              source: "rest",
+            };
+            if (fillExists(fill.tradeId, this.persistenceProfile)) continue;
+            if (!persistFill(fill, this.persistenceProfile)) continue;
+            rememberFill(fill);
+            diffs.push(`backfilled fill ${fill.tradeId} for ${symbol}`);
+          }
+          if (!this.isCurrent() || trades.length < 1000) break;
+          const maxTradeId = Math.max(...trades.map((trade) => trade.id));
+          if (!Number.isFinite(maxTradeId) || fromId === maxTradeId + 1) break;
+          fromId = maxTradeId + 1;
         }
-        if (!this.isCurrent() || trades.length < 1000) break;
-        const maxTradeId = Math.max(...trades.map((trade) => trade.id));
-        if (!Number.isFinite(maxTradeId) || fromId === maxTradeId + 1) break;
-        fromId = maxTradeId + 1;
       }
     }
   }

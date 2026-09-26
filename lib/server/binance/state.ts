@@ -27,6 +27,13 @@ export interface LivePosition {
   entryPrice: string;
   markPrice: string;
   unrealizedProfit: string;
+  /**
+   * Provenance of unrealizedProfit: "exchange" = mark-derived via
+   * applyMarkPrice (current quote); "fill-fallback" = the fill-time `up`
+   * snapshot from ACCOUNT_UPDATE, kept only until a fresh mark arrives.
+   * Product code always sets this; optional only for legacy fixtures.
+   */
+  markPriceSource?: "exchange" | "fill-fallback";
   leverage: string;
   liquidationPrice: string;
   notional: string;
@@ -160,6 +167,7 @@ export function applyPositionSnapshot(rows: PositionRiskRow[], now = Date.now())
       entryPrice: r.entryPrice,
       markPrice: r.markPrice,
       unrealizedProfit: r.unRealizedProfit,
+      markPriceSource: "exchange",
       leverage: r.leverage,
       liquidationPrice: r.liquidationPrice,
       notional: r.notional ?? "",
@@ -189,11 +197,37 @@ export function applyMarkPrice(symbol: string, markPrice: string, now = Date.now
     ...pos,
     markPrice: String(markPrice),
     unrealizedProfit: String(Number.isFinite(pnl) ? Number(pnl.toFixed(8)) : 0),
+    markPriceSource: "exchange",
     notional: Number.isFinite(notional) ? String(Number(notional.toFixed(8))) : pos.notional,
     leverage,
     updatedAt: now,
   });
   return true;
+}
+
+/**
+ * Refreshes the mark for every symbol an ACCOUNT_UPDATE touched so the
+ * fill-time `up` snapshot is replaced by a mark-derived PnL again. Best-effort
+ * per symbol: a failed fetch leaves the position's fill snapshot in place,
+ * keeps markPriceSource at "fill-fallback" (surfaced as stale by the DTO), and
+ * never invents a price. Returns the number of positions refreshed.
+ */
+export async function refreshPositionMarkAfterAccountUpdate(
+  symbols: Iterable<string>,
+  fetchMarkPrice: (symbol: string) => Promise<string>,
+  now = Date.now(),
+): Promise<number> {
+  let refreshed = 0;
+  for (const symbol of new Set(symbols)) {
+    try {
+      const markPrice = await fetchMarkPrice(symbol);
+      if (applyMarkPrice(symbol, markPrice, now)) refreshed += 1;
+    } catch {
+      // Safe fallback: keep the fill-time snapshot; the next mark stream
+      // event, premiumIndex poll, or reconciliation will advance the PnL.
+    }
+  }
+  return refreshed;
 }
 
 /**
@@ -470,7 +504,10 @@ export function applyAccountEvent(ev: AccountUpdateEvent): void {
       qty: absQty,
       entryPrice: p.ep,
       markPrice: prev?.markPrice ?? p.ep,
+      // `up` is the PnL at fill time, not a current quote: mark it as a
+      // fallback until a fresh mark refreshes the value via applyMarkPrice.
       unrealizedProfit: p.up,
+      markPriceSource: "fill-fallback",
       leverage,
       liquidationPrice: prev?.liquidationPrice ?? "0",
       notional: prev?.notional ?? "",

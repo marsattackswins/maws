@@ -18,6 +18,10 @@ export interface PositionDto {
   liq: number | null;
   mark: number;
   unrealized: number;
+  /** Age of the mark behind `unrealized`, in ms, at DTO build time. Optional for builders; positionsDto always sets it. */
+  markAgeMs?: number;
+  /** True when unrealized still holds the fill-time ACCOUNT_UPDATE snapshot. Optional for builders; positionsDto always sets it. */
+  markPriceStale?: boolean;
   openedAt: number;
   /** Exchange-reported position value; mirrors Binance's positionNotional. */
   notional: number;
@@ -102,6 +106,7 @@ export function positionOpenedAt(symbol: string): number | null {
 export function positionsDto(): PositionDto[] {
   const state = liveState();
   const out: PositionDto[] = [];
+  const now = Date.now();
   for (const p of state.positions.values()) {
     let tp: number | null = null;
     let sl: number | null = null;
@@ -124,6 +129,8 @@ export function positionsDto(): PositionDto[] {
       liq: Number(p.liquidationPrice) > 0 ? Number(p.liquidationPrice) : null,
       mark: Number(p.markPrice),
       unrealized: Number(p.unrealizedProfit),
+      markAgeMs: Math.max(0, now - p.updatedAt),
+      markPriceStale: p.markPriceSource === "fill-fallback",
       openedAt: positionOpenedAt(p.symbol) ?? p.updatedAt,
       notional: Number(p.notional),
       marginType: p.marginType,
