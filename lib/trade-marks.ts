@@ -16,3 +16,24 @@ export function defaultProtect(entry: number, side: "long" | "short") {
   }
   return { tp: entry * 0.988, sl: entry * 1.006 };
 }
+
+/**
+ * Finds the open protective order (closePosition bracket) for one TP/SL leg.
+ * The live order DTO collapses both bracket types to type "stop", so the leg
+ * is matched by its stop price equaling the position's TP (or SL) value —
+ * both figures come from the same server snapshot.
+ */
+export function findProtectiveOrderId(
+  orders: Array<{ id: string; symbol: string; closePosition: boolean; price: number }>,
+  symbol: string,
+  leg: "tp" | "sl",
+  tp: number | null,
+  sl: number | null,
+): string | null {
+  const target = leg === "tp" ? tp : sl;
+  if (target == null || !Number.isFinite(target)) return null;
+  const match = orders.find(
+    (o) => o.symbol === symbol && o.closePosition && Number(o.price) === target,
+  );
+  return match?.id ?? null;
+}

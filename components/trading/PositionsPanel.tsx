@@ -544,7 +544,11 @@ export function PositionsPanel() {
                   const pnl = p.pnl;
                   const notional = p.notional;
                   const mgn = p.margin;
-                  const pct = notional === 0 ? 0 : (pnl / notional) * 100;
+                  // Binance ROE% is PnL / initial margin (qty × entry / leverage),
+                  // not PnL / notional — otherwise the % ignores leverage and
+                  // diverges from the Futures UI by the leverage factor.
+                  const initialMargin = mgn > 0 ? mgn : notional / Math.max(1, p.leverage);
+                  const pct = initialMargin === 0 ? 0 : (pnl / initialMargin) * 100;
                   return (
                     <tr key={p.id} className="border-t border-[#222222] text-[#d1d4dc]">
                       <td className="px-2 py-1.5">{formatTicker(p.symbol)}</td>

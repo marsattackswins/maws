@@ -5,6 +5,8 @@ import { attachChartLinkedPaint } from "@/lib/chart-linked-paint";
 import { formatPrice } from "@/lib/maws/feed";
 import { useBrokerBook } from "@/lib/selectors/broker";
 import { useAppStore } from "@/lib/store";
+import { dispatchProtect, dispatchCancelOrder } from "@/lib/trading/dispatch";
+import { findProtectiveOrderId } from "@/lib/trade-marks";
 import type { ChartPaneState } from "@/types";
 import { useEffect, useMemo, useRef } from "react";
 
@@ -16,6 +18,8 @@ type Mark = {
   dash: string;
   onMove: (price: number) => void;
   onRemove: () => void;
+  /** True while a replace/cancel round-trip is in flight. */
+  busy?: boolean;
 };
 
 export function TradeMarks({ pane }: { pane: ChartPaneState }) {
@@ -31,6 +35,8 @@ export function TradeMarks({ pane }: { pane: ChartPaneState }) {
   const removeOrder = useAppStore((s) => s.removeOrder);
   const updatePosition = useAppStore((s) => s.updatePosition);
   const removePosition = useAppStore((s) => s.removePosition);
+  const live = useAppStore((s) => s.connectedBroker) === "binance";
+  const busy = useRef(false);
 
   const marks = useMemo(() => {
     const list: Mark[] = [];
@@ -86,8 +92,31 @@ export function TradeMarks({ pane }: { pane: ChartPaneState }) {
           label: `TP ${formatPrice(p.symbol, p.tp)}`,
           color: settings.tpLineColor,
           dash: "4 3",
-          onMove: (price) => updatePosition(p.id, { tp: price }),
-          onRemove: () => updatePosition(p.id, { tp: null }),
+          onMove: (price) => {
+            if (live) {
+              if (busy.current) return;
+              busy.current = true;
+              void dispatchProtect(p.symbol, price, p.sl).finally(() => {
+                busy.current = false;
+              });
+            } else {
+              updatePosition(p.id, { tp: price });
+            }
+          },
+          onRemove: () => {
+            if (live) {
+              const orderId = findProtectiveOrderId(
+                orders.map((o) => ({ id: o.id, symbol: o.symbol, closePosition: (o as { closePosition?: boolean }).closePosition === true, price: o.price })),
+                p.symbol,
+                "tp",
+                p.tp,
+                p.sl,
+              );
+              if (orderId) void dispatchCancelOrder(orderId);
+            } else {
+              updatePosition(p.id, { tp: null });
+            }
+          },
         });
       }
       if (settings.showTpSlLines && p.sl != null) {
@@ -97,8 +126,31 @@ export function TradeMarks({ pane }: { pane: ChartPaneState }) {
           label: `SL ${formatPrice(p.symbol, p.sl)}`,
           color: settings.slLineColor,
           dash: "4 3",
-          onMove: (price) => updatePosition(p.id, { sl: price }),
-          onRemove: () => updatePosition(p.id, { sl: null }),
+          onMove: (price) => {
+            if (live) {
+              if (busy.current) return;
+              busy.current = true;
+              void dispatchProtect(p.symbol, p.tp, price).finally(() => {
+                busy.current = false;
+              });
+            } else {
+              updatePosition(p.id, { sl: price });
+            }
+          },
+          onRemove: () => {
+            if (live) {
+              const orderId = findProtectiveOrderId(
+                orders.map((o) => ({ id: o.id, symbol: o.symbol, closePosition: (o as { closePosition?: boolean }).closePosition === true, price: o.price })),
+                p.symbol,
+                "sl",
+                p.tp,
+                p.sl,
+              );
+              if (orderId) void dispatchCancelOrder(orderId);
+            } else {
+              updatePosition(p.id, { sl: null });
+            }
+          },
         });
       }
       if (settings.showLiqLines && p.liq != null) {
@@ -134,6 +186,23 @@ export function TradeMarks({ pane }: { pane: ChartPaneState }) {
   settingsRef.current = settings;
   const lastPaintKeyRef = useRef("");
 
+  /** Live position risk/reward zones for this pane (entry→TP green, entry→SL red). */
+  const positionZones = useMemo(() => {
+    if (!settings.showTpSlLines || pane.symbol == null) return [];
+    return positions
+      .filter((p) => p.symbol === pane.symbol)
+      .map((p) => ({
+        key: `zone-${p.id}`,
+        entry: p.entry,
+        tp: p.tp,
+        sl: p.sl,
+        tpColor: settings.tpLineColor,
+        slColor: settings.slLineColor,
+      }));
+  }, [positions, pane.symbol, settings.showTpSlLines, settings.tpLineColor, settings.slLineColor]);
+  const zonesRef = useRef(positionZones);
+  zonesRef.current = positionZones;
+
   const paint = () => {
     const svg = svgRef.current;
     if (!svg) return;
@@ -142,6 +211,7 @@ export function TradeMarks({ pane }: { pane: ChartPaneState }) {
     const h = svg.clientHeight || 1;
     const s = settingsRef.current;
     const list = marksRef.current;
+    const zones = zonesRef.current;
 
     // Horizontal pan does not move price lines — skip DOM rewrite when Ys unchanged.
     const ys: number[] = [];
@@ -149,11 +219,36 @@ export function TradeMarks({ pane }: { pane: ChartPaneState }) {
       const y = handle?.series.priceToCoordinate(m.price);
       ys.push(y == null ? -1 : Math.round(y * 2) / 2);
     }
-    const key = `${w}|${h}|${s.extendedPriceLines ? 1 : 0}|${s.orderAlignment}|${ys.join(",")}`;
+    const zoneYs: number[] = [];
+    for (const z of zones) {
+      for (const price of [z.entry, z.tp ?? Number.NaN, z.sl ?? Number.NaN]) {
+        const y = Number.isFinite(price) ? handle?.series.priceToCoordinate(price) : null;
+        zoneYs.push(y == null ? -1 : Math.round(y * 2) / 2);
+      }
+    }
+    const key = `${w}|${h}|${s.extendedPriceLines ? 1 : 0}|${s.orderAlignment}|${ys.join(",")}|${zoneYs.join(",")}|${zones.length}`;
     if (key === lastPaintKeyRef.current) return;
     lastPaintKeyRef.current = key;
 
     const nodes: string[] = [];
+
+    // Risk/reward zones render behind the price lines (first in the SVG).
+    for (let zi = 0; zi < zones.length; zi++) {
+      const z = zones[zi];
+      const yE = zoneYs[zi * 3];
+      const yT = zoneYs[zi * 3 + 1];
+      const yS = zoneYs[zi * 3 + 2];
+      const band = (y1: number, y2: number, color: string) => {
+        if (y1 < 0 || y2 < 0 || Math.abs(y1 - y2) < 1) return;
+        const top = Math.max(-8, Math.min(y1, y2));
+        const bottom = Math.min(h + 8, Math.max(y1, y2));
+        nodes.push(
+          `<rect pointer-events="none" x="0" y="${top.toFixed(1)}" width="${w}" height="${Math.max(0, bottom - top).toFixed(1)}" fill="${color}" fill-opacity="0.10"/>`,
+        );
+      };
+      band(yE, yT, z.tpColor); // profit zone
+      band(yE, yS, z.slColor); // risk zone
+    }
     for (let i = 0; i < list.length; i++) {
       const m = list[i];
       const y = ys[i];

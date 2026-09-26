@@ -82,7 +82,7 @@ describe("profile-scoped database migration", () => {
   test("fresh schema includes profile columns and the migration is idempotent", () => {
     const db = new Database(":memory:");
     runMigrations(db);
-    expect(currentVersion(db)).toBe(7); // M0007 account_income ledger
+    expect(currentVersion(db)).toBe(8); // M0008 durable historical order log
     for (const table of PROFILE_TABLES) expect(columnNames(db, table)).toContain("profile_id");
     expect(columnNames(db, "audit_log")).toContain("profile_id");
     expect(indexNames(db, "runtime_config")).toContain("idx_runtime_profile_key");
@@ -103,7 +103,7 @@ describe("profile-scoped database migration", () => {
 
     const countsBefore = Object.fromEntries([...PROFILE_TABLES, "audit_log"].map((table) => [table, rowCount(db, table)]));
     runMigrations(db);
-    expect(currentVersion(db)).toBe(7); // idempotent re-run
+    expect(currentVersion(db)).toBe(8); // idempotent re-run
     expect(Object.fromEntries([...PROFILE_TABLES, "audit_log"].map((table) => [table, rowCount(db, table)]))).toEqual(countsBefore);
     db.close();
   });

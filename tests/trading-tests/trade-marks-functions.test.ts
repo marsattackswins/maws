@@ -237,3 +237,43 @@ describe('defaultProtect (direct function)', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// findProtectiveOrderId (live TP/SL bracket matching)
+// ---------------------------------------------------------------------------
+
+import { findProtectiveOrderId } from '../../lib/trade-marks';
+
+describe('findProtectiveOrderId (direct function)', () => {
+  const orders = [
+    { id: 'open-1', symbol: 'BTCUSDT', closePosition: false, price: 84000 },
+    { id: 'tp-bracket', symbol: 'BTCUSDT', closePosition: true, price: 85000 },
+    { id: 'sl-bracket', symbol: 'BTCUSDT', closePosition: true, price: 83000 },
+    { id: 'other-sym', symbol: 'ETHUSDT', closePosition: true, price: 85000 },
+  ];
+
+  it('matches the TP bracket by symbol + closePosition + stop price', () => {
+    expect(findProtectiveOrderId(orders, 'BTCUSDT', 'tp', 85000, 83000)).toBe('tp-bracket');
+  });
+
+  it('matches the SL bracket by symbol + closePosition + stop price', () => {
+    expect(findProtectiveOrderId(orders, 'BTCUSDT', 'sl', 85000, 83000)).toBe('sl-bracket');
+  });
+
+  it('never matches non-closePosition orders', () => {
+    expect(findProtectiveOrderId(orders, 'BTCUSDT', 'tp', 84000, null)).toBeNull();
+  });
+
+  it('never matches across symbols', () => {
+    expect(findProtectiveOrderId(orders, 'ETHUSDT', 'tp', 99999, null)).toBeNull();
+  });
+
+  it('returns null when the leg has no price', () => {
+    expect(findProtectiveOrderId(orders, 'BTCUSDT', 'tp', null, 83000)).toBeNull();
+    expect(findProtectiveOrderId(orders, 'BTCUSDT', 'sl', 85000, null)).toBeNull();
+  });
+
+  it('returns null for non-finite targets', () => {
+    expect(findProtectiveOrderId(orders, 'BTCUSDT', 'tp', Number.NaN, 83000)).toBeNull();
+  });
+});
