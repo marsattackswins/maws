@@ -46,9 +46,6 @@ yarn-error.log*
 # MAWS server state (SQLite DB, backups) — never commit
 /.maws/
 
-# vercel
-.vercel
-
 # typescript
 *.tsbuildinfo
 next-env.d.ts
