@@ -198,7 +198,7 @@ describe("GET /api/status/trading-health", () => {
     getDb().prepare(
       `INSERT INTO reconciliation_runs (profile_id, started_at, finished_at, trigger, result, details)
        VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run("binance-testnet", 300, 400, "test", "drift", JSON.stringify({ diffs: ["order mismatch"] }));
+    ).run("binance-testnet", Date.now(), Date.now() + 100, "test", "drift", JSON.stringify({ diffs: ["order mismatch"] }));
 
     const response = await GET(new NextRequest("http://localhost:3000/api/status/trading-health", {
       headers: { "x-maws-health-token": "status-health-token" },
@@ -215,5 +215,28 @@ describe("GET /api/status/trading-health", () => {
     });
     expect(body.execution.reconciliation.mismatches).toBe(1);
     expect(body.execution.reconciliation.recent[0].diffs).toEqual(["order mismatch"]);
+  });
+
+  test("excludes reconciliation mismatches recorded before the current server run", async () => {
+    freshEnv(makeCfg({ env: "testnet", healthToken: "status-health-token" }));
+    const db = getDb();
+    const insert = db.prepare(
+      `INSERT INTO reconciliation_runs (profile_id, started_at, finished_at, trigger, result, details)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    );
+    // A drift recorded by a previous server instance (before this process started).
+    insert.run("binance-testnet", Date.now() - 24 * 60 * 60 * 1000, Date.now(), "interval", "error", JSON.stringify({ diffs: ["stale"] }));
+    // A drift from the current run.
+    insert.run("binance-testnet", Date.now(), Date.now() + 100, "startup", "drift", JSON.stringify({ diffs: ["current"] }));
+
+    const response = await GET(new NextRequest("http://localhost:3000/api/status/trading-health", {
+      headers: { "x-maws-health-token": "status-health-token" },
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.execution.reconciliation.mismatches).toBe(1);
+    expect(body.execution.reconciliation.recent).toHaveLength(1);
+    expect(body.execution.reconciliation.recent[0]).toMatchObject({ trigger: "startup", diffs: ["current"] });
   });
 });

@@ -326,7 +326,7 @@ Response includes:
 - Execution gate state
 - Circuit breaker states
 
-For public Binance reachability, use `GET /api/health/broker`; it performs a lightweight Binance public API ping. In local Chart Only, the public API can be reachable while the server trading manager is idle. The `/status` page presents those as separate statuses so an idle server trading manager is not mistaken for a disconnected chart feed.
+For public Binance reachability, use `GET /api/health/broker`; it performs a lightweight Binance public API ping. In local Chart Only, the public API can be reachable while the server trading manager is idle. The Operations Console (`/admin`) presents those as separate blocks so an idle server trading manager is not mistaken for a disconnected chart feed.
 
 #### Health Check with Token
 

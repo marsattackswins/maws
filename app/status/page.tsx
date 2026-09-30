@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { isOperatorPageAuthorized } from "@/lib/server/auth/page-guard";
-import StatusPage from "./StatusPage";
 
 export const dynamic = "force-dynamic";
 
@@ -11,15 +10,16 @@ export default async function Page() {
 
   // Server-side authorization check:
   // local → anonymous allowed; non-local → session required.
+  // The page itself moved into the Operations Console at /admin.
   try {
     const authorized = isOperatorPageAuthorized(cookieHeader);
     if (!authorized) {
       redirect("/login");
     }
   } catch {
-    // Configuration load failure: fail closed, do not render the status page.
+    // Configuration load failure: fail closed, do not redirect anywhere.
     return (
-      <div className="min-h-screen bg-[#0b0e11] flex items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-[#0b0e11]">
         <div className="max-w-md text-center">
           <div className="mb-4 text-lg text-[#f23645]">Service Unavailable</div>
           <div className="text-sm text-[#787b86]">
@@ -30,5 +30,5 @@ export default async function Page() {
     );
   }
 
-  return <StatusPage />;
+  redirect("/admin");
 }

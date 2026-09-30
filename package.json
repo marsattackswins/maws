@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build": "next build && node scripts/prepare-standalone.mjs",
-    "start": "node scripts/start-standalone.mjs",
+    "start": "node scripts/supervisor.mjs",
+    "start:bare": "node scripts/start-standalone.mjs",
     "lint": "eslint",
     "test": "jest",
     "test:watch": "jest --watch",

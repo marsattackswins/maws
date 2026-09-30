@@ -7,6 +7,21 @@ export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
   const { log } = await import("@/lib/server/log/logger");
+
+  // Mirror stdout/stderr into an in-memory ring buffer for the /admin
+  // "Terminal logs" panel. Must run before the first log line is emitted.
+  const { installTerminalCapture } = await import("@/lib/server/log/terminal-capture");
+  installTerminalCapture();
+
+  // An explicitly started server always means "run": clear a stale
+  // desired=off so the supervisor will (re)start it next time.
+  const { markRunning } = await import("@/lib/server/app-power");
+  try {
+    markRunning();
+  } catch {
+    // State file is best-effort; never block startup on it.
+  }
+
   log.info("server startup routines initializing...");
 
   const { serverConfig } = await import("@/lib/server/env/config");

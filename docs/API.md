@@ -649,6 +649,80 @@ curl -H "x-maws-health-token: your-token" \
 
 ---
 
+### GET /api/admin/power
+
+Reports application power status. The app is always running when this endpoint responds; `desired` reflects what the supervisor should do (written to `.maws/app-state.json`).
+
+**Authentication**: Required (session cookie OR supervisor token) — anonymous in local mode
+
+**Response** (200 OK):
+```json
+{
+  "running": true,
+  "desired": "on",
+  "timestamp": 1234567890000
+}
+```
+
+---
+
+### POST /api/admin/power
+
+Stop the application. Requires `{"confirm":"STOP"}`. Writes `desired=off` for the supervisor, audit-logs `app.stop`, then runs the same graceful shutdown as Ctrl+C (stream-lease release + DB checkpoint) before the process exits.
+
+- **Operator calls** (session + CSRF header, or anonymous in local mode with origin binding) flip the desired state and audit.
+- **Supervisor calls** (`x-maws-supervisor-token` header) perform graceful teardown only — they never change desired state. The supervisor uses this on Ctrl+C because Windows cannot deliver signals to a child process.
+
+**Authentication**: Required (session cookie OR supervisor token) — anonymous in local mode
+
+**Request**:
+```json
+{"confirm": "STOP"}
+```
+
+**Response** (200 OK):
+```json
+{
+  "ok": true,
+  "desired": "off",
+  "message": "Stopping the application"
+}
+```
+
+After stopping, restart from the supervisor control page (`http://127.0.0.1:3001`), or run `npm start` / `npm run start:supervised` again. An explicitly started server clears the stale `desired=off` at boot.
+
+---
+
+### GET /api/admin/logs
+
+Get the most recent server terminal output (stdout/stderr) captured in memory by the running process. This is the same text the `npm start` / `npm run dev` terminal prints, exposed so the Operations Console can show it. Lines are kept in a bounded ring buffer (last 1000) and reset when the server restarts.
+
+**Authentication**: Required (session cookie OR health token header) — anonymous in local mode
+
+**Query Parameters**:
+- `limit` (optional): Max lines returned (default: 200, max: 1000)
+
+**Response** (200 OK):
+```json
+{
+  "timestamp": 1234567890000,
+  "total": 812,
+  "dropped": 3,
+  "lines": [
+    { "seq": 810, "ts": 1234567890000, "stream": "stdout", "text": "[2026-09-28 10:15:00 AM] [INFO] clock synced (offsetMs: 12, rttMs: 45)" },
+    { "seq": 811, "ts": 1234567890123, "stream": "stderr", "text": "Warning: something degraded" }
+  ]
+}
+```
+
+**Example with health token**:
+```bash
+curl -H "x-maws-health-token: your-token" \
+  http://localhost:3000/api/admin/logs
+```
+
+---
+
 ### GET /api/admin/circuits
 
 Get circuit breaker status for all circuits.

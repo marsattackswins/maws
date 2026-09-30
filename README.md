@@ -71,9 +71,9 @@ Your local database is stored in `.maws/maws.db`. It is local working data and s
 
 - [`/`](http://localhost:3000/) — Main MAWS trading dashboard
 - [`/login`](http://localhost:3000/login) — Operator login
-- [`/status`](http://localhost:3000/status) — Application and Binance connectivity status
-- [`/admin`](http://localhost:3000/admin) — Admin dashboard
-- [`/admin/journal`](http://localhost:3000/admin/journal) — Audit journal
+- [`/admin`](http://localhost:3000/admin) — Operations Console: system health, Binance connectivity, risk, and execution activity
+- [`/admin/journal`](http://localhost:3000/admin/journal) — Trade journal
+- `/status` — redirects to the Operations Console
 
 The status page separates public Binance connectivity from optional server-side trading. In Chart Only, **Server Trading: Not running** is expected; it does not mean Binance market data or the charts are disconnected.
 

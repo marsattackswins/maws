@@ -1020,6 +1020,19 @@ curl -H "x-maws-health-token: <token>" \
   http://localhost:3000/api/admin/metrics
 ```
 
+## App power (supervised mode)
+
+`npm start` runs the server under `scripts/supervisor.mjs`, which adds crash restarts and an operator-facing stop/start. `npm run start:bare` starts the server directly without a supervisor (used by scripts that must manage the process themselves).
+
+- **Stop app** on `/admin` (header, red power button): writes `desired=off` to `.maws/app-state.json`, audit-logs `app.stop`, then runs the same graceful shutdown as Ctrl+C (stream-lease release + DB checkpoint). Requires a confirmation in the UI; the API requires `{"confirm":"STOP"}`.
+- **Port takeover**: while the app is stopped, the supervisor binds the app port itself and serves a power page for every URL — including `/admin`. `http://localhost:3000` always answers something: the app when running, the power screen when stopped. Pressing **Start app** there hands the port back to the real app and reloads the console.
+- **Fallback control page** at `http://127.0.0.1:3001` (loopback only) serves the same power page; useful if something else holds the app port. Bind port: `MAWS_CONTROL_PORT`. Takeover bind host: `MAWS_SUPERVISOR_BIND` (default `0.0.0.0`, matching the app).
+- **Crash restarts**: if the server process dies while `desired=on`, the supervisor restarts it after 3s, up to 5 times per 10-minute window, then gives up and serves the power page. An explicit Start resets that budget.
+- **Ctrl+C on the supervisor** stops the child gracefully via the app's stop endpoint (Windows cannot deliver signals to a child) and does **not** leave the app stopped — the next supervisor run starts it again.
+- An explicitly started server clears a stale `desired=off` at boot, so starting always means "run".
+
+Without the supervisor (`npm run start:bare`), the Stop button shuts the app down and it stays down until you start it manually; nothing serves the port afterwards.
+
 ## Admin dashboard troubleshooting
 
 The admin dashboard is available at `http://localhost:3000/admin` and refreshes its health, performance, and metrics requests every five seconds. The dashboard calls `/api/admin/health`, `/api/admin/performance`, and `/api/admin/metrics`; use the health endpoints below to distinguish an application problem from an authentication or connectivity problem.

@@ -289,14 +289,12 @@ describe("status page", () => {
   });
 
   describe("status page rendering", () => {
-    test("StatusPage component renders loading state initially", async () => {
-      const { default: StatusPage } = await import("@/app/status/StatusPage");
+    test("status page entry exists and redirects to the Operations Console", async () => {
+      const { default: StatusRedirect } = await import("@/app/status/page");
 
-      // StatusPage is a client component, we can't render it directly in tests
-      // without a full DOM environment. This test verifies the component exists
-      // and has the expected structure.
-      expect(typeof StatusPage).toBe("function");
-      expect(StatusPage.name).toBe("StatusPage");
+      // The standalone status page was merged into the Operations Console.
+      // The /status route remains as an authorized redirect to /admin.
+      expect(typeof StatusRedirect).toBe("function");
     });
   });
 });

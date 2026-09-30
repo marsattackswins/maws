@@ -56,17 +56,21 @@ export async function GET(req: Request): Promise<Response> {
     const reconciliationCount = db
       .prepare(`SELECT COUNT(*) AS count FROM reconciliation_runs WHERE profile_id = ?`)
       .get(profile.id) as { count: number };
+    // Mismatch counts and the recent list cover the current server run only.
+    // Runs recorded by a previous process instance stay in the DB for the
+    // journal/lifetime metrics but must not keep the operator badge orange.
+    const runStartedAt = Date.now() - process.uptime() * 1000;
     const reconciliationMismatchCount = db
-      .prepare(`SELECT COUNT(*) AS count FROM reconciliation_runs WHERE profile_id = ? AND result IN ('drift', 'error')`)
-      .get(profile.id) as { count: number };
+      .prepare(`SELECT COUNT(*) AS count FROM reconciliation_runs WHERE profile_id = ? AND result IN ('drift', 'error') AND started_at >= ?`)
+      .get(profile.id, runStartedAt) as { count: number };
     const reconciliationRows = db
       .prepare(
         `SELECT started_at, finished_at, trigger, result, details
          FROM reconciliation_runs
-         WHERE profile_id = ? AND result IN ('drift', 'error')
+         WHERE profile_id = ? AND result IN ('drift', 'error') AND started_at >= ?
          ORDER BY id DESC LIMIT ?`,
       )
-      .all(profile.id, RECENT_LIMIT) as Array<{
+      .all(profile.id, runStartedAt, RECENT_LIMIT) as Array<{
         started_at: number;
         finished_at: number | null;
         trigger: string;
