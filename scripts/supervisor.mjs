@@ -165,7 +165,9 @@ function spawnChild() {
   const entry = path.join(root, "scripts", "start-standalone.mjs");
   const proc = spawn(process.execPath, [entry], {
     cwd: root,
-    env: { ...process.env, MAWS_SUPERVISOR_TOKEN: supervisorToken },
+    // The child chdir's into .next/standalone; pin the state dir so its
+    // desired=off writes land where the supervisor reads them.
+    env: { ...process.env, MAWS_SUPERVISOR_TOKEN: supervisorToken, MAWS_STATE_DIR: stateDir },
     stdio: ["ignore", "inherit", "inherit"],
   });
   childStartedAt = Date.now();

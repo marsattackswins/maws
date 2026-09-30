@@ -64,6 +64,30 @@ describe("app power state file", () => {
   });
 });
 
+describe("state directory pinning", () => {
+  test("MAWS_STATE_DIR override wins over cwd so chdir'd servers write to the supervisor's directory", async () => {
+    // Regression: the standalone server chdir's into .next/standalone, so a
+    // cwd-based state dir scattered desired=off into the build output while
+    // the supervisor kept reading <root>/.maws and auto-restarted the app.
+    const pinned = fs.mkdtempSync(path.join(os.tmpdir(), "maws-pinned-"));
+    process.chdir(stateDir); // simulate the chdir away from the project root
+    try {
+      process.env.MAWS_STATE_DIR = pinned;
+      const power = await loadModule();
+      power.writeDesiredState("off");
+      expect(power.readDesiredState().desired).toBe("off");
+      expect(fs.existsSync(path.join(pinned, "app-state.json"))).toBe(true);
+      expect(fs.existsSync(path.join(stateDir, "app-state.json"))).toBe(false);
+    } finally {
+      const { cwd } = await import("node:process");
+      const projectRoot = path.resolve(cwd(), "../..");
+      // jest runs with cwd = project root; restore by absolute path.
+      process.chdir(projectRoot.includes(os.tmpdir()) ? stateDir : projectRoot);
+      fs.rmSync(pinned, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("supervisor token", () => {
   test("prefers env over disk and validates callers", async () => {
     fs.writeFileSync(path.join(stateDir, "supervisor-token"), "disk-token", "utf8");

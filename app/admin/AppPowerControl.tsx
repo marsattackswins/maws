@@ -47,6 +47,23 @@ export default function AppPowerControl({ className }: { className?: string }) {
     setBusy(true);
     setError(null);
     try {
+      // Only call /start when the SUPERVISOR is answering this origin. If the
+      // app itself is still up (desired flip failed, bare start, takeover port
+      // busy), /start would 404 on the app. running=true => the app is already
+      // back; just reload. refused => no supervisor holding the port either;
+      // tell the operator to start from the terminal.
+      const probe = await fetch("/api/admin/power", { cache: "no-store" })
+        .then((r) => (r.ok ? (r.json() as Promise<PowerStatus>) : null))
+        .catch(() => null);
+      if (probe?.running === true) {
+        window.location.reload();
+        return;
+      }
+      if (!probe) {
+        throw new Error(
+          "Nothing is serving this URL — start the app from the terminal (npm start) or via the supervisor control page on port 3001.",
+        );
+      }
       const res = await fetch("/start", { method: "POST" });
       if (!res.ok) throw new Error(`Start failed (${res.status})`);
       // The takeover listener closes while the app boots, so connections are
@@ -65,13 +82,13 @@ export default function AppPowerControl({ className }: { className?: string }) {
           // Expected while the port changes owners.
         }
         if (Date.now() < deadline) {
-          pollRef.current = window.setTimeout(poll, 1000);
+          pollRef.current = window.setTimeout(poll, 1_000);
         } else {
           setError("The app did not come back within 90 seconds — check the server terminal.");
           setBusy(false);
         }
       };
-      pollRef.current = window.setTimeout(poll, 1000);
+      pollRef.current = window.setTimeout(poll, 1_000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Start failed");
       setBusy(false);
@@ -112,6 +129,8 @@ export default function AppPowerControl({ className }: { className?: string }) {
       }
       // The app is going down. The supervisor's takeover listener will answer
       // this origin shortly; poll until it does, then show the power screen.
+      // If the origin stops answering entirely (bare start, no supervisor),
+      // still show the screen — it explains how to start again.
       setStoppedScreen(true);
       const deadline = Date.now() + 30_000;
       const poll = async () => {

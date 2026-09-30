@@ -31,6 +31,9 @@ dotenv.config({ path: path.join(root, ".env") });
 // the disposable build output and Windows can rebuild while the server stops.
 // The production server gets its own database by default so dev and prod
 // never share leases, kill-switch state, or audit history.
+// Same for the supervisor state directory: the app must write
+// .maws/app-state.json next to the supervisor, not inside the build output.
+process.env.MAWS_STATE_DIR = process.env.MAWS_STATE_DIR?.trim() || path.join(root, ".maws");
 const configuredDbPath = process.env.MAWS_DB_PATH?.trim();
 process.env.MAWS_DB_PATH = configuredDbPath
   ? path.isAbsolute(configuredDbPath)
