@@ -2,7 +2,7 @@
 
 **Market Analysis & Workflow System**
 
-MAWS is a browser-based workspace for studying markets and, when you choose, trading through Binance Futures. It combines charts, indicators, drawings, replay tools, market news, the Xoomar economic calendar, Paper Trading, and optional Binance Testnet or Production connections.
+MAWS is a browser-based workspace for studying markets and, when you choose, trading through Binance Futures. It combines a professional multi-chart terminal (powered by LuxAlgo's Vela charting engine), indicators, drawings, replay tools, market news, the Xoomar economic calendar, Paper Trading, and optional Binance Testnet or Production connections.
 
 > **Safety first:** Start in Chart Only or Paper Trading. Use Testnet before Production. Binance API keys must not have withdrawal permission. MAWS is a tool, not financial advice.
 
@@ -12,7 +12,7 @@ MAWS keeps the charting experience in the browser, but keeps trading authority o
 
 ```text
 Your browser
-  charts, indicators, drawings, calendar, news, and Trade controls
+  Vela multi-chart workspace, indicators, drawings, calendar, news, and Trade controls
         |
         v
 MAWS server
@@ -25,6 +25,20 @@ Paper Trading or Binance
 ```
 
 The browser never receives Binance secrets. The server checks account state, connection health, fresh market/account data, reconciliation, execution settings, and risk limits before accepting a live order. If something is uncertain or unhealthy, MAWS blocks the action instead of guessing.
+
+### Charting engine
+
+MAWS uses LuxAlgo's Vela charting library (Apache-2.0) as its primary charting engine. The vendored source lives in `lib/charting/` and is consumed directly by the app, allowing local fixes and customization. Key features:
+
+- **Multi-cell workspace**: Grid layout with synchronized crosshair, viewport, symbol, and timeframe
+- **Native indicators**: Bollinger Bands, MACD, RSI, order blocks, PMO, volume profiles, and more
+- **Drawing tools**: Trend lines, horizontal lines, rectangles, fib retracements, and custom drawings
+- **Event marks**: Economic calendar releases and news headlines on the timeline
+- **Replay mode**: Historical playback with seek controls and bar-by-bar stepping
+- **Layout persistence**: Save and restore workspace layouts with drawings and settings
+- **Pine Script support**: Execute TradingView-style Pine indicators via @luxalgo/vela-pinets
+
+The Vela integration is documented in `docs/vela-integration-audit.md` and `lib/charting/README.md`.
 
 ### The four choices you can use
 
@@ -145,11 +159,24 @@ MAWS will still block orders if health, reconciliation, account state, risk limi
 
 ### Charting
 
+MAWS uses LuxAlgo's Vela charting engine (vendored source in `lib/charting/`) for professional-grade charting:
+
 1. Start MAWS and remain in Chart Only.
 2. Choose a symbol and timeframe.
 3. Add indicators, drawings, linked charts, volume, layouts, replay, news, and calendar views as needed.
 4. Use the economic calendar as an information source; MAWS currently gets those events from Xoomar.
-5. Open **Trade** only when you intentionally want to attach Paper Trading or a Binance profile.
+5. Explore chart settings via the settings dialog (symbol type, canvas styling, scales, margins, session breaks, event marks, and theme).
+6. Open **Trade** only when you intentionally want to attach Paper Trading or a Binance profile.
+
+**Chart features:**
+- Multi-cell workspace with synchronized crosshair and viewport
+- Native indicators (Bollinger, MACD, RSI, order blocks, PMO, volume profiles)
+- Custom drawings with toolbar and context menu
+- Session breaks shading (by market or custom sessions)
+- Event marks on the timeline (economic calendar releases, news headlines)
+- Replay mode with seek controls and historical playback
+- Layout templates and workspace persistence
+- Pine Script indicator support via @luxalgo/vela-pinets
 
 ### Paper Trading
 
@@ -181,6 +208,7 @@ npx tsc --noEmit --pretty false
 npm run build
 npx playwright test
 npm run secret-scan
+npm run test:charting  # Vela engine test suite (vitest)
 ```
 
 Integration tests use Binance Testnet only and require a separate `.env.integration` file. Never use Production credentials for tests.
@@ -191,4 +219,6 @@ Integration tests use Binance Testnet only and require a separate `.env.integrat
 - [`docs/API.md`](docs/API.md) — API reference
 - [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — operations and troubleshooting
 - [`docs/SECURITY.md`](docs/SECURITY.md) — security details
+- [`docs/vela-integration-audit.md`](docs/vela-integration-audit.md) — Vela charting engine integration audit
+- [`lib/charting/README.md`](lib/charting/README.md) — Vela charting engine documentation
 - [`obsidian-vault/`](obsidian-vault/) — local Obsidian notes; ignored by Git

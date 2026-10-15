@@ -10,7 +10,7 @@ MAWS provides a secure, browser-based interface for cryptocurrency futures tradi
 
 ### Key Features
 
-- **Multi-Chart Terminal**: Simultaneous chart analysis with custom indicators and drawings
+- **Multi-Chart Terminal**: Simultaneous chart analysis with custom indicators and drawings (powered by LuxAlgo's Vela charting engine)
 - **Live Trading**: Direct integration with Binance USD-M Futures (testnet and production)
 - **Broker Abstraction**: Extensible interface for multi-broker support (currently Binance)
 - **Risk Management**: Configurable risk limits, price collars, and execution gates
@@ -25,7 +25,7 @@ MAWS provides a secure, browser-based interface for cryptocurrency futures tradi
 graph TB
     subgraph "Client Layer"
         UI[Next.js Frontend]
-        Charts[Lightweight Charts]
+        Charts[Vela Charting Engine]
     end
 
     subgraph "API Layer"
@@ -100,6 +100,20 @@ The system uses a broker-agnostic interface (`IBroker`) that normalizes operatio
 - Event-driven updates via SSE instead of polling
 - Async initialization with connection lifecycle management
 - Stateless operations with external state authority
+
+### Charting Engine
+
+MAWS uses LuxAlgo's Vela charting library (Apache-2.0) as its primary charting engine. The vendored source lives in `lib/charting/` and is consumed directly by the app:
+
+- **Multi-cell workspace**: Grid layout with synchronized crosshair, viewport, symbol, and timeframe
+- **Native indicators**: Bollinger Bands, MACD, RSI, order blocks, PMO, volume profiles, and more
+- **Drawing tools**: Trend lines, horizontal lines, rectangles, fib retracements, and custom drawings
+- **Event marks**: Economic calendar releases and news headlines on the timeline
+- **Replay mode**: Historical playback with seek controls and bar-by-bar stepping
+- **Layout persistence**: Save and restore workspace layouts with drawings and settings
+- **Pine Script support**: Execute TradingView-style Pine indicators via @luxalgo/vela-pinets
+
+The Vela integration is documented in `docs/vela-integration-audit.md` and `lib/charting/README.md`. The engine's own test suite runs via `npm run test:charting` (vitest), while the app's jest suite mocks the engine via `__mocks__/vela.js`.
 
 ### Circuit Breakers
 
@@ -500,6 +514,7 @@ node scripts/restore-backup.mjs .maws/backups/<file>.db.enc
 - [Security Model](SECURITY.md) - Authentication, secrets, and security practices
 - [Architecture Decisions](DECISIONS/) - ADRs for major technical choices
 - [Runbooks](runbooks/) - Operational runbooks for common procedures
+- [Vela Integration Audit](vela-integration-audit.md) - Detailed audit of the Vela charting engine integration
 
 ## See Also
 
