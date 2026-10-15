@@ -44,7 +44,7 @@ function Seasonals({
 
   return (
     <div className="px-3 py-2">
-      <div className="mb-1 text-[13px] font-semibold text-[#d1d4dc]">Seasonals</div>
+      <div className="mb-1 text-[13px] font-semibold text-(--app-text)">Seasonals</div>
       <svg viewBox={`0 0 ${w} ${h}`} className="h-[78px] w-full">
         {series.map((s) => (
           <path key={s.year} d={path(s.points)} fill="none" stroke={s.color} strokeWidth={s === series[series.length - 1] ? 2.2 : 1.4} />
@@ -75,13 +75,13 @@ function Seasonals({
       <div className="mt-1 flex items-center justify-between">
         <div className="flex gap-3 text-[11px]">
           {series.map((s) => (
-            <span key={s.year} className="flex items-center gap-1 text-[#787b86]">
+            <span key={s.year} className="flex items-center gap-1 text-(--app-muted)">
               <span className="h-1.5 w-1.5 rounded-full" style={{ background: s.color }} />
               {s.year}
             </span>
           ))}
         </div>
-        <span className="rounded-full border border-[#222222] px-2 py-[2px] text-[11px] text-[#787b86]">
+        <span className="rounded-full border border-(--app-border) px-2 py-[2px] text-[11px] text-(--app-muted)">
           More seasonals
         </span>
       </div>
@@ -156,12 +156,12 @@ export function SymbolDetails() {
       <div className="flex items-center justify-between px-3 pt-2">
         <div className="flex min-w-0 items-center gap-2">
           <AssetLogo symbol={pane.symbol} size={24} />
-          <span className="truncate text-[15px] font-semibold text-[#d1d4dc]">{formatTicker(pane.symbol)}</span>
+          <span className="truncate text-[15px] font-semibold text-(--app-text)">{formatTicker(pane.symbol)}</span>
         </div>
-        <div className="flex items-center gap-0.5 text-[#787b86]">
+        <div className="flex items-center gap-0.5 text-(--app-muted)">
           <button
             type="button"
-            className="flex h-7 w-7 items-center justify-center rounded-[4px] hover:bg-[#222222]"
+            className="flex h-7 w-7 items-center justify-center rounded-[4px] hover:bg-(--app-hover)"
             title="Watchlist"
             onClick={() => setRightDock("strategy")}
           >
@@ -169,7 +169,7 @@ export function SymbolDetails() {
           </button>
           <button
             type="button"
-            className="flex h-7 w-7 items-center justify-center rounded-[4px] hover:bg-[#222222]"
+            className="flex h-7 w-7 items-center justify-center rounded-[4px] hover:bg-(--app-hover)"
             title="Change symbol"
             onClick={() => setSearchOpen(true)}
           >
@@ -177,7 +177,7 @@ export function SymbolDetails() {
           </button>
           <button
             type="button"
-            className="flex h-7 w-7 items-center justify-center rounded-[4px] hover:bg-[#222222]"
+            className="flex h-7 w-7 items-center justify-center rounded-[4px] hover:bg-(--app-hover)"
             title="More"
           >
             <Ellipsis size={14} />
@@ -185,16 +185,16 @@ export function SymbolDetails() {
         </div>
       </div>
 
-      <div className="px-3 pt-0.5 text-[11px] leading-4 text-[#787b86]">
+      <div className="px-3 pt-0.5 text-[11px] leading-4 text-(--app-muted)">
         {info.name} / TetherUS PERPETUAL CONTRACT
         <span className="ml-2">BINANCE</span>
         <span className="ml-2">Swap • Crypto</span>
       </div>
 
       <div className="px-3 pt-3">
-        <div className="text-[28px] leading-none font-semibold tracking-tight text-[#d1d4dc]">
+        <div className="text-[28px] leading-none font-semibold tracking-tight text-(--app-text)">
           {quote ? formatPrice(pane.symbol, quote.last) : "—"}
-          <span className="ml-1 text-[13px] font-normal text-[#787b86]">{info.quote}</span>
+          <span className="ml-1 text-[13px] font-normal text-(--app-muted)">{info.quote}</span>
         </div>
         <div className={`mt-1.5 text-[13px] ${up ? "text-[#089981]" : "text-[#f23645]"}`}>
           {quote
@@ -209,7 +209,7 @@ export function SymbolDetails() {
 
       {latestNews ? (
         <div className="px-3 py-3">
-          <div className="rounded-[8px] bg-[#2a2148] px-3 py-2.5">
+          <div className="rounded-[8px] bg-[color-mix(in_srgb,var(--app-elevated)_88%,#7c4dff)] px-3 py-2.5">
             <div className="text-[11px] text-[#b39ddb]">
               News
               {headline ? ` • ${formatNewsAge(headline.at)}` : ""}
@@ -229,7 +229,7 @@ export function SymbolDetails() {
       ) : null}
 
       <div className="px-3 pb-3">
-        <div className="mb-2 text-[13px] font-semibold text-[#d1d4dc]">Performance</div>
+        <div className="mb-2 text-[13px] font-semibold text-(--app-text)">Performance</div>
         <div className="grid grid-cols-3 gap-1.5">
           {stats.map(([label, value]) => {
             const pos = (value ?? 0) >= 0;
@@ -238,10 +238,10 @@ export function SymbolDetails() {
                 key={label}
                 className={`rounded-[6px] px-2 py-2 ${
                   value == null
-                    ? "bg-[var(--maws-elevated)]"
+                    ? "bg-(--app-elevated)"
                     : pos
-                      ? "bg-[#0e3d38]"
-                      : "bg-[#3d1a22]"
+                      ? "bg-[color-mix(in_srgb,var(--vela-up,\"#089981\")_18%,var(--app-panel))]"
+                      : "bg-[color-mix(in_srgb,var(--vela-down,\"#f23645\")_16%,var(--app-panel))]"
                 }`}
               >
                 <div
@@ -251,7 +251,7 @@ export function SymbolDetails() {
                 >
                   {value == null ? "—" : `${value.toFixed(2)}%`}
                 </div>
-                <div className="text-[11px] text-[#787b86]">{label}</div>
+                <div className="text-[11px] text-(--app-muted)">{label}</div>
               </div>
             );
           })}

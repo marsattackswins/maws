@@ -165,7 +165,7 @@ export function TradingSettingsModal() {
                   onFocus={(e) => e.currentTarget.select()}
                 />
                 {isPercent ? (
-                  <span className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-[13px] text-[#787b86]">
+                  <span className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-[13px] text-(--app-muted)">
                     %
                   </span>
                 ) : null}

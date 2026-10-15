@@ -28,6 +28,9 @@ const eslintConfig = defineConfig([
     ".next-e2e/**",
     "test-results/**",
     "playwright-report/**",
+    // Absorbed charting engine (LuxAlgo vela, Apache-2.0) — keeps its own
+    // conventions and vitest suite; the app's lint rules don't apply.
+    "lib/charting/**",
   ]),
 ]);
 

@@ -6,7 +6,10 @@ const root = resolve(__dirname, "../..");
 const appShell = readFileSync(resolve(root, "components/shell/AppShell.tsx"), "utf8");
 const topBar = readFileSync(resolve(root, "components/shell/TopBar.tsx"), "utf8");
 const bottomPanel = readFileSync(resolve(root, "components/shell/BottomPanel.tsx"), "utf8");
-const chartScaleMenu = readFileSync(resolve(root, "components/charts/ChartScaleMenu.tsx"), "utf8");
+const settingsDialog = readFileSync(
+  resolve(root, "lib/charting/renderers/native/chrome/SettingsDialog.ts"),
+  "utf8",
+);
 
 describe("shell bottom-area layout", () => {
   test("does not render or retain the obsolete StatusBar", () => {
@@ -31,7 +34,18 @@ describe("shell bottom-area layout", () => {
   });
 
   test("keeps the chart-level timezone selector", () => {
-    expect(chartScaleMenu).toContain("function TimezonePicker");
-    expect(chartScaleMenu).toContain('className="scale-menu-tz-title">Timezone</span>');
+    // The legacy scale-menu TimezonePicker is gone (Vela ships its own scale
+    // controls); the timezone selector lives in the chart settings dialog.
+    expect(settingsDialog).toContain("sectionTitle('Time zone')");
+    expect(settingsDialog).toContain("selectRowLabeled('Time zone'");
+  });
+
+  test("does not resurrect the legacy chart-scale chrome", () => {
+    // Old MAWS overlays superseded by Vela's built-in price-scale controls
+    // (A/L buttons on hover) and the TopBar settings menu.
+    for (const file of ["ChartAutoScale.tsx", "ChartScaleMenu.tsx", "IndicatorPaneAutoScale.tsx"]) {
+      expect(existsSync(resolve(root, `components/charts/${file}`))).toBe(false);
+    }
+    expect(appShell).not.toContain("ChartAutoScale");
   });
 });

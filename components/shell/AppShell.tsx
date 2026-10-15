@@ -1,7 +1,7 @@
 "use client";
 
 import { ChartContextMenu } from "@/components/charts/ChartContextMenu";
-import { ChartGrid } from "@/components/charts/ChartGrid";
+import { VelaWorkspaceHost } from "@/components/charts/VelaWorkspaceHost";
 import { SymbolSearch } from "@/components/charts/SymbolSearch";
 import { SettingsModal } from "@/components/settings/SettingsModal";
 import { IndicatorSettingsModal } from "@/components/settings/IndicatorSettingsModal";
@@ -33,6 +33,13 @@ import { useEffect, useRef, useState } from "react";
 
 type ChartRange = "1D" | "5D" | "1M" | "3M" | "6M" | "YTD" | "1Y" | "5Y" | "All";
 
+/**
+ * Host the chart grid on Vela's workspace engine (phased VelaWorkspace migration).
+ * The legacy ChartGrid path has been removed; this constant is now a one-way opt-in
+ * kept for parity with the migration docs until the env var is retired.
+ */
+const USE_VELA_WORKSPACE = process.env.NEXT_PUBLIC_MAWS_VELA_WORKSPACE === "true";
+
 function rangeSeconds(range: ChartRange): number | null {
   const day = 86400;
   if (range === "All") return null;
@@ -63,13 +70,16 @@ function ChartRangeSync() {
     const candles = mawsFeed.getCandles(pane.symbol, pane.timeframe);
     const seconds = rangeSeconds(range);
     if (seconds == null) {
-      handle.chart.timeScale().fitContent();
+      handle.vela.setVisibleRangePreset("ALL");
       return;
     }
     const bars = Math.max(20, Math.round(seconds / timeframeSeconds(pane.timeframe)));
-    const to = candles.length + 4;
-    const from = Math.max(0, candles.length - bars);
-    handle.chart.timeScale().setVisibleLogicalRange({ from, to });
+    const tip = candles.at(-1);
+    if (!tip) return;
+    handle.vela.setVisibleRange({
+      from: (tip.time - bars * timeframeSeconds(pane.timeframe)) * 1000,
+      to: tip.time * 1000 + 60_000,
+    });
   }, [range, pane.id, pane.symbol, pane.timeframe]);
 
   return null;
@@ -98,14 +108,14 @@ function LiveNotices() {
               ? "border-[#f23645] bg-[#1a0b0d] text-[#f23645]"
               : n.tone === "success"
                 ? "border-[#089981] bg-[#071512] text-[#089981]"
-                : "border-[#2a2e39] bg-[#1b1b1b] text-[#d1d4dc]"
+                : "border-(--app-border) bg-(--app-elevated) text-(--app-text)"
           }`}
         >
           <span className="min-w-0 flex-1 break-words">{n.text}</span>
           <button
             type="button"
             aria-label="Dismiss"
-            className="shrink-0 text-[#787b86] hover:text-[#d1d4dc]"
+            className="shrink-0 text-(--app-muted) hover:text-(--app-text)"
             onClick={() => dismissNotice(n.id)}
           >
             <X size={13} />
@@ -168,8 +178,12 @@ export function AppShell() {
           break;
         case "fitChart": {
           if (!pane) return;
-          getChart(pane.id)?.chart.timeScale().fitContent();
-          getChart(pane.id)?.chart.priceScale("right").setAutoScale(true);
+          getChart(pane.id)?.vela.setVisibleRangePreset("ALL");
+          try {
+            getChart(pane.id)?.vela.renderer.set("autoScale", true);
+          } catch {
+            /* ignore */
+          }
           s.setRange("All");
           break;
         }
@@ -206,10 +220,9 @@ export function AppShell() {
         }
         case "drawHorizontalRay": {
           if (!pane || price == null) return;
-          const handle = getChart(pane.id);
-          const from = handle?.chart.timeScale().getVisibleRange()?.from;
+          const from = getChart(pane.id)?.vela.getVisibleRange()?.from;
           const time =
-            typeof from === "number" ? from : (cross?.time ?? Math.floor(Date.now() / 1000));
+            typeof from === "number" ? Math.floor(from / 1000) : (cross?.time ?? Math.floor(Date.now() / 1000));
           s.addDrawing(pane.id, {
             id: Math.random().toString(36).slice(2, 10),
             tool: "hray",
@@ -229,7 +242,8 @@ export function AppShell() {
           break;
         }
         case "openChartSettings":
-          setSettingsOpen(true);
+          // Open Vela's native settings dialog (the unified settings panel).
+          (getChart(s.activePaneId)?.renderer as unknown as { openSettings?: (s?: string) => void }).openSettings?.();
           break;
         case "cursorTool":
           setDrawingTool("cursor");
@@ -278,7 +292,14 @@ export function AppShell() {
           return;
         }
         if (s.replay) {
+          // Stop Vela replay so live data resumes, then clear the store.
+          const chart = getChart(s.replay.paneId)?.vela;
+          if (chart?.replay.state.active) chart.replay.stop();
           s.stopReplay();
+          return;
+        }
+        if (s.replaySeeking) {
+          s.setReplaySeeking(false);
           return;
         }
       }
@@ -321,7 +342,7 @@ export function AppShell() {
       <div className="flex min-h-0 flex-1">
         <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="min-h-0 flex-1">
-            <ChartGrid />
+            <VelaWorkspaceHost />
           </div>
           <ChartRangeSync />
           <BottomPanel />

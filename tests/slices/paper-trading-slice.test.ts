@@ -24,7 +24,7 @@ import type {
  *   - resetPaperAccount full semantics incl. the chartSettings.defaultLeverage
  *     cross-slice contract, proven atomic via the counting-set harness;
  *   - persistence boundary: the nine paper fields keep their positions
- *     (#33–37 and #46–49) in the frozen 50-key workspacePartialize output.
+ *     (#33–37 and #46–49) in the frozen 51-key workspacePartialize output.
  */
 
 const PAPER_FIELDS = [
@@ -304,12 +304,12 @@ describe("paper account actions", () => {
   });
 });
 
-describe("persistence boundary (50-key schema)", () => {
+describe("persistence boundary (51-key schema)", () => {
   it("keeps the nine paper fields at positions #33-37 and #46-49", () => {
     const keys = Object.keys(workspacePartialize(useAppStore.getState()));
-    expect(keys).toHaveLength(50);
-    expect(keys.slice(32, 37)).toEqual(["orders", "positions", "orderHistory", "balanceHistory", "journal"]);
-    expect(keys.slice(45, 49)).toEqual(["connectedBroker", "mockBalance", "mockRealized", "paperAccount"]);
+    expect(keys).toHaveLength(51);
+    expect(keys.slice(33, 38)).toEqual(["orders", "positions", "orderHistory", "balanceHistory", "journal"]);
+    expect(keys.slice(46, 50)).toEqual(["connectedBroker", "mockBalance", "mockRealized", "paperAccount"]);
   });
 });
 

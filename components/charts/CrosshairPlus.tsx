@@ -1,117 +1,34 @@
 "use client";
 
-import { getChart } from "@/lib/chart-registry";
-import {
-  computeAdx,
-  computeAtr,
-  computeEmaPlot,
-  computePmo,
-  computeRsi,
-  computeStochastic,
-  computeVwapPlot,
-  indicatorTitle,
-  PANE_INDICATORS,
-} from "@/lib/indicators";
-import { formatPrice, mawsFeed } from "@/lib/maws/feed";
+/**
+ * CrosshairPlus.tsx — Vela implementation.
+ *
+ * Hover-state is driven by Vela's public crosshair seam (onCrosshairMove), and
+ * Buy/Sell rows go through the existing MAWS dispatch layer — Vela never sees
+ * broker credentials or executes orders.
+ */
+
+import { formatPrice } from "@/lib/maws/feed";
+import { getChart, setLastCrosshair } from "@/lib/chart-registry";
 import { useAppStore } from "@/lib/store";
 import { newClientOrderId, submitOrderFromUi } from "@/lib/trading/ui-orders";
 import { resolveOrderQty } from "@/lib/trading/symbol-settings";
 import type {
-  AdxIndicatorSettings,
-  AtrIndicatorSettings,
   ChartHover,
   ChartPaneState,
-  EmaIndicatorSettings,
-  IndicatorInstance,
-  PmoIndicatorSettings,
-  RsiIndicatorSettings,
-  StochIndicatorSettings,
-  VwapIndicatorSettings,
 } from "@/types";
 import { AlarmClock, ChevronsDown, ChevronsUp, Minus, Plus } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-const TIME_AXIS_PAD = 28;
-
-function studyValue(
-  pane: ChartPaneState,
-  time: number | null,
-): { names: string; value: string } | null {
-  const enabled =
-    pane.studies.filter((s) => !s.hidden && PANE_INDICATORS.includes(s.type))[0] ??
-    pane.studies.find((s) => !s.hidden) ??
-    null;
-  if (!enabled) return null;
-  return formatStudyRaw(pane, enabled, time);
-}
-
-function formatStudyRaw(
-  pane: ChartPaneState,
-  study: IndicatorInstance,
-  time: number | null,
-): { names: string; value: string } | null {
-  const candles = mawsFeed.getCandles(pane.symbol, pane.timeframe);
-  if (candles.length === 0) return null;
-  let idx = candles.length - 1;
-  if (time != null) {
-    for (let i = candles.length - 1; i >= 0; i--) {
-      if (candles[i].time <= time) {
-        idx = i;
-        break;
-      }
-    }
-  }
-  const slice = candles.slice(0, idx + 1);
-  const names = indicatorTitle(study.type, pane.symbol);
-
-  if (study.type === "rsi") {
-    const s = study.settings as RsiIndicatorSettings;
-    const vals = computeRsi(slice, s.period);
-    const v = vals[vals.length - 1];
-    return v == null ? null : { names, value: v.toFixed(2) };
-  }
-  if (study.type === "stoch") {
-    const s = study.settings as StochIndicatorSettings;
-    const { k, d } = computeStochastic(slice, s.length, s.kSmoothing, s.dSmoothing);
-    const kv = k[k.length - 1];
-    const dv = d[d.length - 1];
-    if (kv == null || dv == null) return null;
-    return { names, value: `${kv.toFixed(1)} / ${dv.toFixed(1)}` };
-  }
-  if (study.type === "atr") {
-    const s = study.settings as AtrIndicatorSettings;
-    const vals = computeAtr(slice, s.period);
-    const v = vals[vals.length - 1];
-    return v == null ? null : { names, value: formatPrice(pane.symbol, v) };
-  }
-  if (study.type === "adx") {
-    const s = study.settings as AdxIndicatorSettings;
-    const vals = computeAdx(slice, s.period);
-    const v = vals[vals.length - 1];
-    return v == null ? null : { names, value: v.toFixed(2) };
-  }
-  if (study.type === "pmo") {
-    const s = study.settings as PmoIndicatorSettings;
-    const { pmo, signal } = computePmo(slice, s.period1, s.period2, s.signalPeriod, s.source);
-    const pmoV = pmo[pmo.length - 1];
-    const sigV = signal[signal.length - 1];
-    if (pmoV == null || sigV == null) return null;
-    return { names, value: `${pmoV.toFixed(2)} / ${sigV.toFixed(2)}` };
-  }
-  if (study.type === "ema") {
-    const s = study.settings as EmaIndicatorSettings;
-    const plot = computeEmaPlot(slice, s);
-    const v = plot.line[plot.line.length - 1];
-    return v == null ? null : { names, value: formatPrice(pane.symbol, v) };
-  }
-  if (study.type === "vwap") {
-    const s = study.settings as VwapIndicatorSettings;
-    const vals = computeVwapPlot(slice, s, pane.timeframe);
-    const v = vals[vals.length - 1];
-    return v == null ? null : { names, value: formatPrice(pane.symbol, v) };
-  }
-  return null;
+const AXIS_W = 56;
+/** Estimated rendered height of the open menu (5 rows + padding) — used to keep
+ *  the menu on screen: it flips above the button near the bottom edge. */
+const MENU_H = 216;
+/** True when `el` is the plus button or inside the open menu (both carry the
+ *  marker attribute; the nearest match covers child nodes too). */
+function isPlusPart(el: EventTarget | null): boolean {
+  return el instanceof Element && el.closest("[data-crosshair-plus]") != null;
 }
 
 function OrderIcon() {
@@ -137,179 +54,124 @@ export function CrosshairPlus({ pane, suppress }: { pane: ChartPaneState; suppre
   const [anchor, setAnchor] = useState<{ left: number; top: number } | null>(null);
   const openRef = useRef(false);
   const overPlusRef = useRef(false);
+  // Live cursor Y (client coords) over the chart element — the crosshair event
+  // carries no pixel position, so the plus button tracks this instead of
+  // parking at the pane's vertical center.
+  const pointerYRef = useRef<number | null>(null);
+  const [pointerY, setPointerY] = useState<number | null>(null);
   openRef.current = open;
 
+  // Vela crosshair → hover state (rAF-throttled by Vela itself).
   useEffect(() => {
-    const lastTimeRef = { current: null as number | null };
-    const rectCache = { current: null as DOMRect | null, at: 0 };
-    let raf = 0;
-    let pendingX = 0;
-    let pendingY = 0;
+    let tries = 0;
+    let timer = 0;
+    let cancelled = false;
+    let off: (() => void) | null = null;
+    let offPointer: (() => void) | null = null;
 
-    const clearHover = () => {
-      if (openRef.current || overPlusRef.current) return;
-      setHover(null);
-      try {
-        getChart(pane.id)?.chart.clearCrosshairPosition();
-      } catch {
-        /* ignore */
-      }
-    };
-
-    const updateFromClient = (clientX: number, clientY: number) => {
-      if (openRef.current) return;
+    const attach = () => {
+      if (cancelled) return;
       const handle = getChart(pane.id);
-      if (!handle) return;
-      const el = handle.chart.chartElement();
-      const now = performance.now();
-      let rect = rectCache.current;
-      if (!rect || now - rectCache.at > 200) {
-        rect = el.getBoundingClientRect();
-        rectCache.current = rect;
-        rectCache.at = now;
-      }
-
-      if (
-        clientX < rect.left ||
-        clientX > rect.right ||
-        clientY < rect.top ||
-        clientY > rect.bottom - TIME_AXIS_PAD
-      ) {
-        clearHover();
+      if (!handle) {
+        if (tries++ < 120) timer = window.setTimeout(attach, 250);
         return;
       }
-
-      const y = clientY - rect.top;
-      const x = clientX - rect.left;
-      const price = handle.series.coordinateToPrice(y);
-      if (price == null || !Number.isFinite(Number(price))) {
-        clearHover();
-        return;
-      }
-
-      const axisWidth = Math.max(handle.chart.priceScale("right").width(), 54);
-      const inPriceAxis = x >= rect.width - axisWidth;
-      const plotX = Math.min(x, Math.max(0, rect.width - axisWidth - 1));
-      const timeRaw = handle.chart.timeScale().coordinateToTime(plotX);
-      if (typeof timeRaw === "number") lastTimeRef.current = timeRaw;
-
-      // Only programmatically set the crosshair when we have a real bar time, or when the
-      // pointer is over the price scale (so +/- controls can keep a price line). Never pin
-      // the vertical line to the last candle while the mouse is in right-side whitespace.
-      if (typeof timeRaw === "number") {
-        try {
-          handle.chart.setCrosshairPosition(Number(price), timeRaw as never, handle.series);
-        } catch {
-          /* ignore */
+      const el = handle.el;
+      // Chromium boundary order: leave(current) fires BEFORE enter(next), and
+      // React's synthetic enter lands even later — so when the pointer crosses
+      // INTO the plus button or its open menu, flip the guard here first, or
+      // Vela's canvas-leave crosshair-clear (price == null) runs before the
+      // enter had a chance to set it and hover dies mid-crossing.
+      const onDocLeaveCapture = (ev: Event): void => {
+        if (ev instanceof PointerEvent && isPlusPart(ev.relatedTarget)) {
+          overPlusRef.current = true;
         }
-      } else if (inPriceAxis && lastTimeRef.current != null) {
-        try {
-          handle.chart.setCrosshairPosition(
-            Number(price),
-            lastTimeRef.current as never,
-            handle.series,
-          );
-        } catch {
-          /* ignore */
+      };
+      document.addEventListener("pointerleave", onDocLeaveCapture, true);
+      const onPointerMove = (ev: PointerEvent) => {
+        // Menu open: freeze — the button (and its open menu) must not follow the cursor.
+        if (openRef.current) return;
+        if (pointerYRef.current === ev.clientY) return;
+        pointerYRef.current = ev.clientY;
+        setPointerY(ev.clientY);
+      };
+      const onPointerLeave = (ev: PointerEvent) => {
+        // Moving onto the plus button/menu itself leaves the chart element
+        // (both are body portals, so this fires on every approach). The
+        // button's enter handler races this leave event — it runs AFTER it —
+        // so `overPlusRef` is still false here and must not be trusted.
+        // Test where the pointer is GOING instead: keep the last Y when it is
+        // entering plus chrome so the button (and open menu) does not jump.
+        if (ev.relatedTarget && isPlusPart(ev.relatedTarget)) return;
+        pointerYRef.current = null;
+        setPointerY(null);
+      };
+      el.addEventListener("pointermove", onPointerMove);
+      el.addEventListener("pointerleave", onPointerLeave);
+      off = handle.vela.renderer.onCrosshairMove((e) => {
+        if (openRef.current) return;
+        if (e.price == null) {
+          if (!overPlusRef.current) setHover(null);
+          return;
         }
-      }
-
-      const time =
-        typeof timeRaw === "number"
-          ? timeRaw
-          : inPriceAxis
-            ? lastTimeRef.current
-            : null;
-
-      const next = { price: Number(price), time, y, axisWidth };
-      setHover((prev) => {
-        if (
+        const next: ChartHover = {
+          price: e.price,
+          time: e.time != null ? Math.floor(e.time / 1000) : null,
+          y: 0,
+          axisWidth: AXIS_W,
+        };
+        setHover((prev) =>
           prev &&
-          Math.abs(prev.y - next.y) < 0.25 &&
-          prev.price === next.price &&
-          prev.time === next.time &&
-          prev.axisWidth === next.axisWidth
-        ) {
-          return prev;
-        }
-        return next;
+          Math.abs(prev.price - next.price) < 1e-12 &&
+          prev.time === next.time
+            ? prev
+            : next,
+        );
+        // Crosshair SYNC across cells is the workspace's own link (toggled in the
+        // layout picker) — no per-cell mirror here.
+        setLastCrosshair({ paneId: pane.id, price: e.price, time: e.time ?? null });
       });
+      offPointer = () => {
+        el.removeEventListener("pointermove", onPointerMove);
+        el.removeEventListener("pointerleave", onPointerLeave);
+        document.removeEventListener("pointerleave", onDocLeaveCapture, true);
+      };
     };
 
-    const onMove = (e: MouseEvent) => {
-      // User is panning/zooming the chart — don't fight LWC with extra crosshair work.
-      if (e.buttons) {
-        if (!openRef.current) setHover(null);
-        return;
-      }
-      // Hide plus button when cursor enters the maximize button zone.
-      // Use bounding-rect hit test because the plus portal sits on top and
-      // blocks elementFromPoint from seeing the zone underneath.
-      const zones = document.querySelectorAll("[data-maximize-zone]");
-      for (const z of zones) {
-        const r = z.getBoundingClientRect();
-        if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
-          clearHover();
-          return;
-        }
-      }
-      // Suppress crosshair while pointer is inside any open dropdown / settings panel.
-      const menuZones = document.querySelectorAll("[data-dropdown-open]");
-      for (const z of menuZones) {
-        const r = z.getBoundingClientRect();
-        if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
-          clearHover();
-          return;
-        }
-      }
-      pendingX = e.clientX;
-      pendingY = e.clientY;
-      if (raf) return;
-      raf = requestAnimationFrame(() => {
-        raf = 0;
-        updateFromClient(pendingX, pendingY);
-      });
-    };
-
-    const invalidateRect = () => {
-      rectCache.current = null;
-    };
-
-    window.addEventListener("mousemove", onMove, { passive: true });
-    window.addEventListener("resize", invalidateRect);
-    window.addEventListener("scroll", invalidateRect, true);
+    attach();
     return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("resize", invalidateRect);
-      window.removeEventListener("scroll", invalidateRect, true);
-      if (raf) cancelAnimationFrame(raf);
-      try {
-        getChart(pane.id)?.chart.clearCrosshairPosition();
-      } catch {
-        /* ignore */
-      }
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+      off?.();
+      offPointer?.();
     };
   }, [pane.id]);
 
   useLayoutEffect(() => {
+    // Menu open: freeze — the button (and its open menu) must not re-anchor
+    // while the user moves across the menu rows.
+    if (openRef.current) return;
     if (!hover) {
       setAnchor(null);
       return;
     }
-    const host = getChart(pane.id)?.chart.chartElement();
-    if (!host) return;
-    const rect = host.getBoundingClientRect();
-    const axis = hover.axisWidth || 56;
+    const handle = getChart(pane.id);
+    if (!handle) return;
+    const rect = handle.el.getBoundingClientRect();
     setAnchor({
-      left: rect.right - axis - 28,
-      top: rect.top + hover.y - 12,
+      left: rect.right - hover.axisWidth - 28,
+      // Ride the cursor: center the 24px button on the pointer's Y (client
+      // coords — the button is position:fixed). Fall back to the pane's
+      // vertical center when the crosshair moved without a pointer (keyboard).
+      top: pointerYRef.current ?? rect.top + rect.height / 2 - 12,
     });
-  }, [hover, pane.id]);
+  }, [hover, pointerY, pane.id]);
 
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (wrapRef.current?.contains(e.target as Node)) return;
+      if (!(e.target instanceof Node)) return;
+      if (wrapRef.current?.contains(e.target)) return;
       const t = e.target as HTMLElement | null;
       if (t?.closest?.("[data-crosshair-plus]")) return;
       setOpen(false);
@@ -320,16 +182,21 @@ export function CrosshairPlus({ pane, suppress }: { pane: ChartPaneState; suppre
 
   if (!hover || !anchor || suppress) return null;
 
-  const study = open ? studyValue(pane, hover.time) : null;
   const price = formatPrice(pane.symbol, hover.price);
   const side: "above" | "below" = "above";
+  // Menu opens 28px below the button, flipping ABOVE it when that would
+  // overflow the window's bottom edge (the old fixed offset parked the menu
+  // past the chart whenever the button was pressed near the bottom).
+  const menuLeft = Math.max(8, anchor.left - 200);
+  const menuBelow = anchor.top + 28 + MENU_H <= window.innerHeight - 8;
+  const menuTop = menuBelow ? anchor.top + 28 : Math.max(8, anchor.top - MENU_H - 8);
 
   return createPortal(
     <>
       <button
         type="button"
         data-crosshair-plus
-        className="fixed z-[35] flex h-6 w-6 items-center justify-center rounded-[4px] border border-[#2a2e39] bg-[#1b1b1b] text-[#d1d4dc] shadow-[0_2px_8px_rgba(0,0,0,0.45)] hover:bg-[#252525]"
+        className="fixed z-[35] flex h-6 w-6 items-center justify-center rounded-[4px] border border-(--app-border) bg-(--app-elevated) text-(--app-text) shadow-[0_2px_8px_rgba(0,0,0,0.45)] hover:bg-(--app-hover)"
         style={{ left: anchor.left, top: anchor.top }}
         onMouseEnter={() => {
           overPlusRef.current = true;
@@ -348,8 +215,8 @@ export function CrosshairPlus({ pane, suppress }: { pane: ChartPaneState; suppre
         <div
           ref={wrapRef}
           data-crosshair-plus
-          className="fixed z-[80] w-[220px] rounded-[8px] border border-[#2a2e39] bg-[#1b1b1b] py-1 shadow-[0_8px_28px_rgba(0,0,0,0.65)]"
-          style={{ left: Math.max(8, anchor.left - 200), top: anchor.top + 28 }}
+          className="fixed z-[80] w-[220px] rounded-[8px] border border-(--app-border) bg-(--app-elevated) py-1 shadow-[0_8px_28px_rgba(0,0,0,0.65)]"
+          style={{ left: menuLeft, top: menuTop }}
           onMouseDown={(e) => e.stopPropagation()}
           onMouseEnter={() => {
             overPlusRef.current = true;
@@ -358,12 +225,6 @@ export function CrosshairPlus({ pane, suppress }: { pane: ChartPaneState; suppre
             overPlusRef.current = false;
           }}
         >
-          {study && (
-            <div className="border-b border-[#2a2e39] px-3 py-2 text-[11px] text-[#787b86]">
-              <div className="truncate text-[#d1d4dc]">{study.names}</div>
-              <div>{study.value}</div>
-            </div>
-          )}
           <button
             type="button"
             className="plus-row"

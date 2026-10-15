@@ -271,16 +271,16 @@ function StatsMultiSelect({
         onClick={() => setOpen((v) => !v)}
       >
         <span className="truncate">{summary}</span>
-        <span className="shrink-0 text-[10px] text-[#787b86]">▾</span>
+        <span className="shrink-0 text-[10px] text-(--app-muted)">▾</span>
       </button>
       {open ? (
-        <div className="absolute top-[calc(100%+4px)] right-0 z-20 max-h-[240px] w-[240px] overflow-y-auto rounded-[6px] border border-[#363a45] bg-[#1b1b1b] py-1 shadow-[0_8px_28px_rgba(0,0,0,0.65)]">
+        <div className="absolute top-[calc(100%+4px)] right-0 z-20 max-h-[240px] w-[240px] overflow-y-auto rounded-[6px] border border-[#363a45] bg-(--app-elevated) py-1 shadow-[0_8px_28px_rgba(0,0,0,0.65)]">
           {ALL_POSITION_STATS.map((key) => {
             const on = selected.has(key);
             return (
               <label
                 key={key}
-                className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-[12px] text-[#d1d4dc] hover:bg-[#2a2e39]"
+                className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-[12px] text-(--app-text) hover:bg-(--app-hover)"
               >
                 <input
                   type="checkbox"
@@ -461,7 +461,7 @@ export function DrawingSettingsModal() {
           title={
             <>
               {title}
-              <Pencil size={13} className="text-[#787b86]" />
+              <Pencil size={13} className="text-(--app-muted)" />
             </>
           }
           onClose={close}
@@ -717,7 +717,7 @@ export function DrawingSettingsModal() {
                       </option>
                     ))}
                   </select>
-                  <svg width="36" height="12" className="text-[#d1d4dc]">
+                  <svg width="36" height="12" className="text-(--app-text)">
                     <line
                       x1="0"
                       y1="6"
@@ -809,7 +809,7 @@ export function DrawingSettingsModal() {
                   checked={draft.fibTrendVisible}
                   onChange={(e) => patch({ fibTrendVisible: e.target.checked })}
                 />
-                <span className="w-[88px] shrink-0 text-[13px] text-[#d1d4dc]">Trend line</span>
+                <span className="w-[88px] shrink-0 text-[13px] text-(--app-text)">Trend line</span>
                 <SettingsColorSwatch
                   value={draft.fibTrendColor}
                   onChange={(fibTrendColor) => patch({ fibTrendColor })}
@@ -941,7 +941,7 @@ export function DrawingSettingsModal() {
                   checked={draft.fibUseOneColor}
                   onChange={(e) => patch({ fibUseOneColor: e.target.checked })}
                 />
-                <span className="w-[110px] shrink-0 text-[13px] text-[#d1d4dc]">Use one color</span>
+                <span className="w-[110px] shrink-0 text-[13px] text-(--app-text)">Use one color</span>
                 <SettingsColorSwatch
                   value={draft.fibOneColor}
                   onChange={(fibOneColor) => patch({ fibOneColor })}
@@ -956,7 +956,7 @@ export function DrawingSettingsModal() {
                   checked={draft.fibBackground}
                   onChange={(e) => patch({ fibBackground: e.target.checked })}
                 />
-                <span className="w-[110px] shrink-0 text-[13px] text-[#d1d4dc]">Background</span>
+                <span className="w-[110px] shrink-0 text-[13px] text-(--app-text)">Background</span>
                 <input
                   type="range"
                   min={0}
@@ -967,7 +967,7 @@ export function DrawingSettingsModal() {
                     patch({ fibBackgroundOpacity: Number(e.target.value) || 0 })
                   }
                 />
-                <span className="text-[11px] text-[#787b86]">{draft.fibBackgroundOpacity}%</span>
+                <span className="text-[11px] text-(--app-muted)">{draft.fibBackgroundOpacity}%</span>
               </div>
 
               <SettingsCheck
@@ -988,7 +988,7 @@ export function DrawingSettingsModal() {
                   checked={draft.fibShowLevels}
                   onChange={(e) => patch({ fibShowLevels: e.target.checked })}
                 />
-                <span className="w-[72px] shrink-0 text-[13px] text-[#d1d4dc]">Levels</span>
+                <span className="w-[72px] shrink-0 text-[13px] text-(--app-text)">Levels</span>
                 <SettingsSelectWrap>
                   <select
                     className={`${settingsUi.select} w-[120px]`}
@@ -1041,7 +1041,7 @@ export function DrawingSettingsModal() {
                   checked={draft.fibShowText}
                   onChange={(e) => patch({ fibShowText: e.target.checked })}
                 />
-                <span className="w-[48px] shrink-0 text-[13px] text-[#d1d4dc]">Text</span>
+                <span className="w-[48px] shrink-0 text-[13px] text-(--app-text)">Text</span>
                 <SettingsSelectWrap>
                   <select
                     className={`${settingsUi.select} w-[100px]`}
@@ -1073,7 +1073,7 @@ export function DrawingSettingsModal() {
               </div>
               {draft.fibShowText && (
                 <textarea
-                  className="min-h-[64px] w-full resize-y rounded-[4px] border border-[#363a45] bg-[#0b0e14] px-3 py-2 text-[13px] text-[#d1d4dc] outline-none focus:border-[#2962ff]"
+                  className="min-h-[64px] w-full resize-y rounded-[4px] border border-[#363a45] bg-[#0b0e14] px-3 py-2 text-[13px] text-(--app-text) outline-none focus:border-[#2962ff]"
                   placeholder="Add text"
                   value={draft.text}
                   onChange={(e) => patch({ text: e.target.value })}
@@ -1148,7 +1148,7 @@ export function DrawingSettingsModal() {
                   checked={draft.showMiddlePoint}
                   onChange={(e) => patch({ showMiddlePoint: e.target.checked })}
                 />
-                <span className="w-[92px] shrink-0 text-[13px] text-[#d1d4dc]">Middle line</span>
+                <span className="w-[92px] shrink-0 text-[13px] text-(--app-text)">Middle line</span>
                 <SettingsColorSwatch
                   value={draft.middleLineColor}
                   onChange={(middleLineColor) => patch({ middleLineColor })}
@@ -1185,7 +1185,7 @@ export function DrawingSettingsModal() {
                   checked={draft.fillVisible}
                   onChange={(e) => patch({ fillVisible: e.target.checked })}
                 />
-                <span className="w-[92px] shrink-0 text-[13px] text-[#d1d4dc]">Background</span>
+                <span className="w-[92px] shrink-0 text-[13px] text-(--app-text)">Background</span>
                 <SettingsColorSwatch
                   value={draft.fillColor}
                   onChange={(fillColor) => patch({ fillColor })}
@@ -1248,7 +1248,7 @@ export function DrawingSettingsModal() {
                   checked={draft.fillVisible}
                   onChange={(e) => patch({ fillVisible: e.target.checked })}
                 />
-                <span className="w-[92px] shrink-0 text-[13px] text-[#d1d4dc]">Background</span>
+                <span className="w-[92px] shrink-0 text-[13px] text-(--app-text)">Background</span>
                 <SettingsColorSwatch
                   value={draft.fillColor}
                   onChange={(fillColor) => patch({ fillColor })}
@@ -1287,7 +1287,7 @@ export function DrawingSettingsModal() {
                   <option value="dashed">Dashed</option>
                   <option value="dotted">Dotted</option>
                 </select>
-                <svg width="48" height="12" className="text-[#d1d4dc]">
+                <svg width="48" height="12" className="text-(--app-text)">
                   <line
                     x1="0"
                     y1="6"
@@ -1311,7 +1311,7 @@ export function DrawingSettingsModal() {
                   <option value="both">Extend both</option>
                 </select>
               </SettingsFieldRow>
-              <label className="flex items-center gap-2 py-1 text-[13px] text-[#d1d4dc]">
+              <label className="flex items-center gap-2 py-1 text-[13px] text-(--app-text)">
                 <input
                   type="checkbox"
                   className="accent-[#2962ff]"
@@ -1320,7 +1320,7 @@ export function DrawingSettingsModal() {
                 />
                 Middle point
               </label>
-              <label className="flex items-center gap-2 py-1 text-[13px] text-[#d1d4dc]">
+              <label className="flex items-center gap-2 py-1 text-[13px] text-(--app-text)">
                 <input
                   type="checkbox"
                   className="accent-[#2962ff]"
@@ -1354,7 +1354,7 @@ export function DrawingSettingsModal() {
                 <button
                   type="button"
                   className={`flex h-7 w-7 items-center justify-center rounded border border-[#363a45] text-[13px] font-bold ${
-                    draft.textBold ? "bg-[#2a2e39] text-white" : "text-[#d1d4dc]"
+                    draft.textBold ? "bg-(--app-hover) text-white" : "text-(--app-text)"
                   }`}
                   onClick={() => patch({ textBold: !draft.textBold })}
                 >
@@ -1363,7 +1363,7 @@ export function DrawingSettingsModal() {
                 <button
                   type="button"
                   className={`flex h-7 w-7 items-center justify-center rounded border border-[#363a45] text-[13px] italic ${
-                    draft.textItalic ? "bg-[#2a2e39] text-white" : "text-[#d1d4dc]"
+                    draft.textItalic ? "bg-(--app-hover) text-white" : "text-(--app-text)"
                   }`}
                   onClick={() => patch({ textItalic: !draft.textItalic })}
                 >
@@ -1371,7 +1371,7 @@ export function DrawingSettingsModal() {
                 </button>
               </div>
               <textarea
-                className="min-h-[88px] w-full resize-y rounded-[4px] border border-[#2962ff] bg-[#0b0e14] px-3 py-2 text-[13px] text-[#d1d4dc] outline-none"
+                className="min-h-[88px] w-full resize-y rounded-[4px] border border-[#2962ff] bg-[#0b0e14] px-3 py-2 text-[13px] text-(--app-text) outline-none"
                 placeholder="Add text"
                 value={draft.text}
                 onChange={(e) => patch({ text: e.target.value })}
@@ -1416,7 +1416,7 @@ export function DrawingSettingsModal() {
             <div className="space-y-3">
               {draft.points.map((p, i) => (
                 <div key={i}>
-                  <div className="mb-1 text-[12px] text-[#787b86]">
+                  <div className="mb-1 text-[12px] text-(--app-muted)">
                     #{i + 1} (price, bar time)
                   </div>
                   <div className="flex gap-2">

@@ -170,7 +170,7 @@ describe("hotSymbols persistence boundary", () => {
 
       const persisted = workspacePartialize(useAppStore.getState());
       expect(persisted).not.toHaveProperty("hotSymbols");
-      expect(Object.keys(persisted)).toHaveLength(50);
+      expect(Object.keys(persisted)).toHaveLength(51);
     } finally {
       spy.mockRestore();
     }

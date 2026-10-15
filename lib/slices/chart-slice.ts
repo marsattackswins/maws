@@ -1,4 +1,10 @@
 import { DEFAULT_SYMBOLS } from "@/lib/maws/universe";
+import {
+  chartSettingsFromVelaTheme,
+  normalizeAppSettings,
+  velaThemeNameFromAppSettings,
+  THEME_OWNED_CHART_KEYS,
+} from "@/lib/app-theme";
 import { layoutKey } from "@/lib/layouts";
 import {
   createStudy,
@@ -20,10 +26,7 @@ import {
   DEFAULT_LAYOUT_SYNC,
   normalizeBbSettings,
   normalizeEmaSettings,
-  normalizeObSettings,
-  normalizePmoSettings,
   normalizeStochSettings,
-  normalizeVolumeSettings,
   normalizeVwapSettings,
 } from "@/types";
 import type {
@@ -83,6 +86,7 @@ export type ChartSliceState = WorkspaceState & {
     { main: number; byStudyId: Record<string, number> }
   >;
   replay: ReplayState;
+  replaySeeking: boolean;
   clipboardPrice: number | null;
   vertCursorLocked: boolean;
   lockedCursorTime: number | null;
@@ -94,6 +98,11 @@ export type ChartSliceState = WorkspaceState & {
 
 export type ChartSliceActions = {
   setLayout: (count: LayoutCount) => void;
+  /**
+   * Layout count + orientation in ONE store update (Vela's layout picker target) so
+   * the workspace bridge applies exactly one `setLayout` — never a stale mid-state.
+   */
+  applyLayout: (count: LayoutCount, orientation: "h" | "v") => void;
   toggleOrientation: () => void;
   setLayoutTracks: (key: string, tracks: { cols: number[]; rows: number[] }) => void;
   setActivePane: (id: string) => void;
@@ -103,6 +112,13 @@ export type ChartSliceActions = {
   addIndicator: (type: IndicatorId, paneId?: string) => void;
   /** Removes one study by instance id. */
   removeIndicator: (instanceId: string, paneId?: string) => void;
+  /** Replaces the pane's persisted Vela-native indicator instances. */
+  setPaneNatives: (
+    paneId: string,
+    natives: Array<{ type: string; inputs: Record<string, number | string | boolean>; hidden?: boolean }> | undefined,
+  ) => void;
+  /** Bridges the Vela cell's dehydrated state doc into the persisted store. */
+  setPaneVelaState: (paneId: string, velaState: Record<string, unknown> | undefined) => void;
   /** Clears every study on the pane. */
   clearIndicators: (paneId?: string) => void;
   setIndicatorsHidden: (value: boolean) => void;
@@ -132,9 +148,10 @@ export type ChartSliceActions = {
     paneId: string,
     value: { main: number; byStudyId: Record<string, number> },
   ) => void;
-  startReplay: (paneId: string, index: number, total: number) => void;
+  startReplay: (paneId: string, index: number, total: number, cursorTime?: number | null) => void;
   stopReplay: () => void;
   patchReplay: (patch: Partial<NonNullable<ReplayState>>) => void;
+  setReplaySeeking: (value: boolean) => void;
   setClipboardPrice: (price: number | null) => void;
   setVertCursorLocked: (value: boolean) => void;
   setLockedCursorTime: (time: number | null) => void;
@@ -216,6 +233,7 @@ export function createChartSlice(set: RootSet, get: RootGet): ChartSlice {
     autoScaleByPane: {},
     paneStretchFactors: {},
     replay: null,
+    replaySeeking: false,
     clipboardPrice: null,
     vertCursorLocked: false,
     lockedCursorTime: null,
@@ -251,6 +269,12 @@ export function createChartSlice(set: RootSet, get: RootGet): ChartSlice {
         return;
       }
       set({ layoutCount: count });
+    },
+    applyLayout: (count, orientation) => {
+      const state = get();
+      // Re-picking the current target is a no-op (Vela's picker shows it checked).
+      if (state.layoutCount === count && state.orientation === orientation) return;
+      set({ layoutCount: count, orientation });
     },
     toggleOrientation: () =>
       set({ orientation: get().orientation === "h" ? "v" : "h" }),
@@ -350,6 +374,18 @@ export function createChartSlice(set: RootSet, get: RootGet): ChartSlice {
         activeIndicatorTemplateId: pinned,
       });
     },
+    setPaneNatives: (paneId, natives) =>
+      set({
+        panes: get().panes.map((p) =>
+          p.id === paneId ? { ...p, natives } : p,
+        ),
+      }),
+    setPaneVelaState: (paneId, velaState) =>
+      set({
+        panes: get().panes.map((p) =>
+          p.id === paneId && p.velaState !== velaState ? { ...p, velaState } : p,
+        ),
+      }),
     clearIndicators: (paneId) => {
       const id = paneId ?? get().activePaneId;
       const before = get().panes.find((p) => p.id === id);
@@ -431,7 +467,6 @@ export function createChartSlice(set: RootSet, get: RootGet): ChartSlice {
     setIndicatorSettings: (value) =>
       set({
         indicatorSettings: {
-          volume: normalizeVolumeSettings(value.volume),
           vwap: normalizeVwapSettings(value.vwap),
           ema: normalizeEmaSettings({
             ...DEFAULT_INDICATOR_SETTINGS.ema,
@@ -463,23 +498,12 @@ export function createChartSlice(set: RootSet, get: RootGet): ChartSlice {
             ...value.adx,
             visibility: cloneVisibility(value.adx?.visibility),
           },
-          pmo: normalizePmoSettings(value.pmo),
-          ob: normalizeObSettings(value.ob),
         },
       }),
     patchIndicatorSettings: (id, patch) => {
       const prev = get().indicatorSettings[id];
       const base = DEFAULT_INDICATOR_SETTINGS[id];
       const next = { ...base, ...prev, ...patch } as IndicatorSettingsMap[typeof id];
-      if (id === "volume") {
-        set({
-          indicatorSettings: {
-            ...get().indicatorSettings,
-            volume: normalizeVolumeSettings(next as IndicatorSettingsMap["volume"]),
-          },
-        });
-        return;
-      }
       if (id === "vwap") {
         set({
           indicatorSettings: {
@@ -514,16 +538,6 @@ export function createChartSlice(set: RootSet, get: RootGet): ChartSlice {
           indicatorSettings: {
             ...get().indicatorSettings,
             stoch,
-          },
-        });
-        return;
-      }
-      if (id === "ob") {
-        const ob = normalizeObSettings(next as IndicatorSettingsMap["ob"]);
-        set({
-          indicatorSettings: {
-            ...get().indicatorSettings,
-            ob,
           },
         });
         return;
@@ -572,7 +586,7 @@ export function createChartSlice(set: RootSet, get: RootGet): ChartSlice {
       set({
         paneStretchFactors: { ...get().paneStretchFactors, [paneId]: value },
       }),
-    startReplay: (paneId, index, total) =>
+    startReplay: (paneId, index, total, cursorTime) =>
       set({
         replay: {
           paneId,
@@ -580,14 +594,18 @@ export function createChartSlice(set: RootSet, get: RootGet): ChartSlice {
           total,
           playing: false,
           speed: 1,
+          cursorTime: cursorTime ?? null,
+          remaining: null,
         },
+        replaySeeking: false,
       }),
-    stopReplay: () => set({ replay: null }),
+    stopReplay: () => set({ replay: null, replaySeeking: false }),
     patchReplay: (patch) => {
       const cur = get().replay;
       if (!cur) return;
       set({ replay: { ...cur, ...patch } });
     },
+    setReplaySeeking: (value) => set({ replaySeeking: value }),
     setClipboardPrice: (price) => set({ clipboardPrice: price }),
     setVertCursorLocked: (value) =>
       set({ vertCursorLocked: value, lockedCursorTime: value ? get().lockedCursorTime : null }),
@@ -709,6 +727,9 @@ export function createChartSlice(set: RootSet, get: RootGet): ChartSlice {
   };
 }
 
+/** Study types that moved to Vela-native indicators — dropped on hydrate. */
+const LEGACY_STUDY_TYPES = new Set<string>(["volume", "pmo", "ob"]);
+
 /** Chart-owned rehydration normalizations for persisted workspace state. */
 export function normalizeChartRehydrate(state: Store): void {
   state.chartSettings = {
@@ -720,6 +741,31 @@ export function normalizeChartRehydrate(state: Store): void {
   if (state.chartSettings.scaleFontSize === 14) {
     state.chartSettings.scaleFontSize = 12;
   }
+  // Self-heal a pre-Vela cosmetic palette: when EVERY theme-owned chart color
+  // still equals the legacy MAWS default (the user never customized chart
+  // cosmetics), re-derive them from the active Vela theme. Without this, a
+  // themed shell replays the old black/gray chart palette over every themed
+  // mount. Explicit customizations are left untouched.
+  const untouchedThemeColors = THEME_OWNED_CHART_KEYS.every(
+    (k) =>
+      String(state.chartSettings[k] ?? "").toLowerCase() ===
+      String(DEFAULT_CHART_SETTINGS[k] ?? "").toLowerCase(),
+  );
+  const themed = chartSettingsFromVelaTheme(
+    velaThemeNameFromAppSettings(normalizeAppSettings(state.appSettings)),
+  );
+  // Guard against a resolver that didn't produce concrete colors (test stubs
+  // for `resolveTheme`): writing undefined over the defaults would be worse
+  // than keeping the persisted palette.
+  const usableTheme = Object.values(themed).every(
+    (v) => typeof v === "string" && v !== "",
+  );
+  if (untouchedThemeColors && usableTheme) {
+    state.chartSettings = {
+      ...state.chartSettings,
+      ...themed,
+    };
+  }
   state.layoutSync = { ...DEFAULT_LAYOUT_SYNC, ...state.layoutSync };
   state.layoutTracks = state.layoutTracks ?? {};
   state.autoScaleByPane = state.autoScaleByPane ?? {};
@@ -730,7 +776,6 @@ export function normalizeChartRehydrate(state: Store): void {
     .map((p) => (/^EURUSD$/i.test(p.symbol) ? { ...p, symbol: "BTCUSDT" } : p));
   state.indicatorsHidden = state.indicatorsHidden === true;
   state.indicatorSettings = {
-    volume: normalizeVolumeSettings(state.indicatorSettings?.volume),
     vwap: normalizeVwapSettings(state.indicatorSettings?.vwap),
     ema: normalizeEmaSettings(state.indicatorSettings?.ema),
     bb: normalizeBbSettings(state.indicatorSettings?.bb),
@@ -750,8 +795,6 @@ export function normalizeChartRehydrate(state: Store): void {
       ...state.indicatorSettings?.adx,
       visibility: cloneVisibility(state.indicatorSettings?.adx?.visibility),
     },
-    pmo: normalizePmoSettings(state.indicatorSettings?.pmo),
-    ob: normalizeObSettings(state.indicatorSettings?.ob),
   };
   state.indicatorSettingsId = null;
   const seededIds = new Set(["vol-based", "momentum", "swing"]);
@@ -759,7 +802,11 @@ export function normalizeChartRehydrate(state: Store): void {
     (t) => !seededIds.has(t.id),
   );
   state.panes = state.panes.map((p) => {
-    const studies = ensurePaneStudies(p, state.indicatorSettings);
+    const studies = ensurePaneStudies(p, state.indicatorSettings).filter(
+      // Volume / PMO / Order Blocks moved to Vela-native indicators added from
+      // the Indicators menu — drop the legacy MAWS studies on hydrate.
+      (s) => !LEGACY_STUDY_TYPES.has(s.type as string),
+    );
     return {
       ...p,
       studies,
@@ -774,13 +821,27 @@ export function normalizeChartRehydrate(state: Store): void {
       })),
     };
   });
+  // Vela cell-state bridge: the pre-mount seed map (panesVelaState) merges INTO
+  // the panes so a fresh mount can rehydrate its cell; a pane's own velaState
+  // keeps whatever the bridge wrote last session.
+  const seedVela = (state as { panesVelaState?: Record<string, Record<string, unknown>> }).panesVelaState;
+  if (seedVela && typeof seedVela === "object") {
+    for (const p of state.panes) {
+      const cs = seedVela[p.id];
+      if (cs && typeof cs === "object" && p.velaState == null) p.velaState = cs;
+    }
+  }
+  delete (state as { panesVelaState?: unknown }).panesVelaState;
   state.indicatorTemplates = (state.indicatorTemplates ?? []).map((t) => ({
     ...t,
-    studies: templateToStudies(t, state.indicatorSettings).map((s) => ({
-      type: s.type,
-      settings: s.settings,
-      hidden: s.hidden,
-    })),
+    studies: templateToStudies(t, state.indicatorSettings).filter(
+      (s) => !LEGACY_STUDY_TYPES.has(s.type as string),
+    )
+      .map((s) => ({
+        type: s.type,
+        settings: s.settings,
+        hidden: s.hidden,
+      })),
   }));
   const pane =
     state.panes.find((p) => p.id === state.activePaneId) ?? state.panes[0];

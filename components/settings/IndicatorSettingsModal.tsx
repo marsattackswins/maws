@@ -29,20 +29,13 @@ import {
   type IndicatorLineWidth,
   type IndicatorSettingsMap,
   type MaSource,
-  type ObIndicatorSettings,
-  type PmoIndicatorSettings,
   type RsiIndicatorSettings,
   type StochBandSettings,
   type StochIndicatorSettings,
-  type VolumeIndicatorSettings,
-  type VolumePlotStyle,
   type VwapIndicatorSettings,
   normalizeBbSettings,
   normalizeEmaSettings,
-  normalizeObSettings,
-  normalizePmoSettings,
   normalizeStochSettings,
-  normalizeVolumeSettings,
   normalizeVwapSettings,
 } from "@/types";
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
@@ -50,27 +43,6 @@ import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 
 type Tab = "inputs" | "style" | "visibility";
 
 const inputClass = settingsUi.inputSm;
-
-function VolumePlotStyleSelect({
-  value,
-  onChange,
-}: {
-  value: VolumePlotStyle;
-  onChange: (v: VolumePlotStyle) => void;
-}) {
-  return (
-    <select
-      className={`${settingsUi.select} min-w-[118px]`}
-      value={value}
-      title="Volume plot style"
-      onChange={(e) => onChange(e.target.value as VolumePlotStyle)}
-    >
-      <option value="histogram">Histogram</option>
-      <option value="line">Line</option>
-      <option value="candle">Candle</option>
-    </select>
-  );
-}
 
 function LineStyleSelect({
   value,
@@ -126,9 +98,9 @@ function LineAppearanceFields({
   fillOnly?: boolean;
 }) {
   return (
-    <div className={label ? "mb-3 border-b border-[#2a2e39] pb-2" : undefined}>
+    <div className={label ? "mb-3 border-b border-(--app-border) pb-2" : undefined}>
       {label ? (
-        <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#787b86]">
+        <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-(--app-muted)">
           {label}
         </div>
       ) : null}
@@ -156,149 +128,6 @@ function LineAppearanceFields({
           </SettingsFieldRow>
         </>
       )}
-    </div>
-  );
-}
-
-function VolumeForm({
-  value,
-  onChange,
-  tab,
-}: {
-  value: VolumeIndicatorSettings;
-  onChange: (v: VolumeIndicatorSettings) => void;
-  tab: "inputs" | "style";
-}) {
-  const safe = normalizeVolumeSettings(value);
-
-  if (tab === "inputs") {
-    return (
-      <div>
-        <SettingsFieldRow label="MA Length">
-          <input
-            className={inputClass}
-            type="number"
-            min={1}
-            max={500}
-            value={safe.maLength}
-            onChange={(e) =>
-              onChange({
-                ...safe,
-                maLength: Math.max(1, Math.min(500, Number(e.target.value) || 20)),
-              })
-            }
-          />
-        </SettingsFieldRow>
-        <SettingsCheck
-          label="Color based on previous close"
-          checked={safe.colorBasedOnPreviousClose}
-          onChange={(colorBasedOnPreviousClose) =>
-            onChange({ ...safe, colorBasedOnPreviousClose })
-          }
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <div className="py-1.5">
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            className="accent-white"
-            checked={safe.volumeVisible}
-            onChange={(e) => onChange({ ...safe, volumeVisible: e.target.checked })}
-          />
-          <span className="text-[13px] text-[#d1d4dc]">Volume</span>
-          <VolumePlotStyleSelect
-            value={safe.plotStyle ?? "histogram"}
-            onChange={(plotStyle) => onChange({ ...safe, plotStyle })}
-          />
-        </div>
-        <div className="mt-1.5 ml-6 flex flex-col gap-1.5">
-          <div className="flex items-center gap-2">
-            <span className="w-[64px] shrink-0 text-[12px] text-[#787b86]">Growing</span>
-            <SettingsColorSwatch
-              value={safe.upColor}
-              onChange={(upColor) => onChange({ ...safe, upColor })}
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-[64px] shrink-0 text-[12px] text-[#787b86]">Falling</span>
-            <SettingsColorSwatch
-              value={safe.downColor}
-              onChange={(downColor) => onChange({ ...safe, downColor })}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-2 py-1.5">
-        <input
-          type="checkbox"
-          className="accent-white"
-          checked={safe.maVisible}
-          onChange={(e) => onChange({ ...safe, maVisible: e.target.checked })}
-        />
-        <span className="w-[88px] shrink-0 text-[13px] text-[#d1d4dc]">Volume MA</span>
-        <SettingsColorSwatch
-          value={safe.maColor}
-          opacity={safe.maOpacity}
-          onChange={(maColor) => onChange({ ...safe, maColor })}
-          onOpacityChange={(maOpacity) => onChange({ ...safe, maOpacity })}
-        />
-        <LineWidthSelect
-          value={safe.maLineWidth}
-          onChange={(maLineWidth) => onChange({ ...safe, maLineWidth })}
-        />
-        <LineStyleSelect
-          value={safe.maLineStyle}
-          onChange={(maLineStyle) => onChange({ ...safe, maLineStyle })}
-        />
-      </div>
-
-      <div className="mt-4">
-        <SettingsSection title="OUTPUT VALUES">
-          <SettingsFieldRow label="Precision">
-            <select
-              className={inputClass}
-              value={safe.precision === "default" ? "default" : String(safe.precision)}
-              onChange={(e) => {
-                const v = e.target.value;
-                onChange({
-                  ...safe,
-                  precision: v === "default" ? "default" : Number(v),
-                });
-              }}
-            >
-              <option value="default">Default</option>
-              {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </SettingsFieldRow>
-          <SettingsCheck
-            label="Labels on price scale"
-            checked={safe.showScaleValues}
-            onChange={(showScaleValues) => onChange({ ...safe, showScaleValues })}
-          />
-          <SettingsCheck
-            label="Values in status line"
-            checked={safe.showStatusValues}
-            onChange={(showStatusValues) => onChange({ ...safe, showStatusValues })}
-          />
-        </SettingsSection>
-        <SettingsSection title="INPUT VALUES">
-          <SettingsCheck
-            label="Inputs in status line"
-            checked={safe.showStatusInputs}
-            onChange={(showStatusInputs) => onChange({ ...safe, showStatusInputs })}
-          />
-        </SettingsSection>
-      </div>
     </div>
   );
 }
@@ -401,7 +230,7 @@ function VwapForm({
           checked={safe.visible}
           onChange={(e) => onChange({ ...safe, visible: e.target.checked })}
         />
-        <span className="w-[56px] shrink-0 text-[13px] text-[#d1d4dc]">VWAP</span>
+        <span className="w-[56px] shrink-0 text-[13px] text-(--app-text)">VWAP</span>
         <SettingsColorSwatch
           value={safe.color}
           opacity={safe.opacity}
@@ -607,7 +436,7 @@ function EmaForm({
           checked={safe.visible}
           onChange={(e) => onChange({ ...safe, visible: e.target.checked })}
         />
-        <span className="w-[48px] shrink-0 text-[13px] text-[#d1d4dc]">EMA</span>
+        <span className="w-[48px] shrink-0 text-[13px] text-(--app-text)">EMA</span>
         <SettingsColorSwatch
           value={safe.color}
           opacity={safe.opacity}
@@ -803,7 +632,7 @@ function BbForm({
         checked={visible}
         onChange={(e) => onVisible(e.target.checked)}
       />
-      <span className="w-[72px] shrink-0 text-[13px] text-[#d1d4dc]">{label}</span>
+      <span className="w-[72px] shrink-0 text-[13px] text-(--app-text)">{label}</span>
       <SettingsColorSwatch
         value={line.color}
         opacity={line.opacity}
@@ -851,7 +680,7 @@ function BbForm({
           checked={safe.backgroundVisible}
           onChange={(e) => onChange({ ...safe, backgroundVisible: e.target.checked })}
         />
-        <span className="w-[72px] shrink-0 text-[13px] text-[#d1d4dc]">Background</span>
+        <span className="w-[72px] shrink-0 text-[13px] text-(--app-text)">Background</span>
         <SettingsColorSwatch
           value={safe.backgroundColor}
           opacity={safe.backgroundOpacity}
@@ -1068,7 +897,7 @@ function StochForm({
         checked={visible}
         onChange={(e) => onVisible(e.target.checked)}
       />
-      <span className="w-[88px] shrink-0 text-[13px] text-[#d1d4dc]">{label}</span>
+      <span className="w-[88px] shrink-0 text-[13px] text-(--app-text)">{label}</span>
       <SettingsColorSwatch
         value={line.color}
         opacity={line.opacity}
@@ -1149,7 +978,7 @@ function StochForm({
           checked={safe.backgroundVisible}
           onChange={(e) => onChange({ ...safe, backgroundVisible: e.target.checked })}
         />
-        <span className="w-[88px] shrink-0 text-[13px] text-[#d1d4dc]">Background</span>
+        <span className="w-[88px] shrink-0 text-[13px] text-(--app-text)">Background</span>
         <SettingsColorSwatch
           value={safe.backgroundColor}
           opacity={safe.backgroundOpacity}
@@ -1245,300 +1074,6 @@ function AtrForm({
   );
 }
 
-function PmoForm({
-  value,
-  onChange,
-  tab,
-}: {
-  value: PmoIndicatorSettings;
-  onChange: (v: PmoIndicatorSettings) => void;
-  tab: "inputs" | "style";
-}) {
-  const safe = normalizePmoSettings(value);
-
-  if (tab === "inputs") {
-    return (
-      <div>
-        <SettingsFieldRow label="First Smoothing (Period 1)">
-          <input
-            className={inputClass}
-            type="number"
-            min={1}
-            max={200}
-            value={safe.period1}
-            onChange={(e) =>
-              onChange({ ...safe, period1: Math.max(1, Math.min(200, Number(e.target.value) || 35)) })
-            }
-          />
-        </SettingsFieldRow>
-        <SettingsFieldRow label="Second Smoothing (Period 2)">
-          <input
-            className={inputClass}
-            type="number"
-            min={1}
-            max={200}
-            value={safe.period2}
-            onChange={(e) =>
-              onChange({ ...safe, period2: Math.max(1, Math.min(200, Number(e.target.value) || 20)) })
-            }
-          />
-        </SettingsFieldRow>
-        <SettingsFieldRow label="Signal Period">
-          <input
-            className={inputClass}
-            type="number"
-            min={1}
-            max={200}
-            value={safe.signalPeriod}
-            onChange={(e) =>
-              onChange({ ...safe, signalPeriod: Math.max(1, Math.min(200, Number(e.target.value) || 10)) })
-            }
-          />
-        </SettingsFieldRow>
-        <SettingsFieldRow label="Source">
-          <select
-            className={inputClass}
-            value={safe.source}
-            onChange={(e) => onChange({ ...safe, source: e.target.value as MaSource })}
-          >
-            <option value="close">Close</option>
-            <option value="open">Open</option>
-            <option value="high">High</option>
-            <option value="low">Low</option>
-            <option value="hl2">HL/2</option>
-            <option value="hlc3">HLC/3</option>
-            <option value="ohlc4">OHLC/4</option>
-          </select>
-        </SettingsFieldRow>
-      </div>
-    );
-  }
-
-  const StyleLineRow = ({
-    label,
-    visible,
-    onVisible,
-    line,
-    onLine,
-  }: {
-    label: string;
-    visible: boolean;
-    onVisible: (v: boolean) => void;
-    line: IndicatorLineStyleSettings;
-    onLine: (v: IndicatorLineStyleSettings) => void;
-  }) => (
-    <div className="space-y-3">
-      <SettingsFieldRow label={label}>
-        <input type="checkbox" checked={visible} onChange={(e) => onVisible(e.target.checked)} />
-      </SettingsFieldRow>
-      {visible && <LineAppearanceFields value={line} onChange={onLine} />}
-    </div>
-  );
-
-  return (
-    <div className="space-y-4">
-      <StyleLineRow
-        label="PMO Line"
-        visible={safe.pmoVisible}
-        onVisible={(v) => onChange({ ...safe, pmoVisible: v })}
-        line={safe.pmo}
-        onLine={(pmo) => onChange({ ...safe, pmo })}
-      />
-      <StyleLineRow
-        label="Signal Line"
-        visible={safe.signalVisible}
-        onVisible={(v) => onChange({ ...safe, signalVisible: v })}
-        line={safe.signal}
-        onLine={(signal) => onChange({ ...safe, signal })}
-      />
-      <div className="space-y-3">
-        <SettingsFieldRow label="Zero Line">
-          <input
-            type="checkbox"
-            checked={safe.zeroLine.visible}
-            onChange={(e) =>
-              onChange({ ...safe, zeroLine: { ...safe.zeroLine, visible: e.target.checked } })
-            }
-          />
-        </SettingsFieldRow>
-        {safe.zeroLine.visible && (
-          <LineAppearanceFields
-            value={{
-              color: safe.zeroLine.color,
-              opacity: safe.zeroLine.opacity,
-              lineWidth: safe.zeroLine.lineWidth,
-              lineStyle: safe.zeroLine.lineStyle,
-            }}
-            onChange={(line) => onChange({ ...safe, zeroLine: { ...safe.zeroLine, ...line } })}
-          />
-        )}
-      </div>
-      <SettingsFieldRow label="Precision">
-        <select
-          className={inputClass}
-          value={safe.precision}
-          onChange={(e) => {
-            const v = e.target.value;
-            onChange({ ...safe, precision: v === "default" ? "default" : Number(v) });
-          }}
-        >
-          <option value="default">Default</option>
-          <option value="0">0</option>
-          <option value="1">1</option>
-          <option value="2">2</option>
-          <option value="3">3</option>
-          <option value="4">4</option>
-          <option value="5">5</option>
-          <option value="6">6</option>
-          <option value="8">8</option>
-        </select>
-      </SettingsFieldRow>
-      <SettingsFieldRow label="Show values on scale">
-        <input
-          type="checkbox"
-          checked={safe.showScaleValues}
-          onChange={(e) => onChange({ ...safe, showScaleValues: e.target.checked })}
-        />
-      </SettingsFieldRow>
-      <SettingsFieldRow label="Show values in legend">
-        <input
-          type="checkbox"
-          checked={safe.showStatusValues}
-          onChange={(e) => onChange({ ...safe, showStatusValues: e.target.checked })}
-        />
-      </SettingsFieldRow>
-      <SettingsFieldRow label="Show inputs in legend">
-        <input
-          type="checkbox"
-          checked={safe.showStatusInputs}
-          onChange={(e) => onChange({ ...safe, showStatusInputs: e.target.checked })}
-        />
-      </SettingsFieldRow>
-    </div>
-  );
-}
-
-function ObForm({
-  value,
-  onChange,
-  tab,
-}: {
-  value: ObIndicatorSettings;
-  onChange: (v: ObIndicatorSettings) => void;
-  tab: "inputs" | "style";
-}) {
-  const safe = normalizeObSettings(value);
-
-  if (tab === "inputs") {
-    return (
-      <div>
-        <SettingsFieldRow label="Swing Lookback">
-          <input
-            className={inputClass}
-            type="number"
-            min={3}
-            max={200}
-            value={safe.swingLookback}
-            onChange={(e) =>
-              onChange({
-                ...safe,
-                swingLookback: Math.max(3, Math.min(200, Number(e.target.value) || 10)),
-              })
-            }
-          />
-        </SettingsFieldRow>
-        <SettingsFieldRow label="Show Last Bullish OB">
-          <input
-            className={inputClass}
-            type="number"
-            min={0}
-            max={200}
-            value={safe.showLastBull}
-            onChange={(e) =>
-              onChange({
-                ...safe,
-                showLastBull: Math.max(0, Math.min(200, Number(e.target.value) || 0)),
-              })
-            }
-          />
-        </SettingsFieldRow>
-        <SettingsFieldRow label="Show Last Bearish OB">
-          <input
-            className={inputClass}
-            type="number"
-            min={0}
-            max={200}
-            value={safe.showLastBear}
-            onChange={(e) =>
-              onChange({
-                ...safe,
-                showLastBear: Math.max(0, Math.min(200, Number(e.target.value) || 0)),
-              })
-            }
-          />
-        </SettingsFieldRow>
-        <SettingsFieldRow label="Use Candle Body">
-          <input
-            type="checkbox"
-            checked={safe.useBody}
-            onChange={(e) => onChange({ ...safe, useBody: e.target.checked })}
-          />
-        </SettingsFieldRow>
-        <SettingsFieldRow label="Show Historical Polarity Changes">
-          <input
-            type="checkbox"
-            checked={safe.showLabels}
-            onChange={(e) => onChange({ ...safe, showLabels: e.target.checked })}
-          />
-        </SettingsFieldRow>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <LineAppearanceFields
-        label="Bullish"
-        value={safe.bull}
-        onChange={(bull) => onChange({ ...safe, bull })}
-        fillOnly
-      />
-      <LineAppearanceFields
-        label="Bullish Breaker"
-        value={safe.bullBreak}
-        onChange={(bullBreak) => onChange({ ...safe, bullBreak })}
-        fillOnly
-      />
-      <LineAppearanceFields
-        label="Bearish"
-        value={safe.bear}
-        onChange={(bear) => onChange({ ...safe, bear })}
-        fillOnly
-      />
-      <LineAppearanceFields
-        label="Bearish Breaker"
-        value={safe.bearBreak}
-        onChange={(bearBreak) => onChange({ ...safe, bearBreak })}
-        fillOnly
-      />
-      <SettingsFieldRow label="Show values in legend">
-        <input
-          type="checkbox"
-          checked={safe.showStatusValues}
-          onChange={(e) => onChange({ ...safe, showStatusValues: e.target.checked })}
-        />
-      </SettingsFieldRow>
-      <SettingsFieldRow label="Show inputs in legend">
-        <input
-          type="checkbox"
-          checked={safe.showStatusInputs}
-          onChange={(e) => onChange({ ...safe, showStatusInputs: e.target.checked })}
-        />
-      </SettingsFieldRow>
-    </div>
-  );
-}
-
 function AdxForm({
   value,
   onChange,
@@ -1590,7 +1125,6 @@ function AdxForm({
 
 function mergeDraft(saved: IndicatorSettingsMap): IndicatorSettingsMap {
   return {
-    volume: normalizeVolumeSettings(saved.volume),
     vwap: normalizeVwapSettings(saved.vwap),
     ema: normalizeEmaSettings(saved.ema),
     bb: normalizeBbSettings(saved.bb),
@@ -1610,8 +1144,6 @@ function mergeDraft(saved: IndicatorSettingsMap): IndicatorSettingsMap {
       ...saved.adx,
       visibility: cloneVisibility(saved.adx?.visibility),
     },
-    pmo: normalizePmoSettings(saved.pmo),
-    ob: normalizeObSettings(saved.ob),
   };
 }
 
@@ -1751,7 +1283,7 @@ export function IndicatorSettingsModal() {
       ref={boxRef}
       data-indicator-settings-panel
       data-dropdown-open
-      className="fixed z-[70] flex w-[420px] max-h-[calc(100vh-188px)] flex-col overflow-hidden rounded-[8px] bg-[#1b1b1b] shadow-[0_8px_28px_rgba(0,0,0,0.65)]"
+      className="fixed z-[70] flex w-[420px] max-h-[calc(100vh-188px)] flex-col overflow-hidden rounded-[8px] bg-(--app-elevated) shadow-[0_8px_28px_rgba(0,0,0,0.65)]"
       style={
         dragged
           ? { left: pos.x, top: pos.y }
@@ -1774,13 +1306,6 @@ export function IndicatorSettingsModal() {
           />
         ) : (
           <>
-            {type === "volume" && (
-              <VolumeForm
-                value={draft.volume}
-                onChange={(volume) => commit({ ...draft, volume })}
-                tab={tab}
-              />
-            )}
             {type === "vwap" && (
               <VwapForm
                 value={draft.vwap}
@@ -1825,16 +1350,6 @@ export function IndicatorSettingsModal() {
                 onChange={(adx) => commit({ ...draft, adx })}
                 tab={tab}
               />
-            )}
-            {type === "pmo" && (
-              <PmoForm
-                value={draft.pmo}
-                onChange={(pmo) => commit({ ...draft, pmo })}
-                tab={tab}
-              />
-            )}
-            {type === "ob" && (
-              <ObForm value={draft.ob} onChange={(ob) => commit({ ...draft, ob })} tab={tab} />
             )}
           </>
         )}

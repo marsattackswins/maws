@@ -109,7 +109,7 @@ export function AlertsPanel() {
           </span>
         </div>
         {alerts.length === 0 && (
-          <div className="px-3 py-6 text-center text-[12px] text-[#787b86]">
+          <div className="px-3 py-6 text-center text-[12px] text-(--app-muted)">
             No alerts. Add a price level for the active symbol.
           </div>
         )}
@@ -118,7 +118,7 @@ export function AlertsPanel() {
           return (
             <div
               key={alert.id}
-              className="grid items-center border-b border-[#222222] px-2 py-2"
+              className="grid items-center border-b border-(--app-border) px-2 py-2"
               style={{ gridTemplateColumns: template, minWidth: "max-content" }}
             >
               <input
@@ -126,16 +126,16 @@ export function AlertsPanel() {
                 checked={alert.enabled}
                 onChange={() => toggleAlert(alert.id)}
               />
-              <span className="truncate pr-1 text-[12px] text-[#d1d4dc]">{formatTicker(alert.symbol)}</span>
-              <span className="truncate pr-1 text-[12px] text-[#d1d4dc]">
+              <span className="truncate pr-1 text-[12px] text-(--app-text)">{formatTicker(alert.symbol)}</span>
+              <span className="truncate pr-1 text-[12px] text-(--app-text)">
                 {alert.side === "above" ? "≥" : "≤"} {formatPrice(alert.symbol, alert.price)}
               </span>
-              <span className={`truncate pr-1 text-[11px] ${hit ? "text-[#089981]" : "text-[#787b86]"}`}>
+              <span className={`truncate pr-1 text-[11px] ${hit ? "text-[#089981]" : "text-(--app-muted)"}`}>
                 {hit ? "Triggered" : "Waiting"}
               </span>
               <button
                 type="button"
-                className="text-[#787b86] hover:text-[#f23645]"
+                className="text-(--app-muted) hover:text-[#f23645]"
                 onClick={() => removeAlert(alert.id)}
               >
                 <Trash2 size={13} />

@@ -1,4 +1,10 @@
-import { ColorType, CrosshairMode, LineStyle, type ChartOptions, type DeepPartial } from "lightweight-charts";
+/**
+ * Theme tokens shared by the app chrome around the chart.
+ *
+ * (The chart-surface options that used to live here were Lightweight-Charts
+ * config; the Vela chart takes its own theme through `new Vela(el, { theme })`
+ * and `chart.setTheme`.)
+ */
 
 export const TV = {
   bg: "#000000",
@@ -20,57 +26,3 @@ export const TV = {
   rsi: "#ab47bc",
   atr: "#ffa726",
 } as const;
-
-export const chartOptions: DeepPartial<ChartOptions> = {
-  autoSize: true,
-  layout: {
-    background: { type: ColorType.Solid, color: TV.bg },
-    textColor: TV.text,
-    fontSize: 10,
-    fontFamily: "Trebuchet MS, Roboto, Ubuntu, sans-serif",
-    attributionLogo: false,
-    panes: {
-      separatorColor: TV.border,
-      separatorHoverColor: "#3a3a3a",
-      enableResize: true,
-    },
-  },
-  grid: {
-    vertLines: { visible: false },
-    horzLines: { color: TV.grid },
-  },
-  crosshair: {
-    mode: CrosshairMode.Normal,
-    vertLine: {
-      color: TV.crosshair,
-      width: 1,
-      style: LineStyle.Dashed,
-      visible: true,
-      labelVisible: true,
-      labelBackgroundColor: TV.active,
-    },
-    horzLine: {
-      color: TV.crosshair,
-      width: 1,
-      style: LineStyle.Dashed,
-      visible: true,
-      labelVisible: true,
-      labelBackgroundColor: TV.active,
-    },
-  },
-  rightPriceScale: {
-    borderColor: TV.border,
-    scaleMargins: { top: 0.06, bottom: 0.16 },
-  },
-  timeScale: {
-    borderColor: TV.border,
-    timeVisible: true,
-    secondsVisible: false,
-    rightOffset: 6,
-    barSpacing: 7,
-    shiftVisibleRangeOnNewBar: true,
-  },
-  handleScroll: { vertTouchDrag: false },
-  // Wheel zoom is handled in ChartCanvas (right-edge anchored, TradingView-style).
-  handleScale: { mouseWheel: false, pinch: true },
-};

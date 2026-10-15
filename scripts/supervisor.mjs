@@ -40,13 +40,16 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
+import { APP_PORT } from "./app-port.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const stateDir = path.join(root, ".maws");
 const stateFile = path.join(stateDir, "app-state.json");
 const tokenFile = path.join(stateDir, "supervisor-token");
 
-const CHILD_PORT = Number(process.env.PORT || 3000);
+// Pinned, never env-selected: the browser's saved workspace is keyed by origin, so
+// any other port comes up as an empty default workspace (see app-port.mjs).
+const CHILD_PORT = APP_PORT;
 const CONTROL_HOST = "127.0.0.1";
 const CONTROL_PORT = Number(process.env.MAWS_CONTROL_PORT || 3001);
 // The takeover listener serves the same external surface as the app itself,

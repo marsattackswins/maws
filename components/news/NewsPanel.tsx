@@ -4,7 +4,7 @@ import { formatTicker } from "@/lib/maws/universe";
 import { fetchNews, formatNewsAge, type NewsItem } from "@/lib/news";
 import { useActivePane, useAppStore } from "@/lib/store";
 import { ExternalLink, RefreshCw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type NewsTab = "asset" | "all";
 
@@ -29,7 +29,7 @@ function NewsRow({ item, now }: { item: NewsItem; now: number }) {
           : "cursor-default opacity-80"
       }`}
     >
-      <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-wide text-[#787b86]">
+      <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-wide text-(--app-muted)">
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="truncate">
             {item.source}
@@ -41,11 +41,11 @@ function NewsRow({ item, now }: { item: NewsItem; now: number }) {
         </span>
         <span className="shrink-0 normal-case tracking-normal">{formatNewsAge(item.at, now)}</span>
       </div>
-      <div className="mt-1 text-[13px] leading-[18px] font-medium text-[#d1d4dc]">
+      <div className="mt-1 text-[13px] leading-[18px] font-medium text-(--app-text)">
         {item.headline}
       </div>
       {item.summary ? (
-        <div className="mt-1 line-clamp-2 text-[11px] leading-[15px] text-[#787b86]">
+        <div className="mt-1 line-clamp-2 text-[11px] leading-[15px] text-(--app-muted)">
           {item.summary}
         </div>
       ) : null}
@@ -62,6 +62,14 @@ export function NewsPanel() {
   const [loading, setLoading] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
   const [now, setNow] = useState(() => Date.now());
+  /** Last published-at we notified about — 0 until the first notification fires. */
+  const lastSeenRef = useRef(0);
+
+  useEffect(() => {
+    if (useAppStore.getState().chartSettings.newsNotification === true && typeof Notification !== "undefined" && Notification.permission === "default") {
+      void Notification.requestPermission().catch(() => undefined);
+    }
+  }, []);
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 60_000);
@@ -78,6 +86,26 @@ export function NewsPanel() {
         : fetchNews({ category: "all" }, ac.signal);
     void req.then((result) => {
       if (ac.signal.aborted) return;
+      // News notification: fire a browser notification for the newest headline
+      // when the panel reloads and it is newer than what was last shown.
+      const newest = result.items[0];
+      if (
+        useAppStore.getState().chartSettings.newsNotification === true &&
+        newest &&
+        newest.at > lastSeenRef.current
+      ) {
+        lastSeenRef.current = newest.at;
+        try {
+          if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+            new Notification(formatTicker(pane.symbol), {
+              body: newest.headline,
+              tag: `maws-news-${newest.id}`,
+            });
+          }
+        } catch {
+          /* notifications unavailable */
+        }
+      }
       setItems(result.items);
       setError(result.error ?? null);
       setLoading(false);
@@ -89,7 +117,7 @@ export function NewsPanel() {
 
   if (!latestNews) {
     return (
-      <div className="flex h-full items-center justify-center px-4 text-center text-[13px] text-[#787b86]">
+      <div className="flex h-full items-center justify-center px-4 text-center text-[13px] text-(--app-muted)">
         Latest news is hidden in Settings → Events
       </div>
     );
@@ -97,9 +125,9 @@ export function NewsPanel() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex h-8 shrink-0 items-center justify-between border-b border-[#222222] px-2">
+      <div className="flex h-8 shrink-0 items-center justify-between border-b border-(--app-border) px-2">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="text-[13px] font-semibold text-[#d1d4dc]">News</span>
+          <span className="text-[13px] font-semibold text-(--app-text)">News</span>
           <span className="truncate text-[10px] uppercase tracking-wide text-[#4c525e]">
             Finnhub
             {tab === "asset" ? ` · ${formatTicker(pane.symbol)}` : ""}
@@ -107,7 +135,7 @@ export function NewsPanel() {
           <button
             type="button"
             title="Reload news"
-            className="flex h-5 items-center gap-1 rounded px-1 text-[10px] text-[#4c525e] hover:bg-[#222222] hover:text-[#d1d4dc]"
+            className="flex h-5 items-center gap-1 rounded px-1 text-[10px] text-[#4c525e] hover:bg-(--app-hover) hover:text-(--app-text)"
             onClick={() => setReloadToken((n) => n + 1)}
           >
             <RefreshCw size={10} />
@@ -116,7 +144,7 @@ export function NewsPanel() {
         </div>
       </div>
 
-      <div className="flex shrink-0 gap-0.5 border-b border-[#222222] px-2 py-1.5">
+      <div className="flex shrink-0 gap-0.5 border-b border-(--app-border) px-2 py-1.5">
         {TABS.map((t) => {
           const active = tab === t.id;
           return (
@@ -126,8 +154,8 @@ export function NewsPanel() {
               onClick={() => setTab(t.id)}
               className={`h-6 rounded px-2 text-[11px] ${
                 active
-                  ? "bg-[var(--maws-elevated)] text-[#d1d4dc]"
-                  : "text-[#787b86] hover:bg-[var(--maws-elevated)] hover:text-[#d1d4dc]"
+                  ? "bg-[var(--maws-elevated)] text-(--app-text)"
+                  : "text-(--app-muted) hover:bg-[var(--maws-elevated)] hover:text-(--app-text)"
               }`}
             >
               {t.label}
@@ -137,7 +165,7 @@ export function NewsPanel() {
       </div>
 
       {error ? (
-        <div className="shrink-0 border-b border-[#222222] px-2 py-1.5 text-[10px] text-[#787b86]">
+        <div className="shrink-0 border-b border-(--app-border) px-2 py-1.5 text-[10px] text-(--app-muted)">
           {error}
           {error.includes("FINNHUB_API_KEY")
             ? " — add it to .env.local and restart the dev server."
@@ -147,12 +175,12 @@ export function NewsPanel() {
 
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 py-2">
         {loading && items.length === 0 ? (
-          <div className="px-2 py-8 text-center text-[12px] text-[#787b86]">
+          <div className="px-2 py-8 text-center text-[12px] text-(--app-muted)">
             Loading headlines…
           </div>
         ) : null}
         {!loading && items.length === 0 ? (
-          <div className="px-2 py-8 text-center text-[12px] text-[#787b86]">
+          <div className="px-2 py-8 text-center text-[12px] text-(--app-muted)">
             No headlines for this feed right now
           </div>
         ) : null}

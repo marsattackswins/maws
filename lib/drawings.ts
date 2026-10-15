@@ -57,6 +57,7 @@ export function clampToPlot(x: number, y: number, plot: PlotBounds): { x: number
 export const DRAW_TOOLS = [
   "trend",
   "hray",
+  "channel",
   "fib",
   "path",
   "dcurve",
@@ -74,6 +75,7 @@ export type PersistTool = (typeof DRAW_TOOLS)[number];
 export const DRAW_LABEL: Record<PersistTool, string> = {
   trend: "Trend line",
   hray: "Horizontal ray",
+  channel: "Parallel channel",
   fib: "Fib retracement",
   path: "Path",
   dcurve: "Double curve",

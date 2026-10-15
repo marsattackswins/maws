@@ -11,10 +11,8 @@ import type {
   Timeframe,
   VwapIndicatorSettings,
 } from "@/types";
-import { LineStyle } from "lightweight-charts";
 
 export const INDICATOR_ORDER: IndicatorId[] = [
-  "volume",
   "vwap",
   "ema",
   "bb",
@@ -22,30 +20,25 @@ export const INDICATOR_ORDER: IndicatorId[] = [
   "stoch",
   "atr",
   "adx",
-  "pmo",
-  "ob",
 ];
 
 /** Drawn on the main price pane. */
-export const OVERLAY_INDICATORS: IndicatorId[] = ["volume", "vwap", "ema", "bb", "ob"];
+export const OVERLAY_INDICATORS: IndicatorId[] = ["vwap", "ema", "bb"];
 
 /** Drawn in their own chart panes below price. */
-export const PANE_INDICATORS: IndicatorId[] = ["rsi", "stoch", "atr", "adx", "pmo"];
+export const PANE_INDICATORS: IndicatorId[] = ["rsi", "stoch", "atr", "adx"];
 
-export type StudyPaneId = "rsi" | "stoch" | "atr" | "adx" | "pmo";
+export type StudyPaneId = "rsi" | "stoch" | "atr" | "adx";
 
 export function indicatorTitle(id: IndicatorId, symbol: string): string {
   const base = symbol.replace(/USDT$|USD$|USDC$/, "");
-  if (id === "volume") return `Vol · ${base}`;
   if (id === "vwap") return "VWAP";
   if (id === "ema") return "EMA";
   if (id === "bb") return "Bollinger Bands";
   if (id === "rsi") return "RSI";
   if (id === "stoch") return "Stochastic";
   if (id === "atr") return "ATR";
-  if (id === "adx") return "ADX";
-  if (id === "ob") return "Order Blocks";
-  return "PMO";
+  return "ADX";
 }
 
 /** Apply 0–100 opacity onto a hex / rgb / rgba color. */
@@ -73,10 +66,13 @@ export function applyColorOpacity(color: string, opacityPct: number): string {
   return c;
 }
 
-export function toChartLineStyle(style: DrawingLineStyle | undefined): LineStyle {
-  if (style === "dashed") return LineStyle.Dashed;
-  if (style === "dotted") return LineStyle.Dotted;
-  return LineStyle.Solid;
+export type VelaLineStyle = "solid" | "dashed" | "dotted";
+
+/** Map a MAWS line-style to Vela's drawing/plot line-style vocabulary. */
+export function toChartLineStyle(style: DrawingLineStyle | undefined): VelaLineStyle {
+  if (style === "dashed") return "dashed";
+  if (style === "dotted") return "dotted";
+  return "solid";
 }
 
 export function lineAppearance(
@@ -478,23 +474,6 @@ export function computeAdx(candles: Candle[], period = 14): (number | null)[] {
   return out;
 }
 
-/** SMA of volume for Volume MA overlay. */
-export function computeVolumeMa(candles: Candle[], period = 20): (number | null)[] {
-  return smaSeries(
-    candles.map((c) => c.volume),
-    Math.max(1, period),
-  );
-}
-
-/** Last SMA of volume — O(period), for live tip updates. */
-export function computeVolumeMaLast(candles: Candle[], period = 20): number | null {
-  const n = Math.max(1, period);
-  if (candles.length < n) return null;
-  let sum = 0;
-  for (let i = candles.length - n; i < candles.length; i++) sum += candles[i].volume;
-  return sum / n;
-}
-
 function vwapAnchorKey(time: number, anchor: VwapIndicatorSettings["anchorPeriod"]): number {
   const d = new Date(time * 1000);
   if (anchor === "month") return d.getUTCFullYear() * 100 + (d.getUTCMonth() + 1);
@@ -560,12 +539,12 @@ export function lastDefined(values: (number | null)[]): number | null {
 export function toLineData(
   candles: Candle[],
   values: (number | null)[],
-): { time: import("lightweight-charts").UTCTimestamp; value: number }[] {
-  const out: { time: import("lightweight-charts").UTCTimestamp; value: number }[] = [];
+): { time: number; value: number }[] {
+  const out: { time: number; value: number }[] = [];
   for (let i = 0; i < candles.length; i++) {
     const v = values[i];
     if (v == null) continue;
-    out.push({ time: candles[i].time as import("lightweight-charts").UTCTimestamp, value: v });
+    out.push({ time: candles[i].time, value: v });
   }
   return out;
 }

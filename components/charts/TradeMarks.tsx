@@ -1,30 +1,48 @@
 "use client";
 
+/**
+ * TradeMarks.tsx — Vela implementation.
+ *
+ * Position entry / TP / SL / liquidation / alert / order lines are Vela user
+ * drawings (`hline`) owned by this component. Vela emits the new price on drag
+ * (`drawing:edited`); the existing MAWS dispatch layer validates and executes
+ * (live → /api/live/protect via dispatchProtect, paper → the paper engine), and
+ * Vela is updated only from the confirmed broker state that flows back through
+ * the store. Risk/reward zones paint through the `maws-trade-zones` renderer
+ * layer. Vela never sees broker credentials or executes orders directly.
+ */
+
+import { useEffect, useMemo, useRef } from "react";
 import { getChart } from "@/lib/chart-registry";
-import { attachChartLinkedPaint } from "@/lib/chart-linked-paint";
+import { mawsFeed } from "@/lib/maws/feed";
 import { formatPrice } from "@/lib/maws/feed";
 import { useBrokerBook } from "@/lib/selectors/broker";
 import { useAppStore } from "@/lib/store";
 import { dispatchProtect, dispatchCancelOrder } from "@/lib/trading/dispatch";
 import { findProtectiveOrderId } from "@/lib/trade-marks";
+import type { TradeZonesData } from "@/lib/vela-layers";
+import type { DrawingStyle } from "@/lib/charting";
 import type { ChartPaneState } from "@/types";
-import { useEffect, useMemo, useRef } from "react";
 
 type Mark = {
   key: string;
   price: number;
   label: string;
   color: string;
-  dash: string;
+  lineStyle: DrawingStyle["lineStyle"];
   onMove: (price: number) => void;
   onRemove: () => void;
-  /** True while a replace/cancel round-trip is in flight. */
-  busy?: boolean;
 };
 
+function dashToStyle(dash: string): DrawingStyle["lineStyle"] {
+  if (dash === "2 3" || dash === "1 4") return "dotted";
+  if (dash === "4 3" || dash === "6 4" || dash === "8 4") return "dashed";
+  return "solid";
+}
+
+const TRADE_LAYER = "maws-trade-zones";
+
 export function TradeMarks({ pane }: { pane: ChartPaneState }) {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const drag = useRef<{ key: string; move: (price: number) => void } | null>(null);
   const settings = useAppStore((s) => s.chartSettings);
   const alerts = useAppStore((s) => s.alerts);
   // Exactly one book (live for binance, paper otherwise) — never a mix.
@@ -35,10 +53,13 @@ export function TradeMarks({ pane }: { pane: ChartPaneState }) {
   const removeOrder = useAppStore((s) => s.removeOrder);
   const updatePosition = useAppStore((s) => s.updatePosition);
   const removePosition = useAppStore((s) => s.removePosition);
+  const replay = useAppStore((s) => s.replay);
   const live = useAppStore((s) => s.connectedBroker) === "binance";
   const busy = useRef(false);
 
-  const marks = useMemo(() => {
+  const replaying = replay?.paneId === pane.id;
+
+  const marks = useMemo<Mark[]>(() => {
     const list: Mark[] = [];
     if (settings.showAlertLines) {
       for (const a of alerts) {
@@ -48,7 +69,7 @@ export function TradeMarks({ pane }: { pane: ChartPaneState }) {
           price: a.price,
           label: `Alert ${a.side === "above" ? "≥" : "≤"} ${formatPrice(a.symbol, a.price)}`,
           color: settings.alertLineColor,
-          dash: "6 4",
+          lineStyle: "dashed",
           onMove: (price) => updateAlert(a.id, { price }),
           onRemove: () => removeAlert(a.id),
         });
@@ -58,13 +79,12 @@ export function TradeMarks({ pane }: { pane: ChartPaneState }) {
       for (const o of orders) {
         if (o.symbol !== pane.symbol) continue;
         const buy = o.side === "buy";
-        const kind = o.type === "stop" ? "Stop" : o.type === "market" ? "Market" : "Limit";
         list.push({
           key: `order-${o.id}`,
           price: o.price,
-          label: `${buy ? "Buy" : "Sell"} ${kind} ${o.qty}`,
+          label: `${buy ? "Buy" : "Sell"} ${o.type === "stop" ? "Stop" : o.type === "market" ? "Market" : "Limit"} ${o.qty}`,
           color: buy ? settings.buyLineColor : settings.sellLineColor,
-          dash: o.type === "stop" ? "2 3" : "8 4",
+          lineStyle: o.type === "stop" ? "dotted" : "dashed",
           onMove: (price) => updateOrder(o.id, { price }),
           onRemove: () => removeOrder(o.id),
         });
@@ -80,7 +100,7 @@ export function TradeMarks({ pane }: { pane: ChartPaneState }) {
           price: p.entry,
           label: `${long ? "Long" : "Short"} ${p.qty} @ ${formatPrice(p.symbol, p.entry)}`,
           color,
-          dash: "",
+          lineStyle: "solid",
           onMove: (price) => updatePosition(p.id, { entry: price }),
           onRemove: () => removePosition(p.id),
         });
@@ -91,7 +111,7 @@ export function TradeMarks({ pane }: { pane: ChartPaneState }) {
           price: p.tp,
           label: `TP ${formatPrice(p.symbol, p.tp)}`,
           color: settings.tpLineColor,
-          dash: "4 3",
+          lineStyle: "dashed",
           onMove: (price) => {
             if (live) {
               if (busy.current) return;
@@ -125,7 +145,7 @@ export function TradeMarks({ pane }: { pane: ChartPaneState }) {
           price: p.sl,
           label: `SL ${formatPrice(p.symbol, p.sl)}`,
           color: settings.slLineColor,
-          dash: "4 3",
+          lineStyle: "dashed",
           onMove: (price) => {
             if (live) {
               if (busy.current) return;
@@ -159,7 +179,7 @@ export function TradeMarks({ pane }: { pane: ChartPaneState }) {
           price: p.liq,
           label: `Liq ${p.leverage}x ${formatPrice(p.symbol, p.liq)}`,
           color: settings.liqLineColor,
-          dash: "1 4",
+          lineStyle: "dotted",
           onMove: (price) => updatePosition(p.id, { liq: price }),
           onRemove: () => updatePosition(p.id, { liq: null }),
         });
@@ -167,169 +187,208 @@ export function TradeMarks({ pane }: { pane: ChartPaneState }) {
     }
     return list;
   }, [
-    alerts,
-    orders,
-    positions,
-    pane.symbol,
-    settings,
-    updateAlert,
-    removeAlert,
-    updateOrder,
-    removeOrder,
-    updatePosition,
-    removePosition,
+    alerts, orders, positions, pane.symbol, settings, live,
+    updateAlert, removeAlert, updateOrder, removeOrder, updatePosition, removePosition,
   ]);
 
   const marksRef = useRef(marks);
   marksRef.current = marks;
-  const settingsRef = useRef(settings);
-  settingsRef.current = settings;
-  const lastPaintKeyRef = useRef("");
+  const replayingRef = useRef(replaying);
+  replayingRef.current = replaying;
+  /** markKey → Vela drawing id */
+  const idsRef = useRef<Map<string, string>>(new Map());
+  /** Drawing ids being rewritten by THIS component (suppress drag echo). */
+  const syncingRef = useRef<Set<string>>(new Set());
 
-  /** Live position risk/reward zones for this pane (entry→TP green, entry→SL red). */
-  const positionZones = useMemo(() => {
-    if (!settings.showTpSlLines || pane.symbol == null) return [];
-    return positions
-      .filter((p) => p.symbol === pane.symbol)
-      .map((p) => ({
-        key: `zone-${p.id}`,
-        entry: p.entry,
-        tp: p.tp,
-        sl: p.sl,
-        tpColor: settings.tpLineColor,
-        slColor: settings.slLineColor,
-      }));
-  }, [positions, pane.symbol, settings.showTpSlLines, settings.tpLineColor, settings.slLineColor]);
-  const zonesRef = useRef(positionZones);
-  zonesRef.current = positionZones;
-
-  const paint = () => {
-    const svg = svgRef.current;
-    if (!svg) return;
-    const handle = getChart(pane.id);
-    const w = svg.clientWidth || 1;
-    const h = svg.clientHeight || 1;
-    const s = settingsRef.current;
-    const list = marksRef.current;
-    const zones = zonesRef.current;
-
-    // Horizontal pan does not move price lines — skip DOM rewrite when Ys unchanged.
-    const ys: number[] = [];
-    for (const m of list) {
-      const y = handle?.series.priceToCoordinate(m.price);
-      ys.push(y == null ? -1 : Math.round(y * 2) / 2);
-    }
-    const zoneYs: number[] = [];
-    for (const z of zones) {
-      for (const price of [z.entry, z.tp ?? Number.NaN, z.sl ?? Number.NaN]) {
-        const y = Number.isFinite(price) ? handle?.series.priceToCoordinate(price) : null;
-        zoneYs.push(y == null ? -1 : Math.round(y * 2) / 2);
-      }
-    }
-    const key = `${w}|${h}|${s.extendedPriceLines ? 1 : 0}|${s.orderAlignment}|${ys.join(",")}|${zoneYs.join(",")}|${zones.length}`;
-    if (key === lastPaintKeyRef.current) return;
-    lastPaintKeyRef.current = key;
-
-    const nodes: string[] = [];
-
-    // Risk/reward zones render behind the price lines (first in the SVG).
-    for (let zi = 0; zi < zones.length; zi++) {
-      const z = zones[zi];
-      const yE = zoneYs[zi * 3];
-      const yT = zoneYs[zi * 3 + 1];
-      const yS = zoneYs[zi * 3 + 2];
-      const band = (y1: number, y2: number, color: string) => {
-        if (y1 < 0 || y2 < 0 || Math.abs(y1 - y2) < 1) return;
-        const top = Math.max(-8, Math.min(y1, y2));
-        const bottom = Math.min(h + 8, Math.max(y1, y2));
-        nodes.push(
-          `<rect pointer-events="none" x="0" y="${top.toFixed(1)}" width="${w}" height="${Math.max(0, bottom - top).toFixed(1)}" fill="${color}" fill-opacity="0.10"/>`,
-        );
-      };
-      band(yE, yT, z.tpColor); // profit zone
-      band(yE, yS, z.slColor); // risk zone
-    }
-    for (let i = 0; i < list.length; i++) {
-      const m = list[i];
-      const y = ys[i];
-      if (y < 0 || y < -8 || y > h + 8) continue;
-      const dash = m.dash ? `stroke-dasharray="${m.dash}"` : "";
-      const full = s.extendedPriceLines;
-      const x1 = full ? 0 : Math.max(0, w * 0.35);
-      nodes.push(
-        `<line data-mark="${m.key}" pointer-events="stroke" x1="${x1}" y1="${y}" x2="${w}" y2="${y}" stroke="${m.color}" stroke-width="8" stroke-opacity="0"/>`,
-        `<line pointer-events="none" x1="${x1}" y1="${y}" x2="${w}" y2="${y}" stroke="${m.color}" stroke-width="1.25" ${dash}/>`,
-      );
-      const tag = escapeXml(m.label);
-      const tw = Math.min(220, 10 + tag.length * 6.2);
-      const x = s.orderAlignment === "left" ? 8 : Math.max(8, w - tw - 58);
-      nodes.push(
-        `<g data-mark="${m.key}" pointer-events="all" cursor="ns-resize">
-            <rect x="${x}" y="${y - 9}" width="${tw}" height="18" rx="2" fill="#000" stroke="${m.color}"/>
-            <text x="${x + 6}" y="${y + 4}" fill="${m.color}" font-size="11" font-family="Trebuchet MS">${tag}</text>
-          </g>`,
-        `<g data-remove="${m.key}" pointer-events="all" cursor="pointer">
-            <rect x="${x + tw - 16}" y="${y - 8}" width="14" height="16" fill="transparent"/>
-            <text x="${x + tw - 13}" y="${y + 4}" fill="#787b86" font-size="11">×</text>
-          </g>`,
-      );
-    }
-    svg.innerHTML = nodes.join("");
-  };
-
+  // Sync store state → Vela drawings (add / update / remove / show-hide).
   useEffect(() => {
-    lastPaintKeyRef.current = "";
-    return attachChartLinkedPaint({
-      paneId: pane.id,
-      getChart,
-      paint,
-      observeEl: svgRef.current,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pane.id, marks, settings.extendedPriceLines, settings.orderAlignment]);
+    let cancelled = false;
+    let tries = 0;
+    let timer = 0;
 
-  return (
-    <svg
-      ref={svgRef}
-      className="pointer-events-none absolute inset-0 z-[15] h-full w-full"
-      onMouseDown={(e) => {
-        const target = e.target as SVGElement;
-        const removeKey = target.closest("[data-remove]")?.getAttribute("data-remove");
-        if (removeKey) {
-          e.preventDefault();
-          e.stopPropagation();
-          marksRef.current.find((m) => m.key === removeKey)?.onRemove();
-          return;
+    const apply = () => {
+      if (cancelled) return;
+      const handle = getChart(pane.id);
+      if (!handle) {
+        if (tries++ < 120) timer = window.setTimeout(apply, 250);
+        return;
+      }
+      tries = 0;
+      const { vela } = handle;
+      const live = vela.drawings.all();
+      const byId = new Map(live.map((d) => [d.id, d]));
+      const ids = idsRef.current;
+
+      // Drop mappings whose drawing disappeared (chart remount).
+      for (const [key, id] of [...ids]) {
+        if (!byId.has(id)) ids.delete(key);
+      }
+      // Remove drawings whose mark is gone.
+      const keys = new Set(marksRef.current.map((m) => m.key));
+      for (const [key, id] of [...ids]) {
+        if (keys.has(key)) continue;
+        ids.delete(key);
+        try {
+          vela.drawings.remove(id);
+        } catch {
+          /* already gone */
         }
-        const key = target.closest("[data-mark]")?.getAttribute("data-mark");
-        const mark = marksRef.current.find((m) => m.key === key);
-        if (!mark) return;
-        e.preventDefault();
-        e.stopPropagation();
-        drag.current = { key: mark.key, move: mark.onMove };
-        const move = (ev: MouseEvent) => {
-          const y = ev.clientY - (svgRef.current?.getBoundingClientRect().top ?? 0);
-          const price = getChart(pane.id)?.series.coordinateToPrice(y);
-          if (price == null) return;
-          drag.current?.move(price);
-          paint();
-        };
-        const up = () => {
-          drag.current = null;
-          window.removeEventListener("mousemove", move);
-          window.removeEventListener("mouseup", up);
-        };
-        window.addEventListener("mousemove", move);
-        window.addEventListener("mouseup", up);
-      }}
-    />
-  );
-}
+      }
+      // Add / update.
+      const now = Date.now();
+      for (const m of marksRef.current) {
+        const existingId = ids.get(m.key);
+        const existing = existingId ? byId.get(existingId) : undefined;
+        if (existing) {
+          const anchor = existing.anchors[0];
+          if (anchor && Math.abs(anchor.price - m.price) > 1e-12) {
+            syncingRef.current.add(existing.id);
+            try {
+              vela.drawings.update(existing.id, {
+                anchors: [{ time: anchor.time, price: m.price }],
+              });
+            } catch {
+              /* ignore */
+            }
+          }
+          if (existing.style.lineColor !== m.color) {
+            syncingRef.current.add(existing.id);
+            try {
+              vela.drawings.update(existing.id, {
+                style: { ...existing.style, lineColor: m.color, lineStyle: m.lineStyle },
+              });
+            } catch {
+              /* ignore */
+            }
+          }
+          // Replay hides every trade visual; replay end restores them.
+          if (existing.visible === replayingRef.current) {
+            syncingRef.current.add(existing.id);
+            try {
+              vela.drawings.show(existing.id, !replayingRef.current);
+            } catch {
+              /* ignore */
+            }
+          }
+          continue;
+        }
+        try {
+          const created = vela.drawings.add("hline", {
+            paneId: "price",
+            anchors: [{ time: now, price: m.price }],
+            style: { lineColor: m.color, lineWidth: 1, lineStyle: m.lineStyle },
+            text: { value: m.label, size: "tiny", hAlign: "right", vAlign: "center" },
+          });
+          if (created) {
+            ids.set(m.key, created.id);
+            if (replayingRef.current) vela.drawings.show(created.id, false);
+          }
+        } catch {
+          /* renderer not ready yet — retried on next marks change */
+        }
+      }
+    };
 
-function escapeXml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+    apply();
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [pane.id, marks, replaying]);
+
+  // Vela → store: drag events on our lines.
+  useEffect(() => {
+    let tries = 0;
+    let timer = 0;
+    let cancelled = false;
+    let offs: Array<() => void> = [];
+
+    const attach = () => {
+      if (cancelled) return;
+      const handle = getChart(pane.id);
+      if (!handle) {
+        if (tries++ < 120) timer = window.setTimeout(attach, 250);
+        return;
+      }
+      const { vela } = handle;
+
+      const onEdited = () => {
+        if (replayingRef.current) return;
+        const ids = idsRef.current;
+        const all = vela.drawings.all();
+        for (const [key, id] of ids) {
+          if (syncingRef.current.has(id)) continue;
+          const doc = all.find((d) => d.id === id);
+          if (!doc) continue;
+          const price = doc.anchors[0]?.price;
+          if (price == null) continue;
+          const mark = marksRef.current.find((m) => m.key === key);
+          if (!mark) continue;
+          if (Math.abs(mark.price - price) < 1e-12) continue;
+          // Vela emitted the new price → MAWS validates/executes; the confirmed
+          // broker state flows back through the store and re-syncs Vela.
+          mark.onMove(price);
+        }
+        syncingRef.current.clear();
+      };
+
+      const onRemoved = (payload: { id: string }) => {
+        const id = payload.id;
+        const ids = idsRef.current;
+        for (const [key, vid] of [...ids]) {
+          if (vid !== id) continue;
+          ids.delete(key);
+          if (replayingRef.current) return;
+          marksRef.current.find((m) => m.key === key)?.onRemove();
+        }
+      };
+
+      offs = [vela.on("drawing:edited", onEdited), vela.on("drawing:removed", onRemoved)];
+    };
+
+    attach();
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+      for (const off of offs) off();
+    };
+  }, [pane.id]);
+
+  // Risk/reward zones → renderer layer payload (hidden during replay).
+  useEffect(() => {
+    let cancelled = false;
+    let tries = 0;
+    let timer = 0;
+    const push = () => {
+      if (cancelled) return;
+      const handle = getChart(pane.id);
+      if (!handle) {
+        if (tries++ < 120) timer = window.setTimeout(push, 250);
+        return;
+      }
+      const bands = !settings.showTpSlLines || replaying
+        ? []
+        : positions
+            .filter((p) => p.symbol === pane.symbol)
+            .flatMap((p) => {
+              const out: TradeZonesData["bands"] = [];
+              if (p.tp != null) out.push({ entry: p.entry, other: p.tp, color: settings.tpLineColor });
+              if (p.sl != null) out.push({ entry: p.entry, other: p.sl, color: settings.slLineColor });
+              return out;
+            });
+      try {
+        handle.renderer.setNativeData(TRADE_LAYER, { bands } satisfies TradeZonesData);
+      } catch {
+        /* ignore */
+      }
+    };
+    push();
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [pane.id, positions, pane.symbol, settings.showTpSlLines, settings.tpLineColor, settings.slLineColor, replaying, mawsFeed]);
+
+  // Vela owns rendering — no DOM output.
+  return null;
 }

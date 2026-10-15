@@ -8,10 +8,7 @@ import {
   DEFAULT_INDICATOR_SETTINGS,
   normalizeBbSettings,
   normalizeEmaSettings,
-  normalizeObSettings,
-  normalizePmoSettings,
   normalizeStochSettings,
-  normalizeVolumeSettings,
   normalizeVwapSettings,
 } from "@/types";
 import { cloneVisibility } from "@/lib/visibility";
@@ -30,11 +27,6 @@ export function normalizeStudySettings<K extends IndicatorId>(
   raw: Partial<IndicatorSettingsMap[K]> | null | undefined,
 ): IndicatorSettingsMap[K] {
   const base = DEFAULT_INDICATOR_SETTINGS[type];
-  if (type === "volume") {
-    return normalizeVolumeSettings(
-      raw as Partial<IndicatorSettingsMap["volume"]>,
-    ) as IndicatorSettingsMap[K];
-  }
   if (type === "vwap") {
     return normalizeVwapSettings(
       raw as Partial<IndicatorSettingsMap["vwap"]>,
@@ -49,16 +41,6 @@ export function normalizeStudySettings<K extends IndicatorId>(
   if (type === "stoch") {
     return normalizeStochSettings(
       raw as Parameters<typeof normalizeStochSettings>[0],
-    ) as IndicatorSettingsMap[K];
-  }
-  if (type === "pmo") {
-    return normalizePmoSettings(
-      raw as Partial<IndicatorSettingsMap["pmo"]>,
-    ) as IndicatorSettingsMap[K];
-  }
-  if (type === "ob") {
-    return normalizeObSettings(
-      raw as Partial<IndicatorSettingsMap["ob"]>,
     ) as IndicatorSettingsMap[K];
   }
   if (type === "rsi" || type === "atr" || type === "adx") {
@@ -94,14 +76,11 @@ export function createStudy(
   };
 }
 
-/** Default studies for a new chart pane (Volume + VWAP). */
+/** Default studies for a new chart pane (VWAP). */
 export function defaultStudies(
   defaults: IndicatorSettingsMap = DEFAULT_INDICATOR_SETTINGS,
 ): IndicatorInstance[] {
-  return [
-    createStudy("volume", defaults.volume),
-    createStudy("vwap", defaults.vwap),
-  ];
+  return [createStudy("vwap", defaults.vwap)];
 }
 
 export function studiesOfType(studies: IndicatorInstance[], type: IndicatorId): IndicatorInstance[] {
@@ -140,12 +119,14 @@ export function ensurePaneStudies(
 ): IndicatorInstance[] {
   if (Array.isArray(pane.studies)) {
     if (pane.studies.length > 0 || !pane.indicators) {
-      return pane.studies.map((s) => ({
-        id: s.id || newStudyId(),
-        type: s.type,
-        hidden: Boolean(s.hidden),
-        settings: cloneStudySettings(s.type, s.settings as never),
-      }));
+      return pane.studies
+        .filter((s) => s.type in DEFAULT_INDICATOR_SETTINGS)
+        .map((s) => ({
+          id: s.id || newStudyId(),
+          type: s.type,
+          hidden: Boolean(s.hidden),
+          settings: cloneStudySettings(s.type, s.settings as never),
+        }));
     }
   }
   if (pane.indicators) {
@@ -174,7 +155,9 @@ export function templateToStudies(
   defaults: IndicatorSettingsMap = DEFAULT_INDICATOR_SETTINGS,
 ): IndicatorInstance[] {
   if (tpl.studies?.length) {
-    return tpl.studies.map((s) => createStudy(s.type, s.settings as never, Boolean(s.hidden)));
+    return tpl.studies
+      .filter((s) => s.type in DEFAULT_INDICATOR_SETTINGS)
+      .map((s) => createStudy(s.type, s.settings as never, Boolean(s.hidden)));
   }
   if (tpl.indicators) {
     return migrateLegacyIndicators(tpl.indicators, {}, defaults);

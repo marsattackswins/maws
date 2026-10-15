@@ -52,7 +52,7 @@ const PROFILE_COPY: Record<LiveProfileId, { description: string; caution: string
 
 function ProfileMark({ profileId }: { profileId: LiveProfileId }) {
   if (profileId === "paper") {
-    return <span className="flex h-11 w-11 items-center justify-center rounded-[8px] border border-[#363a45] bg-[#1b1b1b] text-[18px]">P</span>;
+    return <span className="flex h-11 w-11 items-center justify-center rounded-[8px] border border-[#363a45] bg-(--app-elevated) text-[18px]">P</span>;
   }
   return (
     <span className="flex h-11 w-11 items-center justify-center">
@@ -273,19 +273,19 @@ export function BrokerDialog() {
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70" onMouseDown={closeDialog}>
-      <div className="w-[720px] max-w-[calc(100vw-24px)] overflow-hidden rounded-[8px] border border-[#2a2e39] bg-[#131313] shadow-[0_16px_60px_rgba(0,0,0,0.6)]" onMouseDown={(event) => event.stopPropagation()}>
+      <div className="w-[720px] max-w-[calc(100vw-24px)] overflow-hidden rounded-[8px] border border-(--app-border) bg-[#131313] shadow-[0_16px_60px_rgba(0,0,0,0.6)]" onMouseDown={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between px-5 pt-4 pb-3">
           <div>
             <div className="text-[18px] font-semibold text-white">Choose trading profile</div>
-            <div className="mt-1 text-[12px] text-[#787b86]">Current: {currentLabel} · {currentStatus}</div>
+            <div className="mt-1 text-[12px] text-(--app-muted)">Current: {currentLabel} · {currentStatus}</div>
           </div>
-          <button ref={closeRef} type="button" aria-label="Close profile chooser" className="flex h-8 w-8 items-center justify-center rounded-[4px] text-[#787b86] hover:bg-[#1a1a1a] hover:text-[#d1d4dc]" onClick={closeDialog}>
+          <button ref={closeRef} type="button" aria-label="Close profile chooser" className="flex h-8 w-8 items-center justify-center rounded-[4px] text-(--app-muted) hover:bg-(--app-hover) hover:text-(--app-text)" onClick={closeDialog}>
             <X size={16} />
           </button>
         </div>
 
         {switching ? (
-          <div className="mx-5 mb-3 flex items-center gap-2 rounded-[6px] border border-[#2962ff]/40 bg-[#101827] px-3 py-2 text-[12px] text-[#d1d4dc]" role="status">
+          <div className="mx-5 mb-3 flex items-center gap-2 rounded-[6px] border border-[#2962ff]/40 bg-[#101827] px-3 py-2 text-[12px] text-(--app-text)" role="status">
             <LoaderCircle size={14} className="animate-spin text-[#2962ff]" />
             Switching profile… Existing profile remains confirmed until the server reports readiness.
           </div>
@@ -299,7 +299,7 @@ export function BrokerDialog() {
         {loadError ? <div className="mx-5 mb-3 text-[12px] text-[#f0b90b]">{loadError}</div> : null}
 
         <div className="grid grid-cols-3 gap-3 px-5 pb-5">
-          {loading ? <div className="col-span-3 flex items-center justify-center py-14 text-[12px] text-[#787b86]"><LoaderCircle size={16} className="mr-2 animate-spin" />Loading server profiles…</div> : null}
+          {loading ? <div className="col-span-3 flex items-center justify-center py-14 text-[12px] text-(--app-muted)"><LoaderCircle size={16} className="mr-2 animate-spin" />Loading server profiles…</div> : null}
           {!loading && orderedProfiles.map((profile) => {
             const selected = activeProfile === profile.profileId && livePhase !== "switching";
             const unavailable = profile.profileId !== "paper" && !profile.configured && !authenticationRequired;
@@ -311,13 +311,13 @@ export function BrokerDialog() {
                 disabled={switching || unavailable}
                 aria-pressed={selected}
                 onClick={() => selectProfile(profile)}
-                className={`relative flex min-h-[190px] flex-col items-start rounded-[6px] border px-4 py-4 text-left transition-colors focus:outline-none focus:ring-1 focus:ring-[#2962ff] ${selected ? "border-[#089981] bg-[#071512]" : "border-[#2a2e39] bg-[#111111] hover:border-[#2962ff]"} disabled:cursor-not-allowed disabled:opacity-55`}
+                className={`relative flex min-h-[190px] flex-col items-start rounded-[6px] border px-4 py-4 text-left transition-colors focus:outline-none focus:ring-1 focus:ring-[#2962ff] ${selected ? "border-[#089981] bg-[#071512]" : "border-(--app-border) bg-[#111111] hover:border-[#2962ff]"} disabled:cursor-not-allowed disabled:opacity-55`}
               >
                 {selected ? <span className="absolute right-3 top-3 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-[#089981]"><Check size={12} />Active</span> : null}
                 <ProfileMark profileId={profile.profileId} />
-                <span className="mt-3 text-[14px] font-semibold text-[#d1d4dc]">{profile.label}</span>
-                <span className="mt-1 text-[12px] leading-4 text-[#787b86]">{copy.description}</span>
-                <span className="mt-auto flex items-center gap-1 pt-4 text-[11px] text-[#787b86]">
+                <span className="mt-3 text-[14px] font-semibold text-(--app-text)">{profile.label}</span>
+                <span className="mt-1 text-[12px] leading-4 text-(--app-muted)">{copy.description}</span>
+                <span className="mt-auto flex items-center gap-1 pt-4 text-[11px] text-(--app-muted)">
                   {unavailable
                     ? localUnavailable && profile.profileId !== "paper"
                       ? "Unavailable in local mode"
@@ -339,17 +339,17 @@ export function BrokerDialog() {
             );
           })}
         </div>
-        <div className="border-t border-[#2a2e39] px-5 py-3 text-[11px] text-[#787b86]">
+        <div className="border-t border-(--app-border) px-5 py-3 text-[11px] text-(--app-muted)">
           Server credentials and endpoints stay on the server. The browser receives only safe profile status.
         </div>
       </div>
 
       {authTarget ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60" onMouseDown={() => { setAuthTarget(null); setAuthPassword(""); setAuthError(null); }}>
-          <form role="dialog" aria-modal="true" aria-labelledby="profile-auth-title" onSubmit={authenticateForProfile} className="w-[430px] max-w-[calc(100vw-32px)] rounded-[8px] border border-[#2a2e39] bg-[#171717] p-5 shadow-[0_16px_60px_rgba(0,0,0,0.7)]" onMouseDown={(event) => event.stopPropagation()}>
+          <form role="dialog" aria-modal="true" aria-labelledby="profile-auth-title" onSubmit={authenticateForProfile} className="w-[430px] max-w-[calc(100vw-32px)] rounded-[8px] border border-(--app-border) bg-[#171717] p-5 shadow-[0_16px_60px_rgba(0,0,0,0.7)]" onMouseDown={(event) => event.stopPropagation()}>
             <div id="profile-auth-title" className="text-[16px] font-semibold text-white">Authenticate for {profileLabel(authTarget)}</div>
-            <p className="mt-3 text-[13px] leading-5 text-[#d1d4dc]">Enter the server operator password to connect this profile.</p>
-            <label className="mt-4 block text-[12px] text-[#787b86]" htmlFor="profile-operator-password">Operator password</label>
+            <p className="mt-3 text-[13px] leading-5 text-(--app-text)">Enter the server operator password to connect this profile.</p>
+            <label className="mt-4 block text-[12px] text-(--app-muted)" htmlFor="profile-operator-password">Operator password</label>
             <input
               id="profile-operator-password"
               type="password"
@@ -357,11 +357,11 @@ export function BrokerDialog() {
               autoFocus
               value={authPassword}
               onChange={(event) => setAuthPassword(event.target.value)}
-              className="mt-1 h-9 w-full rounded-[6px] border border-[#2a2e39] bg-[#111111] px-3 text-[13px] text-[#d1d4dc] outline-none focus:border-[#2962ff]"
+              className="mt-1 h-9 w-full rounded-[6px] border border-(--app-border) bg-[#111111] px-3 text-[13px] text-(--app-text) outline-none focus:border-[#2962ff]"
             />
             {authError ? <div role="alert" className="mt-3 text-[12px] text-[#f23645]">{authError}</div> : null}
             <div className="mt-5 flex justify-end gap-2">
-              <button type="button" className="rounded-[4px] px-3 py-2 text-[12px] text-[#787b86] hover:bg-[#222] hover:text-[#d1d4dc]" onClick={() => { setAuthTarget(null); setAuthPassword(""); setAuthError(null); }}>Cancel</button>
+              <button type="button" className="rounded-[4px] px-3 py-2 text-[12px] text-(--app-muted) hover:bg-[#222] hover:text-(--app-text)" onClick={() => { setAuthTarget(null); setAuthPassword(""); setAuthError(null); }}>Cancel</button>
               <button type="submit" disabled={authBusy || authPassword.length === 0} className="rounded-[4px] bg-[#2962ff] px-3 py-2 text-[12px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">{authBusy ? "Authenticating…" : "Authenticate"}</button>
             </div>
           </form>
@@ -372,15 +372,15 @@ export function BrokerDialog() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60" onMouseDown={() => { setProductionConfirmation(false); setProductionChecked(false); }}>
           <div role="dialog" aria-modal="true" aria-labelledby="production-confirm-title" className="w-[430px] max-w-[calc(100vw-32px)] rounded-[8px] border border-[#f0b90b]/50 bg-[#17130a] p-5 shadow-[0_16px_60px_rgba(0,0,0,0.7)]" onMouseDown={(event) => event.stopPropagation()}>
             <div id="production-confirm-title" className="text-[16px] font-semibold text-[#f0b90b]">You are connecting to Binance Production.</div>
-            <p className="mt-3 text-[13px] leading-5 text-[#d1d4dc]">This uses the server’s production credentials.</p>
-            <p className="text-[13px] leading-5 text-[#d1d4dc]">Existing orders and positions will not be cancelled or closed.</p>
-            <p className="text-[13px] leading-5 text-[#d1d4dc]">Switching may be blocked if exposure exists.</p>
-            <label className="mt-4 flex cursor-pointer items-start gap-2 text-[12px] text-[#d1d4dc]">
+            <p className="mt-3 text-[13px] leading-5 text-(--app-text)">This uses the server’s production credentials.</p>
+            <p className="text-[13px] leading-5 text-(--app-text)">Existing orders and positions will not be cancelled or closed.</p>
+            <p className="text-[13px] leading-5 text-(--app-text)">Switching may be blocked if exposure exists.</p>
+            <label className="mt-4 flex cursor-pointer items-start gap-2 text-[12px] text-(--app-text)">
               <input type="checkbox" checked={productionChecked} onChange={(event) => setProductionChecked(event.target.checked)} className="mt-0.5 accent-[#f0b90b]" />
               <span>I understand and want to continue.</span>
             </label>
             <div className="mt-5 flex justify-end gap-2">
-              <button type="button" className="rounded-[4px] px-3 py-2 text-[12px] text-[#787b86] hover:bg-[#241f13] hover:text-[#d1d4dc]" onClick={() => { setProductionConfirmation(false); setProductionChecked(false); }}>Cancel</button>
+              <button type="button" className="rounded-[4px] px-3 py-2 text-[12px] text-(--app-muted) hover:bg-[#241f13] hover:text-(--app-text)" onClick={() => { setProductionConfirmation(false); setProductionChecked(false); }}>Cancel</button>
               <button type="button" disabled={!productionChecked || switching} className="rounded-[4px] bg-[#f0b90b] px-3 py-2 text-[12px] font-semibold text-black disabled:cursor-not-allowed disabled:opacity-40" onClick={() => { setProductionConfirmation(false); void startSwitch("binance-production", true); }}>Connect Production</button>
             </div>
           </div>

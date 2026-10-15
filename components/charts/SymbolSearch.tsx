@@ -61,11 +61,11 @@ export function SymbolSearch() {
     <div
       data-symbol-search
       data-dropdown-open
-      className="absolute left-2 top-[40px] z-50 w-[294px] overflow-hidden rounded-sm border border-[#222222] bg-[#111111] shadow-none"
+      className="absolute left-2 top-[40px] z-50 w-[294px] overflow-hidden rounded-sm border border-(--app-border) bg-(--app-bg) shadow-none"
     >
       {/* Search input */}
-      <div className="flex items-center gap-2 border-b border-[#222222] px-3">
-        <Search size={14} className="shrink-0 text-[#787b86]" />
+      <div className="flex items-center gap-2 border-b border-(--app-border) px-3">
+        <Search size={14} className="shrink-0 text-(--app-muted)" />
         <input
           autoFocus
           value={q}
@@ -75,12 +75,12 @@ export function SymbolSearch() {
             if (e.key === "Enter" && rows[0]) setSymbol(rows[0].info.symbol);
           }}
           placeholder="Search symbol"
-          className="h-9 w-full bg-transparent text-[13px] text-[#d1d4dc] outline-none placeholder:text-[#4c525e]"
+          className="h-9 w-full bg-transparent text-[13px] text-(--app-text) outline-none placeholder:text-[#4c525e]"
         />
       </div>
 
       {/* Category tabs */}
-      <div className="flex border-b border-[#222222]">
+      <div className="flex border-b border-(--app-border)">
         {CATEGORY_TABS.map((tab) => (
           <button
             key={tab.id}
@@ -88,8 +88,8 @@ export function SymbolSearch() {
             onClick={() => setCategory(tab.id)}
             className={`flex-1 py-1.5 text-[11px] font-medium transition-colors ${
               category === tab.id
-                ? "border-b-2 border-[#2962ff] text-[#d1d4dc]"
-                : "text-[#787b86] hover:text-[#d1d4dc]"
+                ? "border-b-2 border-[#2962ff] text-(--app-text)"
+                : "text-(--app-muted) hover:text-(--app-text)"
             }`}
             style={category === tab.id ? { marginBottom: -1 } : undefined}
           >
@@ -101,7 +101,7 @@ export function SymbolSearch() {
       {/* Results */}
       <div className="max-h-[360px] overflow-auto">
         {rows.length === 0 ? (
-          <div className="px-3 py-6 text-center text-[12px] text-[#787b86]">
+          <div className="px-3 py-6 text-center text-[12px] text-(--app-muted)">
             No symbols found
           </div>
         ) : (
@@ -111,13 +111,13 @@ export function SymbolSearch() {
             return (
               <div
                 key={info.symbol}
-                className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-[#222222]"
+                className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-(--app-hover)"
                 onClick={() => setSymbol(info.symbol)}
               >
                 <button
                   type="button"
                   title={starred ? "Remove from watchlist" : "Add to watchlist"}
-                  className="shrink-0 text-[#787b86] hover:text-[#d1d4dc]"
+                  className="shrink-0 text-(--app-muted) hover:text-(--app-text)"
                   onClick={(e) => {
                     e.stopPropagation();
                     if (starred) removeFromWatchlist(info.symbol);
@@ -133,16 +133,16 @@ export function SymbolSearch() {
                 </button>
                 <AssetLogo symbol={info.symbol} size={22} />
                 <div className="min-w-0 flex-1">
-                  <div className="text-[13px] font-semibold text-[#d1d4dc]">
+                  <div className="text-[13px] font-semibold text-(--app-text)">
                     {formatTicker(info.symbol)}
                   </div>
-                  <div className="truncate text-[11px] text-[#787b86]">
+                  <div className="truncate text-[11px] text-(--app-muted)">
                     {getSymbol(info.symbol).name}
                   </div>
                 </div>
                 {quote && quote.last > 0 && (
                   <div className="shrink-0 text-right">
-                    <div className="text-[12px] text-[#d1d4dc]">
+                    <div className="text-[12px] text-(--app-text)">
                       {formatPrice(info.symbol, quote.last)}
                     </div>
                     <div className={`text-[11px] ${up ? "text-[#089981]" : "text-[#f23645]"}`}>

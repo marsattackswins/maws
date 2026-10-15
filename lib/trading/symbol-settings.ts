@@ -61,8 +61,16 @@ export function resolveMarginAmount(symbol: string): number {
   return Math.max(0, t.margin);
 }
 
+/** Raw per-symbol margin when one was explicitly saved (chartSettings default otherwise). */
+function savedMargin(symbol: string): number | undefined {
+  const saved = normalizeSaved(
+    useAppStore.getState().symbolTrading[symbol] as LegacySymbolTrading | undefined,
+  );
+  return saved.margin;
+}
+
 /** Decimal places implied by a step size (handles exponential notation). */
-function stepDecimals(step: number): number {
+export function stepDecimals(step: number): number {
   const s = String(step);
   if (s.includes("e") || s.includes("E")) {
     const exp = Number(s.split(/e/i)[1]);
@@ -96,7 +104,7 @@ export function quantizeQtyToStep(qty: number, stepSize?: string | number): numb
 }
 
 /** Effective qty step for a symbol: LOT_SIZE stepSize, else its price-tick precision. */
-function qtyStepFor(symbol: string): string {
+export function qtyStepFor(symbol: string): string {
   const info = getSymbol(symbol);
   if (info.stepSize) return info.stepSize;
   // 10 ** -4 evaluates to 0.00009999999999999999, so rebuild the step from a
@@ -108,7 +116,16 @@ function qtyStepFor(symbol: string): string {
 export function resolveOrderQty(symbol: string, price: number): number {
   if (!(price > 0)) return 0;
   const t = resolveSymbolTrading(symbol);
-  const margin = resolveMarginAmount(symbol);
+  // "Default order size" chart setting: in fixed sizing mode with no per-symbol
+  // override, it names an explicit margin (account-currency) amount. Treated as
+  // margin × leverage at price → qty, so it fills the same role as "Buy 10 units".
+  const defaultQty = Number(useAppStore.getState().chartSettings.defaultQty);
+  const useDefaultQtyMargin =
+    t.sizingMode !== "percent" &&
+    savedMargin(symbol) == null &&
+    Number.isFinite(defaultQty) &&
+    defaultQty > 0;
+  const margin = useDefaultQtyMargin ? defaultQty : resolveMarginAmount(symbol);
   const lev = Math.max(1, t.leverage);
   const qty = Number(((margin * lev) / price).toPrecision(8));
   return Math.max(0, quantizeQtyToStep(qty, qtyStepFor(symbol)));
@@ -168,6 +185,36 @@ export function formatMarginLabel(symbol: string): string {
   }
   const n = t.margin;
   return Number.isInteger(n) ? String(n) : Number(n.toFixed(2)).toString();
+}
+
+/** Stepper bounds for the topbar margin field — USDT-stepped, min 10. */
+const TOPBAR_MARGIN_MIN = 10;
+const TOPBAR_MARGIN_STEP = 10;
+
+/** Seed margin for the topbar stepper: symbol default, snapped onto the grid. */
+export function topbarSeedMargin(symbol: string): number {
+  const t = resolveSymbolTrading(symbol);
+  const margin =
+    t.sizingMode === "percent"
+      ? Math.max(0, useAppStore.getState().mockBalance) * (t.marginPercent / 100)
+      : Math.max(0, t.margin);
+  return Math.max(
+    TOPBAR_MARGIN_MIN,
+    Math.round(margin / TOPBAR_MARGIN_STEP) * TOPBAR_MARGIN_STEP,
+  );
+}
+
+/** Bump a topbar margin value by ±step, never below the 10 USDT floor. */
+export function bumpTopbarMargin(
+  symbol: string,
+  margin: number,
+  dir: 1 | -1,
+): number {
+  void symbol;
+  const next =
+    Math.round((margin + dir * TOPBAR_MARGIN_STEP) / TOPBAR_MARGIN_STEP) *
+    TOPBAR_MARGIN_STEP;
+  return Math.max(TOPBAR_MARGIN_MIN, next);
 }
 
 export function protectFromSettings(

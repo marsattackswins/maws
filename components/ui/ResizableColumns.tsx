@@ -43,11 +43,18 @@ export function useColumnWidths(tableId: string, defaults: number[]) {
   return { widths, template, onResize };
 }
 
-export function ColResize({ onMouseDown }: { onMouseDown: (e: MouseEvent<HTMLSpanElement>) => void }) {
+export function ColResize({
+  onMouseDown,
+  onDoubleClick,
+}: {
+  onMouseDown: (e: MouseEvent<HTMLSpanElement>) => void;
+  onDoubleClick?: (e: MouseEvent<HTMLSpanElement>) => void;
+}) {
   return (
     <span
       className="col-resizer"
       onMouseDown={onMouseDown}
+      onDoubleClick={onDoubleClick}
       onClick={(e) => e.stopPropagation()}
     />
   );

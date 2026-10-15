@@ -18,6 +18,7 @@ export type DrawingTool =
   | "zoom"
   | "trend"
   | "hray"
+  | "channel"
   | "fib"
   | "path"
   | "dcurve"
@@ -30,16 +31,13 @@ export type DrawingTool =
   | "text";
 
 export type IndicatorId =
-  | "volume"
   | "vwap"
   | "ema"
   | "bb"
   | "rsi"
   | "stoch"
   | "atr"
-  | "adx"
-  | "pmo"
-  | "ob";
+  | "adx";
 
 export type Candle = {
   time: number;
@@ -254,12 +252,8 @@ export type ChartSettings = {
   showIndicatorValues: boolean;
   showIndicatorBackground: boolean;
   indicatorBackgroundOpacity: number;
-  currencyUnit: "always" | "hover" | "never";
-  scaleModes: "always" | "hover" | "never";
-  lockPriceRatio: boolean;
   invertScale: boolean;
   priceScaleMode: "normal" | "logarithmic" | "percentage" | "indexed100";
-  scalesPlacement: "right" | "left" | "both";
   noOverlappingLabels: boolean;
   showPlusButton: boolean;
   countdownToBarClose: boolean;
@@ -279,12 +273,9 @@ export type ChartSettings = {
   crosshairColor: string;
   crosshairStyle: "solid" | "dashed" | "dotted";
   watermark: boolean;
-  watermarkColor: string;
   scaleTextColor: string;
   scaleFontSize: number;
   scaleLineColor: string;
-  navigationButtons: "always" | "hover" | "never";
-  paneButtons: "always" | "hover" | "never";
   marginTop: number;
   marginBottom: number;
   marginRightBars: number;
@@ -301,16 +292,6 @@ export type ChartSettings = {
   showPositionLines: boolean;
   showTpSlLines: boolean;
   showLiqLines: boolean;
-  reversePositionButton: boolean;
-  projectMarketOrders: boolean;
-  showPnlValue: boolean;
-  pnlPositionsFormat: "pct" | "currency";
-  pnlBracketsFormat: "pct" | "currency";
-  executionMarks: boolean;
-  executionLabels: boolean;
-  extendedPriceLines: boolean;
-  orderAlignment: "left" | "right";
-  includeTradesInSnapshots: boolean;
   alertLineColor: string;
   buyLineColor: string;
   sellLineColor: string;
@@ -360,12 +341,8 @@ export const DEFAULT_CHART_SETTINGS: ChartSettings = {
   showIndicatorValues: false,
   showIndicatorBackground: true,
   indicatorBackgroundOpacity: 100,
-  currencyUnit: "never",
-  scaleModes: "always",
-  lockPriceRatio: false,
   invertScale: false,
   priceScaleMode: "normal",
-  scalesPlacement: "right",
   noOverlappingLabels: true,
   showPlusButton: true,
   countdownToBarClose: false,
@@ -385,12 +362,9 @@ export const DEFAULT_CHART_SETTINGS: ChartSettings = {
   crosshairColor: "#758696",
   crosshairStyle: "dashed",
   watermark: true,
-  watermarkColor: "rgba(209, 212, 220, 0.07)",
   scaleTextColor: "#d1d4dc",
   scaleFontSize: 12,
   scaleLineColor: "#222222",
-  navigationButtons: "hover",
-  paneButtons: "never",
   marginTop: 6,
   marginBottom: 16,
   marginRightBars: 6,
@@ -407,16 +381,6 @@ export const DEFAULT_CHART_SETTINGS: ChartSettings = {
   showPositionLines: true,
   showTpSlLines: true,
   showLiqLines: true,
-  reversePositionButton: true,
-  projectMarketOrders: true,
-  showPnlValue: true,
-  pnlPositionsFormat: "pct",
-  pnlBracketsFormat: "pct",
-  executionMarks: true,
-  executionLabels: false,
-  extendedPriceLines: true,
-  orderAlignment: "right",
-  includeTradesInSnapshots: true,
   alertLineColor: "#ff9800",
   buyLineColor: "#089981",
   sellLineColor: "#f23645",
@@ -453,6 +417,10 @@ export type ReplayState = {
   total: number;
   playing: boolean;
   speed: number;
+  /** Vela replay cursor — epoch-ms of the newest bar on screen (Vela-owned). */
+  cursorTime?: number | null;
+  /** Bars still hidden by the replay (from Vela's replay:start/step events). */
+  remaining?: number | null;
 } | null;
 
 export type ChartTemplate = {
@@ -547,28 +515,6 @@ export type IndicatorLineStyleSettings = {
   opacity: number;
   lineWidth: IndicatorLineWidth;
   lineStyle: DrawingLineStyle;
-};
-
-export type VolumePlotStyle = "histogram" | "line" | "candle";
-
-export type VolumeIndicatorSettings = {
-  maLength: number;
-  colorBasedOnPreviousClose: boolean;
-  volumeVisible: boolean;
-  /** How volume is drawn on the chart. */
-  plotStyle: VolumePlotStyle;
-  upColor: string;
-  downColor: string;
-  maVisible: boolean;
-  maColor: string;
-  maOpacity: number;
-  maLineWidth: IndicatorLineWidth;
-  maLineStyle: DrawingLineStyle;
-  precision: "default" | number;
-  showScaleValues: boolean;
-  showStatusValues: boolean;
-  showStatusInputs: boolean;
-  visibility: ObjectVisibility;
 };
 
 export type MaSource = "close" | "open" | "high" | "low" | "hl2" | "hlc3" | "ohlc4";
@@ -706,49 +652,7 @@ export type AdxIndicatorSettings = {
   visibility: ObjectVisibility;
 };
 
-export type PmoIndicatorSettings = {
-  period1: number;
-  period2: number;
-  signalPeriod: number;
-  source: MaSource;
-  pmo: IndicatorLineStyleSettings;
-  signal: IndicatorLineStyleSettings;
-  pmoVisible: boolean;
-  signalVisible: boolean;
-  zeroLine: IndicatorLineStyleSettings & { level: number; visible: boolean };
-  precision: "default" | number;
-  showScaleValues: boolean;
-  showStatusValues: boolean;
-  showStatusInputs: boolean;
-  visibility: ObjectVisibility;
-};
-
-export type ObIndicatorSettings = {
-  /** Pine 'Swing Lookback' (minval 3). */
-  swingLookback: number;
-  /** Pine 'Show Last Bullish OB' (minval 0). */
-  showLastBull: number;
-  /** Pine 'Show Last Bearish OB' (minval 0). */
-  showLastBear: number;
-  /** Pine 'Use Candle Body'. */
-  useBody: boolean;
-  /** Pine 'Show Historical Polarity Changes'. */
-  showLabels: boolean;
-  /** Regular bullish blocks (Pine bullCss). `opacity` is the fill; borders are opaque. */
-  bull: IndicatorLineStyleSettings;
-  /** Breaker phase of bullish blocks (Pine bullBreakCss). */
-  bullBreak: IndicatorLineStyleSettings;
-  /** Regular bearish blocks (Pine bearCss). */
-  bear: IndicatorLineStyleSettings;
-  /** Breaker phase of bearish blocks (Pine bearBreakCss). */
-  bearBreak: IndicatorLineStyleSettings;
-  showStatusValues: boolean;
-  showStatusInputs: boolean;
-  visibility: ObjectVisibility;
-};
-
 export type IndicatorSettingsMap = {
-  volume: VolumeIndicatorSettings;
   vwap: VwapIndicatorSettings;
   ema: EmaIndicatorSettings;
   bb: BbIndicatorSettings;
@@ -756,8 +660,6 @@ export type IndicatorSettingsMap = {
   stoch: StochIndicatorSettings;
   atr: AtrIndicatorSettings;
   adx: AdxIndicatorSettings;
-  pmo: PmoIndicatorSettings;
-  ob: ObIndicatorSettings;
 };
 
 /** One plotted study on a chart pane (multiple of the same type allowed). */
@@ -780,24 +682,6 @@ const DEFAULT_LINE = (
 });
 
 export const DEFAULT_INDICATOR_SETTINGS: IndicatorSettingsMap = {
-  volume: {
-    maLength: 20,
-    colorBasedOnPreviousClose: true,
-    volumeVisible: true,
-    plotStyle: "histogram",
-    upColor: "rgba(38, 166, 154, 0.5)",
-    downColor: "rgba(239, 83, 80, 0.5)",
-    maVisible: true,
-    maColor: "#ffffff",
-    maOpacity: 100,
-    maLineWidth: 1,
-    maLineStyle: "solid",
-    precision: "default",
-    showScaleValues: false,
-    showStatusValues: true,
-    showStatusInputs: true,
-    visibility: { ...DEFAULT_OBJECT_VISIBILITY },
-  },
   vwap: {
     hideOn1DOrAbove: false,
     anchorPeriod: "session",
@@ -910,71 +794,7 @@ export const DEFAULT_INDICATOR_SETTINGS: IndicatorSettingsMap = {
     showScaleValues: true,
     visibility: { ...DEFAULT_OBJECT_VISIBILITY },
   },
-  pmo: {
-    period1: 35,
-    period2: 20,
-    signalPeriod: 10,
-    source: "close",
-    pmo: DEFAULT_LINE("#2962ff"),
-    signal: DEFAULT_LINE("#ff9800"),
-    pmoVisible: true,
-    signalVisible: true,
-    zeroLine: {
-      ...DEFAULT_LINE("#787b86", { lineStyle: "dashed" }),
-      level: 0,
-      visible: true,
-    },
-    precision: "default",
-    showScaleValues: true,
-    showStatusValues: true,
-    showStatusInputs: true,
-    visibility: { ...DEFAULT_OBJECT_VISIBILITY },
-  },
-  ob: {
-    swingLookback: 10,
-    showLastBull: 3,
-    showLastBear: 3,
-    useBody: false,
-    showLabels: false,
-    bull: DEFAULT_LINE("#2157f3", { opacity: 20 }),
-    bullBreak: DEFAULT_LINE("#ff1100", { opacity: 20, lineStyle: "dashed" }),
-    bear: DEFAULT_LINE("#ff5d00", { opacity: 20 }),
-    bearBreak: DEFAULT_LINE("#0cb51a", { opacity: 20, lineStyle: "dashed" }),
-    showStatusValues: true,
-    showStatusInputs: true,
-    visibility: { ...DEFAULT_OBJECT_VISIBILITY },
-  },
 };
-
-/** Normalize Volume settings (fills new TV-style fields). */
-export function normalizeVolumeSettings(
-  raw: Partial<VolumeIndicatorSettings> | null | undefined,
-): VolumeIndicatorSettings {
-  const base = DEFAULT_INDICATOR_SETTINGS.volume;
-  return {
-    ...base,
-    ...raw,
-    maLength: raw?.maLength ?? base.maLength,
-    colorBasedOnPreviousClose: raw?.colorBasedOnPreviousClose ?? base.colorBasedOnPreviousClose,
-    volumeVisible: raw?.volumeVisible ?? base.volumeVisible,
-    plotStyle:
-      raw?.plotStyle === "line" || raw?.plotStyle === "candle" || raw?.plotStyle === "histogram"
-        ? raw.plotStyle
-        : base.plotStyle,
-    upColor: raw?.upColor ?? base.upColor,
-    downColor: raw?.downColor ?? base.downColor,
-    maVisible: raw?.maVisible ?? base.maVisible,
-    maColor: raw?.maColor ?? base.maColor,
-    maOpacity: raw?.maOpacity ?? base.maOpacity,
-    maLineWidth: raw?.maLineWidth ?? base.maLineWidth,
-    maLineStyle: raw?.maLineStyle ?? base.maLineStyle,
-    precision: raw?.precision ?? base.precision,
-    showScaleValues: raw?.showScaleValues ?? base.showScaleValues,
-    showStatusValues: raw?.showStatusValues ?? base.showStatusValues,
-    showStatusInputs: raw?.showStatusInputs ?? base.showStatusInputs,
-    visibility: { ...base.visibility, ...raw?.visibility },
-  };
-}
 
 /** Normalize VWAP settings (fills new TV-style fields; no bands). */
 export function normalizeVwapSettings(
@@ -1136,54 +956,6 @@ export function normalizeStochSettings(
   };
 }
 
-/** Normalize PMO settings (fills new TV-style fields). */
-export function normalizePmoSettings(
-  raw: Partial<PmoIndicatorSettings> | null | undefined,
-): PmoIndicatorSettings {
-  const base = DEFAULT_INDICATOR_SETTINGS.pmo;
-  return {
-    ...base,
-    ...raw,
-    period1: raw?.period1 ?? base.period1,
-    period2: raw?.period2 ?? base.period2,
-    signalPeriod: raw?.signalPeriod ?? base.signalPeriod,
-    source: raw?.source ?? base.source,
-    pmo: { ...base.pmo, ...raw?.pmo },
-    signal: { ...base.signal, ...raw?.signal },
-    pmoVisible: raw?.pmoVisible ?? base.pmoVisible,
-    signalVisible: raw?.signalVisible ?? base.signalVisible,
-    zeroLine: { ...base.zeroLine, ...raw?.zeroLine },
-    precision: raw?.precision ?? base.precision,
-    showScaleValues: raw?.showScaleValues ?? base.showScaleValues,
-    showStatusValues: raw?.showStatusValues ?? base.showStatusValues,
-    showStatusInputs: raw?.showStatusInputs ?? base.showStatusInputs,
-    visibility: { ...base.visibility, ...raw?.visibility },
-  };
-}
-
-/** Normalize order-block settings (deep-merges the four line-style groups). */
-export function normalizeObSettings(
-  raw: Partial<ObIndicatorSettings> | null | undefined,
-): ObIndicatorSettings {
-  const base = DEFAULT_INDICATOR_SETTINGS.ob;
-  return {
-    ...base,
-    ...raw,
-    swingLookback: raw?.swingLookback ?? base.swingLookback,
-    showLastBull: raw?.showLastBull ?? base.showLastBull,
-    showLastBear: raw?.showLastBear ?? base.showLastBear,
-    useBody: raw?.useBody ?? base.useBody,
-    showLabels: raw?.showLabels ?? base.showLabels,
-    bull: { ...base.bull, ...raw?.bull },
-    bullBreak: { ...base.bullBreak, ...raw?.bullBreak },
-    bear: { ...base.bear, ...raw?.bear },
-    bearBreak: { ...base.bearBreak, ...raw?.bearBreak },
-    showStatusValues: raw?.showStatusValues ?? base.showStatusValues,
-    showStatusInputs: raw?.showStatusInputs ?? base.showStatusInputs,
-    visibility: { ...base.visibility, ...raw?.visibility },
-  };
-}
-
 export type IndicatorTemplate = {
   id: string;
   name: string;
@@ -1202,16 +974,30 @@ export type ChartHover = {
   axisWidth: number;
 } | null;
 
+/** One Vela-native indicator mounted directly on a pane's chart (Vela owns legend/settings). */
+export type PaneNative = {
+  /** Vela native-indicator type (registry id, e.g. "macd", "order-blocks"). */
+  type: string;
+  inputs: Record<string, number | string | boolean>;
+  hidden?: boolean;
+};
+
 export type ChartPaneState = {
   id: string;
   symbol: string;
   timeframe: Timeframe;
   studies: IndicatorInstance[];
+  /** Vela-native instances mounted on this pane's chart (persisted so they survive reloads). */
+  natives?: PaneNative[];
   /** @deprecated migrated to studies[] on hydrate */
   indicators?: PaneIndicators;
   /** @deprecated migrated to studies[].hidden on hydrate */
   hiddenIndicators?: Partial<Record<IndicatorId, boolean>>;
   drawings: Drawing[];
+  /** Vela cell-state document (renderer config, drawings doc, bars, session,
+   *  display prefs) bridged from the workspace's `state:changed` — the
+   *  chart-side persistence when the workspace runs headless (`persist:false`). */
+  velaState?: Record<string, unknown>;
 };
 
 export type WorkspaceState = {

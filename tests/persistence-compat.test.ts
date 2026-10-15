@@ -61,6 +61,7 @@ const EXPECTED_PERSISTED_KEYS = [
   "orientation",
   "paneStretchFactors",
   "panes",
+  "panesVelaState",
   "paperAccount",
   "performanceCollapsed",
   "positions",
@@ -79,8 +80,8 @@ const EXPECTED_PERSISTED_KEYS = [
   "watchlistGroups",
   "watchlistHeight",
 ].sort();
-if (EXPECTED_PERSISTED_KEYS.length !== 50) {
-  throw new Error("Approved persisted key set must contain exactly 50 keys");
+if (EXPECTED_PERSISTED_KEYS.length !== 51) {
+  throw new Error("Approved persisted key set must contain exactly 51 keys");
 }
 
 /** Fields that must NEVER be persisted (runtime-only by design). */
@@ -209,7 +210,7 @@ describe("persistence compatibility (maws.workspace.v6)", () => {
     uninstallWindow();
   });
 
-  it("partialize outputs exactly the approved 50-key set", () => {
+  it("partialize outputs exactly the approved 51-key set", () => {
     installWindow();
     const { useAppStore, workspacePartialize } = freshStore();
     const out = workspacePartialize(useAppStore.getState());

@@ -20,7 +20,7 @@ export function RightDock() {
   return (
     <aside
       className="flex w-[44px] shrink-0 flex-col items-center gap-1 border-l py-2"
-      style={{ background: "var(--maws-bg)", borderColor: "var(--maws-border)" }}
+      style={{ background: "var(--maws-panel)", borderColor: "var(--maws-border)" }}
     >
       {ITEMS.map((item) => {
         const Icon = item.icon;

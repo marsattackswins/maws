@@ -49,7 +49,7 @@ export type Store = UiSlice &
   MarketDataSlice &
   PaperTradingSlice;
 
-/** Exact persisted field set for maws.workspace.v6 — 50 keys, shape frozen by tests/persistence-compat.test.ts. */
+/** Exact persisted field set for maws.workspace.v6 — 51 keys, shape frozen by tests/persistence-compat.test.ts. */
 export const workspacePartialize = (state: Store) => ({
   layoutCount: state.layoutCount,
   orientation: state.orientation,
@@ -57,6 +57,11 @@ export const workspacePartialize = (state: Store) => ({
   layoutSync: state.layoutSync,
   activePaneId: state.activePaneId,
   panes: state.panes,
+  panesVelaState: Object.fromEntries(
+    (state.panes ?? [])
+      .filter((p) => p.velaState != null)
+      .map((p) => [p.id, p.velaState]),
+  ),
   watchlist: state.watchlist,
   watchlistGroups: state.watchlistGroups,
   drawingTool: state.drawingTool,

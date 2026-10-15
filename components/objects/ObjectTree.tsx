@@ -28,11 +28,11 @@ export function ObjectTree() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex h-8 items-center justify-between border-b border-[#222222] px-2">
-        <span className="text-[13px] font-semibold text-[#d1d4dc]">Object tree</span>
+      <div className="flex h-8 items-center justify-between border-b border-(--app-border) px-2">
+        <span className="text-[13px] font-semibold text-(--app-text)">Object tree</span>
         <button
           type="button"
-          className="text-[11px] text-[#787b86] hover:text-[#d1d4dc]"
+          className="text-[11px] text-(--app-muted) hover:text-(--app-text)"
           onClick={() => setDrawingsHidden(!drawingsHidden)}
         >
           {drawingsHidden ? "Show all" : "Hide all"}
@@ -57,21 +57,21 @@ export function ObjectTree() {
               >
                 <ChevronDown
                   size={12}
-                  className={`text-[#787b86] ${collapsed ? "-rotate-90" : ""}`}
+                  className={`text-(--app-muted) ${collapsed ? "-rotate-90" : ""}`}
                 />
-                <span className="text-[12px] font-semibold text-[#d1d4dc]">
+                <span className="text-[12px] font-semibold text-(--app-text)">
                   {formatTicker(pane.symbol)}
                 </span>
                 <span className="text-[11px] text-[#4c525e]">{pane.timeframe}</span>
               </button>
               {!collapsed && (
-                <div className="ml-3 border-l border-[#222222] pb-2">
+                <div className="ml-3 border-l border-(--app-border) pb-2">
                   {studies.map((study) => {
                     const hidden = Boolean(study.hidden);
                     return (
                     <div
                       key={study.id}
-                      className="flex items-center gap-1 px-2 py-0.5 text-[12px] text-[#d1d4dc]"
+                      className="flex items-center gap-1 px-2 py-0.5 text-[12px] text-(--app-text)"
                     >
                       <span className={`flex-1 ${hidden ? "text-[#4c525e]" : ""}`}>
                         {indicatorTitle(study.type, pane.symbol)}
@@ -80,7 +80,7 @@ export function ObjectTree() {
                         type="button"
                         title={hidden ? "Show" : "Hide"}
                         onClick={() => setIndicatorHidden(study.id, !hidden, pane.id)}
-                        className="text-[#787b86] hover:text-[#d1d4dc]"
+                        className="text-(--app-muted) hover:text-(--app-text)"
                       >
                         {hidden ? <EyeOff size={12} /> : <Eye size={12} />}
                       </button>
@@ -88,7 +88,7 @@ export function ObjectTree() {
                         type="button"
                         title="Remove"
                         onClick={() => removeIndicator(study.id, pane.id)}
-                        className="text-[#787b86] hover:text-[#f23645]"
+                        className="text-(--app-muted) hover:text-[#f23645]"
                       >
                         <Trash2 size={12} />
                       </button>
@@ -102,7 +102,7 @@ export function ObjectTree() {
                     <div
                       key={d.id}
                       className={`flex cursor-pointer items-center gap-1 px-2 py-0.5 text-[12px] ${
-                        selectedDrawingId === d.id ? "bg-[var(--maws-elevated)] text-[#d1d4dc]" : "text-[#d1d4dc]"
+                        selectedDrawingId === d.id ? "bg-[var(--maws-elevated)] text-(--app-text)" : "text-(--app-text)"
                       }`}
                       onClick={() => {
                         setActivePane(pane.id);
@@ -121,7 +121,7 @@ export function ObjectTree() {
                         type="button"
                         title={d.hidden ? "Show" : "Hide"}
                         onClick={() => toggleDrawingHidden(pane.id, d.id)}
-                        className="text-[#787b86] hover:text-[#d1d4dc]"
+                        className="text-(--app-muted) hover:text-(--app-text)"
                       >
                         {d.hidden ? <EyeOff size={12} /> : <Eye size={12} />}
                       </button>
@@ -129,7 +129,7 @@ export function ObjectTree() {
                         type="button"
                         title="Remove"
                         onClick={() => removeDrawing(pane.id, d.id)}
-                        className="text-[#787b86] hover:text-[#f23645]"
+                        className="text-(--app-muted) hover:text-[#f23645]"
                       >
                         <Trash2 size={12} />
                       </button>
@@ -138,7 +138,7 @@ export function ObjectTree() {
                   {pane.drawings.length > 0 && (
                     <button
                       type="button"
-                      className="px-2 pt-1 text-[11px] text-[#787b86] hover:text-[#f23645]"
+                      className="px-2 pt-1 text-[11px] text-(--app-muted) hover:text-[#f23645]"
                       onClick={() => clearDrawings(pane.id)}
                     >
                       Remove drawings

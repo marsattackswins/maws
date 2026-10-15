@@ -16,6 +16,8 @@ module.exports = {
     'lib/**/*.ts',
     '!lib/**/*.d.ts',
     '!lib/**/index.ts',
+    // Absorbed charting engine — covered by its own vitest suite.
+    '!lib/charting/**',
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
@@ -48,10 +50,14 @@ module.exports = {
     },
   },
   moduleNameMapper: {
+    // The charting engine lives at lib/charting; jest stubs it wholesale so
+    // component tests never touch the real renderer/DOM/WebSockets. These
+    // entries must precede the `^@/(.*)$` catch-all.
+    '^@/lib/charting/data/providers/binance$': '<rootDir>/__mocks__/vela-providers-binance.js',
+    '^@/lib/charting$': '<rootDir>/__mocks__/vela.js',
     '^@/(.*)$': '<rootDir>/$1',
-    '^lightweight-charts$': '<rootDir>/__mocks__/lightweight-charts.js',
     '^server-only$': '<rootDir>/__mocks__/server-only.js',
   },
-  testPathIgnorePatterns: ['/node_modules/', '/.next/', '/tests/integration/'],
+  testPathIgnorePatterns: ['/node_modules/', '/.next/', '/tests/integration/', '/lib/charting/'],
   setupFiles: ['<rootDir>/tests/jest.setup.ts'],
 };

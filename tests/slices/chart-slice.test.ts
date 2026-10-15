@@ -99,7 +99,7 @@ describe("chart-slice defaults (real root store)", () => {
       expect(p.id).toBe(`pane-${i}`);
       expect(p.symbol).toBe(DEFAULT_SYMBOLS[i % DEFAULT_SYMBOLS.length]);
       expect(p.timeframe).toBe("1D");
-      expect(p.studies.map((st) => st.type)).toEqual(["volume", "vwap"]);
+      expect(p.studies.map((st) => st.type)).toEqual(["vwap"]);
       expect(p.drawings).toEqual([]);
     });
     expect(s.range).toBe("All");
@@ -198,7 +198,7 @@ describe("chart-slice actions (real root store)", () => {
     const s = useAppStore.getState();
     s.addIndicator("ema");
     let pane = useAppStore.getState().panes[0] as ChartPaneState;
-    expect(pane.studies.map((st) => st.type)).toEqual(["volume", "vwap", "ema"]);
+    expect(pane.studies.map((st) => st.type)).toEqual(["vwap", "ema"]);
     s.addIndicator("ema");
     pane = useAppStore.getState().panes[0] as ChartPaneState;
     expect(pane.studies.filter((st) => st.type === "ema")).toHaveLength(2);
@@ -253,7 +253,7 @@ describe("chart-slice actions (real root store)", () => {
     // Cross-pane: instance lives on pane-1 while pane-0 is active.
     const target = useAppStore.getState().panes[1]?.studies[0];
     const id = target?.id as string;
-    const next = { ...DEFAULT_INDICATOR_SETTINGS.volume, maLength: 99 };
+    const next = { ...DEFAULT_INDICATOR_SETTINGS.vwap, anchorPeriod: "week" as const };
     s.updateStudySettings(id, next);
     const pane1 = useAppStore.getState().panes[1] as ChartPaneState;
     expect(pane1.studies[0]?.settings).toEqual(next);
@@ -291,10 +291,10 @@ describe("chart-slice actions (real root store)", () => {
     const rsi = useAppStore.getState().indicatorSettings.rsi;
     expect(rsi.period).toBe(21);
     expect(rsi.visibility).toEqual(DEFAULT_INDICATOR_SETTINGS.rsi.visibility);
-    s.patchIndicatorSettings("volume", { maLength: 42 });
-    const vol = useAppStore.getState().indicatorSettings.volume;
-    expect(vol.maLength).toBe(42);
-    expect(vol.plotStyle).toBe(DEFAULT_INDICATOR_SETTINGS.volume.plotStyle);
+    s.patchIndicatorSettings("vwap", { anchorPeriod: "week" });
+    const vwap = useAppStore.getState().indicatorSettings.vwap;
+    expect(vwap.anchorPeriod).toBe("week");
+    expect(vwap.source).toBe(DEFAULT_INDICATOR_SETTINGS.vwap.source);
     s.patchIndicatorSettings("vwap", { offset: 2 });
     expect(useAppStore.getState().indicatorSettings.vwap.offset).toBe(2);
     s.patchIndicatorSettings("ema", { period: 55 });
@@ -313,7 +313,7 @@ describe("chart-slice actions (real root store)", () => {
     });
     const now = useAppStore.getState();
     expect(now.indicatorSettings.rsi.period).toBe(33);
-    expect(now.indicatorSettings.volume).toEqual(DEFAULT_INDICATOR_SETTINGS.volume);
+    expect(now.indicatorSettings.vwap).toEqual(DEFAULT_INDICATOR_SETTINGS.vwap);
   });
 
   it("patchChartSettings merges over defaults without dropping siblings", () => {
@@ -375,6 +375,8 @@ describe("chart-slice actions (real root store)", () => {
       total: 100,
       playing: false,
       speed: 1,
+      cursorTime: null,
+      remaining: null,
     });
     s.startReplay("pane-0", 500, 100);
     expect(useAppStore.getState().replay?.index).toBe(99);
@@ -385,6 +387,8 @@ describe("chart-slice actions (real root store)", () => {
       total: 100,
       playing: true,
       speed: 1,
+      cursorTime: null,
+      remaining: null,
     });
     s.stopReplay();
     expect(useAppStore.getState().replay).toBeNull();
@@ -441,8 +445,7 @@ describe("chart-slice actions (real root store)", () => {
     const id = tpls[0]?.id as string;
     expect(useAppStore.getState().activeIndicatorTemplateId).toBe(id);
     expect(tpls[0]?.name).toBe("My Setup");
-    expect(tpls[0]?.studies?.map((st) => st.type)).toEqual(["volume", "vwap"]);
-    expect(tpls[0]?.indicators?.volume).toBe(true);
+    expect(tpls[0]?.studies?.map((st) => st.type)).toEqual(["vwap"]);
     expect(tpls[0]?.indicators?.vwap).toBe(true);
 
     // Apply restores the snapshot onto the (cleared) active pane.
@@ -450,7 +453,7 @@ describe("chart-slice actions (real root store)", () => {
     expect(useAppStore.getState().panes[0]?.studies).toEqual([]);
     s.applyIndicatorTemplate(id);
     let now = useAppStore.getState();
-    expect(now.panes[0]?.studies.map((st) => st.type)).toEqual(["volume", "vwap"]);
+    expect(now.panes[0]?.studies.map((st) => st.type)).toEqual(["vwap"]);
     expect(now.activeIndicatorTemplateId).toBe(id);
     const lastUsedAfterApply =
       useAppStore.getState().indicatorTemplates[0]?.lastUsedAt as number;
@@ -461,7 +464,7 @@ describe("chart-slice actions (real root store)", () => {
     expect(tpls).toHaveLength(1);
     expect(tpls[0]?.id).toBe(id);
     expect(tpls[0]?.name).toBe("my setup");
-    expect(tpls[0]?.studies?.map((st) => st.type)).toEqual(["volume", "vwap"]);
+    expect(tpls[0]?.studies?.map((st) => st.type)).toEqual(["vwap"]);
     expect(tpls[0]?.lastUsedAt).toBeGreaterThanOrEqual(lastUsedAfterApply);
 
     // Unknown id is a no-op.
@@ -625,7 +628,7 @@ describe("normalizeChartRehydrate (legacy compat)", () => {
     expect(st.indicatorSettings.rsi.visibility).toEqual(
       DEFAULT_INDICATOR_SETTINGS.rsi.visibility,
     );
-    expect(st.indicatorSettings.volume).toEqual(DEFAULT_INDICATOR_SETTINGS.volume);
+    expect(st.indicatorSettings.vwap).toEqual(DEFAULT_INDICATOR_SETTINGS.vwap);
   });
 
   it("filters seeded indicator templates but keeps user templates", () => {
@@ -667,9 +670,10 @@ describe("normalizeChartRehydrate (legacy compat)", () => {
     expect(drawings[0]?.extend).toBe("none");
   });
 
-  it("re-normalizes template studies and resolves the active template", () => {
+  it("drops legacy volume/pmo/ob studies and re-normalizes template studies", () => {
     const studies = [
       { id: "s1", type: "volume" as const, hidden: false, settings: { maLength: 20 } },
+      { id: "s2", type: "vwap" as const, hidden: false, settings: {} },
     ];
     const st = fakeState({
       activePaneId: "pane-0",
@@ -679,20 +683,23 @@ describe("normalizeChartRehydrate (legacy compat)", () => {
       indicatorTemplates: [
         {
           id: "t1",
-          name: "Vol only",
-          studies: [{ type: "volume", settings: { maLength: 20 }, hidden: false }],
+          name: "VWAP only",
+          studies: [
+            { type: "volume", settings: { maLength: 20 }, hidden: false },
+            { type: "vwap", settings: {}, hidden: false },
+          ],
           lastUsedAt: 1,
         },
         { id: "t2", name: "Other", studies: [], lastUsedAt: 2 },
       ],
     });
     normalizeChartRehydrate(st);
-    // Template studies are rebuilt through templateToStudies (normalized).
-    expect(st.indicatorTemplates[0]?.studies?.[0]?.type).toBe("volume");
-    expect(st.indicatorTemplates[0]?.studies?.[0]?.settings).toEqual({
-      ...DEFAULT_INDICATOR_SETTINGS.volume,
-      maLength: 20,
-    });
+    // Legacy volume/PMO/OB studies are Vela natives now — dropped on hydrate.
+    expect(st.panes[0]?.studies.map((s) => s.type)).toEqual(["vwap"]);
+    expect(st.indicatorTemplates[0]?.studies?.map((s) => s.type)).toEqual(["vwap"]);
+    expect(st.indicatorTemplates[0]?.studies?.[0]?.settings).toEqual(
+      DEFAULT_INDICATOR_SETTINGS.vwap,
+    );
     // Signature match against pane studies pins the active template.
     expect(st.activeIndicatorTemplateId).toBe("t1");
   });

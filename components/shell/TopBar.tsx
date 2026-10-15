@@ -1,130 +1,52 @@
 "use client";
 
 import { ToolbarBtn } from "@/components/ui/ToolbarBtn";
-import { getChart } from "@/lib/chart-registry";
+import { getChart, getWorkspace } from "@/lib/chart-registry";
 import { CHART_STYLES } from "@/lib/chart-style";
-import { LAYOUT_COUNTS } from "@/lib/layouts";
+import { AssetLogo } from "@/components/brand/AssetLogo";
 import { MawsLogo } from "@/components/brand/MawsLogo";
-import { DrawingToolbar } from "@/components/drawings/DrawingToolbar";
+import { VelaDrawingBar } from "@/components/drawings/VelaDrawingBar";
 import { MAWS_FULL_NAME } from "@/lib/maws/brand";
 import { formatPrice, mawsFeed } from "@/lib/maws/feed";
 import { formatTicker } from "@/lib/maws/universe";
-import { isIndicatorTemplateDirty, useActivePane, useAppStore } from "@/lib/store";
+import { useActivePane, useAppStore } from "@/lib/store";
 import { useLiveStore } from "@/lib/live/store";
 import { TIMEFRAMES } from "@/lib/timeframes";
 import { newClientOrderId, submitOrderFromUi } from "@/lib/trading/ui-orders";
 import {
   formatMarginLabel,
+  bumpTopbarMargin,
+  quantizeQtyToStep,
+  qtyStepFor,
   resolveOrderQty,
   resolveSymbolTrading,
+  topbarSeedMargin,
 } from "@/lib/trading/symbol-settings";
 import { useQuote } from "@/lib/use-quotes";
-import type { IndicatorId, IndicatorTemplate, LayoutSync, Timeframe } from "@/types";
+import { groupedVelaCatalog, velaIndicatorCategory } from "@/lib/vela-indicator-catalog";
+import type { NativeIndicatorInfo } from "@/lib/charting";
+import type { Timeframe } from "@/types";
+import { VelaTemplateMenu } from "@/components/shell/VelaTemplateMenu";
+import { VelaLayoutButton } from "@/components/shell/VelaLayoutButton";
 import {
   Camera,
   ChevronDown,
-  CloudUpload,
   Diamond,
-  FolderOpen,
-  Info,
-  LayoutGrid,
+  Keyboard,
   Maximize,
-  Redo2,
   Rewind,
   Settings,
-  Star,
-  Trash2,
-  Undo2,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 const BAR_TFS: Timeframe[] = ["1m", "5m", "15m", "30m", "1h", "4h", "1D", "1W", "1M"];
 const MORE_TFS: Timeframe[] = ["3m", "2h"];
 
-const INDICATOR_LABELS: Record<IndicatorId, string> = {
-  volume: "Volume",
-  vwap: "VWAP",
-  ema: "EMA",
-  bb: "Bollinger Bands",
-  rsi: "RSI",
-  stoch: "Stochastic",
-  atr: "ATR",
-  adx: "ADX",
-  pmo: "PMO",
-  ob: "Order Blocks",
-};
-
-function templateSubtitle(tpl: IndicatorTemplate) {
-  if (tpl.studies?.length) {
-    const labels = tpl.studies.map((s) => INDICATOR_LABELS[s.type]);
-    return labels.length ? labels.join(", ") : "No indicators";
-  }
-  const on = (
-    ["volume", "vwap", "ema", "bb", "rsi", "stoch", "atr", "adx", "pmo", "ob"] as IndicatorId[]
-  )
-    .filter((id) => Boolean(tpl.indicators?.[id]))
-    .map((id) => INDICATOR_LABELS[id]);
-  return on.length ? on.join(", ") : "No indicators";
-}
-
-function TemplateIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-      <rect x="2" y="2" width="12" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
-      <path d="M2 6.5h12M6.5 6.5v7.5" stroke="currentColor" strokeWidth="1.3" />
-    </svg>
-  );
-}
-
-const SYNC_ROWS: {
-  key: keyof LayoutSync;
-  label: string;
-  tip: string;
-}[] = [
-  { key: "symbol", label: "Symbol", tip: "Keep the same symbol on every chart in the layout" },
-  { key: "interval", label: "Interval", tip: "Keep the same timeframe on every chart in the layout" },
-  { key: "crosshair", label: "Crosshair", tip: "Move the crosshair together across charts" },
-  { key: "time", label: "Time", tip: "Keep charts scrolled to the same place on the time axis" },
-  { key: "dateRange", label: "Date range", tip: "Keep the same visible date range on every chart" },
-];
-
-function SyncSwitch({ on, onClick }: { on: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      onClick={onClick}
-      className={`relative h-[18px] w-[32px] shrink-0 rounded-full transition-colors ${
-        on ? "bg-[#d1d4dc]" : "bg-[#363a45]"
-      }`}
-    >
-      <span
-        className={`absolute top-[2px] h-[14px] w-[14px] rounded-full transition-[left] ${
-          on ? "left-[16px] bg-[#131722]" : "left-[2px] bg-[#787b86]"
-        }`}
-      />
-    </button>
-  );
-}
-
-function LayoutGlyph({ n }: { n: number }) {
-  const cols = n <= 2 ? n : n <= 4 ? 2 : n <= 6 ? 3 : n <= 9 ? 3 : 4;
-  const rows = Math.ceil(n / cols);
-  return (
-    <div
-      className="grid h-6 w-6 gap-px bg-[#222] p-px"
-      style={{
-        gridTemplateColumns: `repeat(${cols}, 1fr)`,
-        gridTemplateRows: `repeat(${rows}, 1fr)`,
-      }}
-    >
-      {Array.from({ length: n }).map((_, i) => (
-        <div key={i} className="bg-[#787b86]" />
-      ))}
-    </div>
-  );
-}
+/**
+ * Feature flag mirror of AppShell's constant — the workspace's composite
+ * screenshot covers the whole grid when the workspace engine hosts the grid.
+ */
+const USE_VELA_WORKSPACE = process.env.NEXT_PUBLIC_MAWS_VELA_WORKSPACE === "true";
 
 function CandleIcon() {
   return (
@@ -237,18 +159,25 @@ function IndicatorsIcon() {
   );
 }
 
+/** Stepped topbar sizing: min 10 USDT margin, 10 USDT steps; qty is derived
+ *  from margin × leverage at the order price. */
+function marginToQty(symbol: string, margin: number, price: number): number {
+  if (!(price > 0)) return 0;
+  const t = resolveSymbolTrading(symbol);
+  const lev = Math.max(1, t.leverage);
+  return quantizeQtyToStep((margin * lev) / price, qtyStepFor(symbol));
+}
+
 /** Isolated so quote ticks don't re-render the whole top bar. */
 function BuySellStrip({
   symbol,
-  marginLabel,
   onSell,
   onBuy,
   onContextMenu,
 }: {
   symbol: string;
-  marginLabel: string;
-  onSell: (price: number) => void;
-  onBuy: (price: number) => void;
+  onSell: (price: number, qty: number) => void;
+  onBuy: (price: number, qty: number) => void;
   onContextMenu: (x: number, y: number) => void;
 }) {
   const quote = useQuote(symbol);
@@ -272,12 +201,27 @@ function BuySellStrip({
 
   const bid = quote ? quote.last * 0.9999 : 0;
   const ask = quote ? quote.last * 1.0001 : 0;
+  // Topbar sizing is margin-based: min 10 USDT, ±10 steps. Seeded once per
+  // symbol from the trading defaults; a hand-set margin is never stomped by
+  // quote ticks. Qty is derived at click time from margin × leverage / price.
+  const [margin, setMargin] = useState<number | null>(null);
+  const [marginSymbol, setMarginSymbol] = useState(symbol);
+  const [marginDraft, setMarginDraft] = useState<string | null>(null);
+  if (symbol !== marginSymbol) {
+    setMarginSymbol(symbol);
+    setMargin(null);
+    setMarginDraft(null);
+  }
+  const marginValue = margin ?? topbarSeedMargin(symbol);
+  const bumpMargin = (dir: 1 | -1) =>
+    setMargin(bumpTopbarMargin(symbol, marginValue, dir));
+  const units = marginToQty(symbol, marginValue, bid || ask);
   const profileBlocked = livePhase === "switching" || livePhase === "degraded" || livePhase === "failed" || livePhase === "detached" || (connectedBroker === "binance" && liveProfileId !== null && (!liveReady || livePhase !== "ready"));
   const disabled = !quote || !feedLive || profileBlocked;
   const feedTitle = profileBlocked ? "Trading halted: profile switch in progress" : !feedLive ? "Trading halted: market data not live" : undefined;
   return (
     <div
-      className="ml-1 flex w-[292px] shrink-0 items-center justify-end gap-1.5"
+      className="ml-1 flex shrink-0 items-center gap-1"
       onContextMenu={(e) => {
         if (!quote) return;
         e.preventDefault();
@@ -289,28 +233,80 @@ function BuySellStrip({
         type="button"
         disabled={disabled}
         title={feedTitle}
-        className="flex h-[28px] w-[118px] shrink-0 items-center justify-center gap-1 rounded-full border border-[#f23645] px-2 text-[12px] font-semibold tabular-nums text-[#d1d4dc] hover:bg-[#1a1a1a] disabled:opacity-40"
-        onClick={() => quote && onSell(bid)}
+        aria-label="Sell at bid"
+        className="trade-block trade-block-sell flex h-[32px] shrink-0 items-center gap-1.5 px-2.5 text-[12px] tabular-nums disabled:opacity-40"
+        onClick={() => {
+          if (!quote) return;
+          const qty = marginToQty(symbol, marginValue, bid);
+          if (qty > 0) onSell(bid, qty);
+        }}
       >
-        <span className="min-w-0 truncate">
+        <span className="size-1.5 shrink-0 rounded-full bg-[#f23645]" />
+        <span className="shrink-0 text-[#f23645]">Sell</span>
+        <span className="min-w-0 truncate text-(--app-text)">
           {quote ? formatPrice(symbol, bid) : "—"}
         </span>
-        <span className="shrink-0">SELL</span>
       </button>
-      <span className="w-9 shrink-0 text-center text-[11px] tabular-nums text-[#787b86]">
-        {marginLabel}
-      </span>
+      <div
+        className="trade-hover flex h-[32px] shrink-0 items-center gap-0 px-0 rounded-[10px]"
+        title={`Margin × leverage → order size (min 10)`}
+      >
+        <button
+          type="button"
+          aria-label="Decrease margin"
+          disabled={disabled || marginValue <= 10}
+          className="flex h-6 w-[14px] items-center justify-center text-[12px] text-(--app-muted) hover:bg-(--app-hover) disabled:opacity-40"
+          onClick={() => bumpMargin(-1)}
+        >
+          −
+        </button>
+        <input
+          aria-label="Order margin"
+          className="w-8 border-b border-(--app-border) bg-transparent pb-0.5 text-center text-[12px] font-medium tabular-nums text-(--app-text) outline-none focus:border-(--app-muted)"
+          value={marginDraft ?? marginValue}
+          onChange={(e) => {
+            setMarginDraft(e.target.value);
+            const next = Number(e.target.value);
+            if (Number.isFinite(next) && next >= 10) {
+              setMargin(Math.round(next / 10) * 10 || 10);
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+            if (e.key === "Escape") {
+              setMarginDraft(null);
+              (e.target as HTMLInputElement).blur();
+            }
+          }}
+          onBlur={() => setMarginDraft(null)}
+        />
+        <button
+          type="button"
+          aria-label="Increase margin"
+          disabled={disabled}
+          className="flex h-6 w-[14px] items-center justify-center text-[12px] text-(--app-muted) hover:bg-(--app-hover) disabled:opacity-40"
+          onClick={() => bumpMargin(1)}
+        >
+          +
+        </button>
+      </div>
       <button
         type="button"
         disabled={disabled}
         title={feedTitle}
-        className="flex h-[28px] w-[118px] shrink-0 items-center justify-center gap-1 rounded-full border border-[#2962ff] px-2 text-[12px] font-semibold tabular-nums text-[#d1d4dc] hover:bg-[#1a1a1a] disabled:opacity-40"
-        onClick={() => quote && onBuy(ask)}
+        aria-label="Buy at ask"
+        className="trade-block trade-block-buy flex h-[32px] shrink-0 items-center gap-1.5 px-2.5 text-[12px] tabular-nums disabled:opacity-40"
+        onClick={() => {
+          if (!quote) return;
+          const qty = marginToQty(symbol, marginValue, ask);
+          if (qty > 0) onBuy(ask, qty);
+        }}
       >
-        <span className="min-w-0 truncate">
+        <span className="min-w-0 truncate text-(--app-text)">
           {quote ? formatPrice(symbol, ask) : "—"}
         </span>
-        <span className="shrink-0">BUY</span>
+        <span className="shrink-0 text-[#2ebd85]">Buy</span>
+        <span className="size-1.5 shrink-0 rounded-full bg-[#2ebd85]" />
       </button>
     </div>
   );
@@ -320,16 +316,8 @@ export function TopBar() {
   const pane = useActivePane();
   const setSearchOpen = useAppStore((s) => s.setSearchOpen);
   const setTimeframe = useAppStore((s) => s.setTimeframe);
-  const setLayout = useAppStore((s) => s.setLayout);
-  const layoutCount = useAppStore((s) => s.layoutCount);
-  const layoutMenuOpen = useAppStore((s) => s.layoutMenuOpen);
-  const setLayoutMenuOpen = useAppStore((s) => s.setLayoutMenuOpen);
-  const layoutSync = useAppStore((s) => s.layoutSync);
-  const patchLayoutSync = useAppStore((s) => s.patchLayoutSync);
   const indicatorMenuOpen = useAppStore((s) => s.indicatorMenuOpen);
   const setIndicatorMenuOpen = useAppStore((s) => s.setIndicatorMenuOpen);
-  const addIndicator = useAppStore((s) => s.addIndicator);
-  const toggleOrientation = useAppStore((s) => s.toggleOrientation);
   const closeMenus = useAppStore((s) => s.closeMenus);
   const setSettingsOpen = useAppStore((s) => s.setSettingsOpen);
   const setBrokerDialogOpen = useAppStore((s) => s.setBrokerDialogOpen);
@@ -340,11 +328,7 @@ export function TopBar() {
   const setBottomTab = useAppStore((s) => s.setBottomTab);
   const setBuySellMenu = useAppStore((s) => s.setBuySellMenu);
   const showBuySell = useAppStore((s) => s.chartSettings.showBuySell);
-  const symbolTrading = useAppStore((s) => s.symbolTrading[pane.symbol]);
-  const mockBalance = useAppStore((s) => s.mockBalance);
-  void symbolTrading;
-  void mockBalance;
-  const marginLabel = formatMarginLabel(pane.symbol);
+
   const watchlist = useAppStore((s) => s.watchlist);
   const addToWatchlist = useAppStore((s) => s.addToWatchlist);
   const removeFromWatchlist = useAppStore((s) => s.removeFromWatchlist);
@@ -352,8 +336,9 @@ export function TopBar() {
   const patchChartSettings = useAppStore((s) => s.patchChartSettings);
   const candleStyle = useAppStore((s) => s.chartSettings.candleStyle);
   const replay = useAppStore((s) => s.replay);
-  const startReplay = useAppStore((s) => s.startReplay);
+  const replaySeeking = useAppStore((s) => s.replaySeeking);
   const stopReplay = useAppStore((s) => s.stopReplay);
+  const setReplaySeeking = useAppStore((s) => s.setReplaySeeking);
   const settingsOpen = useAppStore((s) => s.settingsOpen);
   const searchOpen = useAppStore((s) => s.searchOpen);
   const indicatorSettingsId = useAppStore((s) => s.indicatorSettingsId);
@@ -362,37 +347,44 @@ export function TopBar() {
   const tfRef = useRef<HTMLDivElement>(null);
   const styleRef = useRef<HTMLDivElement>(null);
   const indicatorRef = useRef<HTMLDivElement>(null);
-  const tplRef = useRef<HTMLDivElement>(null);
-  const layoutRef = useRef<HTMLDivElement>(null);
   const [tfMore, setTfMore] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
-  const [tplMenuOpen, setTplMenuOpen] = useState(false);
-  const [tplBrowseAll, setTplBrowseAll] = useState(false);
-  const indicatorTemplates = useAppStore((s) => s.indicatorTemplates);
-  const activeIndicatorTemplateId = useAppStore((s) => s.activeIndicatorTemplateId);
-  const activeTemplate =
-    indicatorTemplates.find((t) => t.id === activeIndicatorTemplateId) ?? null;
-  const activeTemplateName = activeTemplate?.name ?? "Null";
-  const templateDirty = activeTemplate
-    ? isIndicatorTemplateDirty(activeTemplate, pane.studies)
-    : false;
-  const saveIndicatorTemplate = useAppStore((s) => s.saveIndicatorTemplate);
-  const applyIndicatorTemplate = useAppStore((s) => s.applyIndicatorTemplate);
-  const toggleIndicatorTemplateFavorite = useAppStore(
-    (s) => s.toggleIndicatorTemplateFavorite,
-  );
-  const removeIndicatorTemplate = useAppStore((s) => s.removeIndicatorTemplate);
+  /** Live state of Vela's native-indicator catalog on this pane's chart (supported/present flags). */
+  const [velaCatalog, setVelaCatalog] = useState<NativeIndicatorInfo[] | null>(null);
   const starred = watchlist.includes(pane.symbol);
   const tfLabel = TIMEFRAMES.find((t) => t.id === pane.timeframe)?.label ?? pane.timeframe;
 
   const closeAllMenus = () => {
     setTfMore(false);
     setStyleOpen(false);
-    setTplMenuOpen(false);
-    setTplBrowseAll(false);
     setIndicatorMenuOpen(false);
-    setLayoutMenuOpen(false);
     closeMenus();
+  };
+
+  /** Fetch Vela's native catalog (supported/present flags) for the active pane's chart. */
+  const refreshVelaCatalog = () => {
+    const chart = getChart(pane.id)?.vela;
+    if (!chart?.availableNativeIndicators) {
+      setVelaCatalog(null);
+      return;
+    }
+    void chart
+      .availableNativeIndicators()
+      .then((list) => setVelaCatalog(list))
+      .catch(() => setVelaCatalog(null));
+  };
+
+  useEffect(() => {
+    if (!indicatorMenuOpen) return;
+    refreshVelaCatalog();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [indicatorMenuOpen, pane.id]);
+
+  /** Add a Vela-native indicator straight onto the active pane's chart (Vela owns legend/settings). */
+  const addVelaNative = (type: string) => {
+    getChart(pane.id)?.vela.addNativeIndicator(type);
+    setIndicatorMenuOpen(false);
+    refreshVelaCatalog();
   };
 
   const toggleTfMore = () => {
@@ -416,20 +408,6 @@ export function TopBar() {
     if (next) setIndicatorMenuOpen(true);
   };
 
-  const toggleTplMenu = () => {
-    const next = !tplMenuOpen;
-    closeAllMenus();
-    if (settingsOpen) setSettingsOpen(false);
-    if (next) setTplMenuOpen(true);
-  };
-
-  const toggleLayoutMenu = () => {
-    const next = !layoutMenuOpen;
-    closeAllMenus();
-    if (settingsOpen) setSettingsOpen(false);
-    if (next) setLayoutMenuOpen(true);
-  };
-
   const toggleSearch = () => {
     const next = !searchOpen;
     closeAllMenus();
@@ -438,18 +416,22 @@ export function TopBar() {
   };
 
   const toggleSettings = () => {
-    const next = !settingsOpen;
     closeAllMenus();
-    setSettingsOpen(next);
+    if (settingsOpen) setSettingsOpen(false);
+    // Open Vela's native settings dialog — the ONE settings panel: built-in
+    // tabs plus the full MAWS section set (Status line, Scales & labels,
+    // Chart chrome, Theme, Trading, Alerts, Events) contributed as host
+    // sections on every chart mount.
+    (getChart(pane.id)?.renderer as unknown as { openSettings?: (s?: string) => void }).openSettings?.();
   };
 
-  const placeMarket = (side: "buy" | "sell", price: number) => {
+  const placeMarket = (side: "buy" | "sell", price: number, qtyOverride?: number) => {
     const trading = resolveSymbolTrading(pane.symbol);
-    const qty = resolveOrderQty(pane.symbol, price);
+    const qty = qtyOverride ?? resolveOrderQty(pane.symbol, price);
     if (!(qty > 0)) return;
     // One id per user submit action; reused if this action is retried.
     const clientOrderId = newClientOrderId();
-    if (trading.confirmOrders) {
+    if (trading.confirmOrders && !useAppStore.getState().chartSettings.oneClickTrading) {
       const ok = window.confirm(
         `${side === "buy" ? "Buy" : "Sell"} ${pane.symbol} · margin ${formatMarginLabel(pane.symbol)} @ market?`,
       );
@@ -469,10 +451,7 @@ export function TopBar() {
     if (settingsOpen || indicatorSettingsId || drawingSettingsTarget || brokerDialogOpen) {
       setTfMore(false);
       setStyleOpen(false);
-      setTplMenuOpen(false);
-      setTplBrowseAll(false);
       setIndicatorMenuOpen(false);
-      setLayoutMenuOpen(false);
     }
   }, [
     settingsOpen,
@@ -480,7 +459,6 @@ export function TopBar() {
     drawingSettingsTarget,
     brokerDialogOpen,
     setIndicatorMenuOpen,
-    setLayoutMenuOpen,
   ]);
 
   useEffect(() => {
@@ -497,13 +475,6 @@ export function TopBar() {
       if (indicatorMenuOpen && !indicatorRef.current?.contains(t)) {
         setIndicatorMenuOpen(false);
       }
-      if (tplMenuOpen && !tplRef.current?.contains(t)) {
-        setTplMenuOpen(false);
-        setTplBrowseAll(false);
-      }
-      if (layoutMenuOpen && !layoutRef.current?.contains(t)) {
-        setLayoutMenuOpen(false);
-      }
       if (searchOpen && !t.closest("[data-symbol-search-trigger], [data-symbol-search]")) {
         setSearchOpen(false);
       }
@@ -514,11 +485,8 @@ export function TopBar() {
     tfMore,
     styleOpen,
     indicatorMenuOpen,
-    tplMenuOpen,
-    layoutMenuOpen,
     searchOpen,
     setIndicatorMenuOpen,
-    setLayoutMenuOpen,
     setSearchOpen,
   ]);
 
@@ -541,16 +509,18 @@ export function TopBar() {
         type="button"
         data-symbol-search-trigger
         onClick={toggleSearch}
-        className="relative z-[2] flex h-[28px] w-[120px] shrink-0 items-center justify-between gap-1.5 rounded-full bg-[var(--app-elevated)] px-3 hover:bg-[var(--app-border)]"
+        className="relative z-[2] flex h-[28px] w-[140px] shrink-0 items-center justify-between gap-1.5 rounded-full bg-[var(--app-elevated)] px-3 hover:bg-[var(--app-border)]"
       >
-        <span className="truncate text-[13px] font-semibold">{formatTicker(pane.symbol)}</span>
-        <ChevronDown size={12} className="text-[#787b86]" />
+        {/* Asset icon left of the ticker — mirrors the status line/search rows. */}
+        <AssetLogo symbol={pane.symbol} size={16} />
+        <span className="min-w-0 flex-1 truncate text-left text-[13px] font-semibold">{formatTicker(pane.symbol)}</span>
+        <ChevronDown size={12} className="shrink-0 text-(--app-muted)" />
       </button>
 
       <button
         type="button"
         title={starred ? "Remove from watchlist" : "Add to watchlist"}
-        className="relative z-[2] ml-1 flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full text-[#787b86] hover:bg-[#1a1a1a] hover:text-[#d1d4dc]"
+        className="relative z-[2] ml-1 flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full text-(--app-muted) hover:bg-(--app-hover) hover:text-(--app-text)"
         onClick={() => {
           closeAllMenus();
           if (starred) removeFromWatchlist(pane.symbol);
@@ -580,7 +550,7 @@ export function TopBar() {
                 setTimeframe(id);
               }}
               className={`h-[26px] rounded-[6px] px-[7px] text-[13px] ${
-                on ? "bg-[#1a1a1a] text-[#d1d4dc]" : "text-[#b2b5be] hover:text-[#d1d4dc]"
+                on ? "bg-(--app-hover) text-(--app-text)" : "text-(--app-muted) hover:text-(--app-text)"
               }`}
             >
               {tf.label}
@@ -590,7 +560,7 @@ export function TopBar() {
         <div className="relative" ref={tfRef}>
           <button
             type="button"
-            className="flex h-[26px] w-[20px] items-center justify-center text-[#787b86] hover:text-[#d1d4dc]"
+            className="flex h-[26px] w-[20px] items-center justify-center text-(--app-muted) hover:text-(--app-text)"
             onClick={toggleTfMore}
           >
             <ChevronDown size={12} />
@@ -617,7 +587,7 @@ export function TopBar() {
           )}
         </div>
         {!BAR_TFS.includes(pane.timeframe) && (
-          <span className="ml-1 text-[11px] text-[#787b86]">{tfLabel}</span>
+          <span className="ml-1 text-[11px] text-(--app-muted)">{tfLabel}</span>
         )}
 
         <span className="top-sep" />
@@ -672,9 +642,9 @@ export function TopBar() {
                       setStyleOpen(false);
                     }}
                   >
-                    <ChartStyleIcon id={s.id} className="text-[#b2b5be]" />
+                    <ChartStyleIcon id={s.id} className="text-(--app-muted)" />
                     <span className="flex-1 text-left">{s.label}</span>
-                    {on ? <span className="text-[12px] text-[#d1d4dc]">✓</span> : null}
+                    {on ? <span className="text-[12px] text-(--app-text)">✓</span> : null}
                   </button>
                 );
               })}
@@ -689,40 +659,52 @@ export function TopBar() {
             label="Indicators"
             active={indicatorMenuOpen}
             onClick={toggleIndicatorMenu}
-            className="gap-1 px-2 text-[13px] text-[#d1d4dc]"
+            className="gap-1 px-2 text-[13px] text-(--app-text)"
           >
             <IndicatorsIcon />
             Indicators
-            <ChevronDown size={11} className="text-[#787b86]" />
+            <ChevronDown size={11} className="text-(--app-muted)" />
           </ToolbarBtn>
           {indicatorMenuOpen && (
-            <div className="menu" data-dropdown-open>
-              {(
-                [
-                  ["volume", "Volume"],
-                  ["vwap", "VWAP"],
-                  ["ema", "EMA"],
-                  ["bb", "Bollinger Bands"],
-                  ["rsi", "RSI"],
-                  ["stoch", "Stochastic"],
-                  ["atr", "ATR"],
-                  ["adx", "ADX"],
-                  ["pmo", "PMO (Price Momentum Oscillator)"],
-                  ["ob", "Order Blocks"],
-                ] as const
-              ).map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  className="menu-row w-full text-left"
-                  onClick={() => {
-                    addIndicator(id);
-                    setIndicatorMenuOpen(false);
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
+            <div className="menu max-h-[70vh] overflow-y-auto" data-dropdown-open>
+              {/* The full Vela native catalog (incl. MAWS-registered order-blocks and
+                  pmo) — every entry mounts through chart.addNativeIndicator; Vela
+                  owns the legend row, settings dialog, hide/show and removal. */}
+              {groupedVelaCatalog().map(({ category, entries }) => {
+                const live = new Map(velaCatalog?.map((n) => [n.type, n]) ?? []);
+                return (
+                  <div key={category}>
+                    <div className="menu-section-title">Vela · {category}</div>
+                    {entries.map((entry) => {
+                      const info = live.get(entry.type);
+                      const supported = info ? info.supported : true;
+                      const present = info?.present ?? false;
+                      return (
+                        <button
+                          key={entry.type}
+                          type="button"
+                          disabled={!supported}
+                          className={`menu-row w-full text-left ${supported ? "" : "opacity-40"}`}
+                          title={
+                            !supported
+                              ? "Not available for this symbol"
+                              : velaIndicatorCategory(entry.type)
+                          }
+                          onClick={() => addVelaNative(entry.type)}
+                        >
+                          <span className="flex-1 truncate">
+                            {info?.title ?? entry.title}
+                          </span>
+                          {info?.beta ? (
+                            <span className="text-[10px] uppercase text-(--app-muted)">beta</span>
+                          ) : null}
+                          {present ? <span className="text-[12px] text-(--app-text)">✓</span> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -732,17 +714,22 @@ export function TopBar() {
         <ToolbarBtn
           label="Replay"
           className="gap-1 px-2 text-[13px]"
-          active={Boolean(replay)}
+          active={Boolean(replay) || replaySeeking}
           onClick={() => {
             closeAllMenus();
             if (replay) {
+              // Stop active replay — also stop Vela so live data resumes.
+              const chart = getChart(pane.id)?.vela;
+              if (chart?.replay.state.active) chart.replay.stop();
               stopReplay();
               return;
             }
-            const candles = mawsFeed.getCandles(pane.symbol, pane.timeframe);
-            const total = candles.length;
-            const currentIndex = Math.max(1, total - 1);
-            startReplay(pane.id, currentIndex, total);
+            if (replaySeeking) {
+              setReplaySeeking(false);
+              return;
+            }
+            // Enter seek mode: the ReplaySeekOverlay takes over from here.
+            setReplaySeeking(true);
           }}
         >
           <Rewind size={14} />
@@ -750,240 +737,36 @@ export function TopBar() {
         </ToolbarBtn>
 
         <span className="top-sep" />
-
-        <ToolbarBtn label="Undo" onClick={closeAllMenus}>
-          <Undo2 size={15} />
-        </ToolbarBtn>
-        <ToolbarBtn label="Redo" onClick={closeAllMenus}>
-          <Redo2 size={15} />
-        </ToolbarBtn>
       </div>
 
-      <div className="relative z-[2] mx-0.5 min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <DrawingToolbar />
+      {/* Vela's native drawing bar (horizontal, top-docked) — one shared bar for the
+          active pane, Vela-owned state; the MAWS extras (undo/redo/hide/Clear) ride
+          in its row and are all drag-reorderable with the tools. */}
+      <div className="relative z-[2] mx-0.5 flex min-w-0 flex-1 items-center">
+        <VelaDrawingBar />
       </div>
 
       <div className="relative z-[2] flex shrink-0 items-center gap-0.5">
-        <div className="relative z-[3]" ref={tplRef}>
-          <div
-            className={`toolbar-btn gap-0 px-1 text-[12px] ${
-              tplMenuOpen ? "is-active" : ""
-            } ${templateDirty ? "text-[#2962ff]" : "text-[#d1d4dc]"}`}
-          >
-            <button
-              type="button"
-              title={
-                templateDirty && activeTemplate
-                  ? `Save changes to “${activeTemplate.name}”`
-                  : "Indicator templates"
-              }
-              aria-label={
-                templateDirty && activeTemplate
-                  ? `Save changes to “${activeTemplate.name}”`
-                  : "Indicator templates"
-              }
-              className="flex h-full items-center gap-1 rounded-[4px] px-1"
-              onClick={() => {
-                if (templateDirty && activeTemplate) {
-                  saveIndicatorTemplate(activeTemplate.name);
-                  setTplMenuOpen(false);
-                  return;
-                }
-                toggleTplMenu();
-              }}
-            >
-              <span className={templateDirty ? "text-[#2962ff]" : undefined}>
-                <TemplateIcon />
-              </span>
-              <span className="max-w-[140px] truncate">{activeTemplateName}</span>
-            </button>
-            <button
-              type="button"
-              title="Indicator templates"
-              aria-label="Open indicator templates menu"
-              aria-expanded={tplMenuOpen}
-              className="flex h-full items-center rounded-[4px] px-1"
-              onClick={toggleTplMenu}
-            >
-              <ChevronDown
-                size={11}
-                className={templateDirty ? "text-[#2962ff]" : "text-[#787b86]"}
-              />
-            </button>
-          </div>
-          {tplMenuOpen && (
-            <div className="menu right-0 left-auto w-[320px]" data-dropdown-open>
-              <button
-                type="button"
-                className="menu-row w-full"
-                onClick={() => {
-                  const name = window.prompt(
-                    "Name this indicator template",
-                    activeTemplate?.name ?? "My template",
-                  );
-                  if (!name?.trim()) return;
-                  saveIndicatorTemplate(name.trim());
-                  setTplMenuOpen(false);
-                  setTplBrowseAll(false);
-                }}
-              >
-                <CloudUpload size={15} className="text-[#b2b5be]" />
-                Save indicator template...
-              </button>
-              {indicatorTemplates.length > 0 ? (
-                <>
-                  <div className="my-1 border-t border-[#2a2e39]" />
-                  <div className="px-3 pb-1 pt-1 text-[10px] font-semibold tracking-[0.06em] text-[#787b86]">
-                    {tplBrowseAll ? "ALL TEMPLATES" : "RECENTLY USED"}
-                  </div>
-                  {(tplBrowseAll
-                    ? [...indicatorTemplates].sort((a, b) =>
-                        a.name.localeCompare(b.name),
-                      )
-                    : [...indicatorTemplates]
-                        .sort((a, b) => (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0))
-                        .slice(0, 8)
-                  ).map((tpl) => (
-                    <div
-                      key={tpl.id}
-                      className="group flex w-full items-center gap-2 px-3 py-2 hover:bg-[#1a1a1a]"
-                    >
-                      <button
-                        type="button"
-                        className="min-w-0 flex-1 text-left"
-                        onClick={() => {
-                          applyIndicatorTemplate(tpl.id);
-                          setTplMenuOpen(false);
-                          setTplBrowseAll(false);
-                        }}
-                      >
-                        <div className="truncate text-[13px] font-semibold text-[#d1d4dc]">
-                          {tpl.name}
-                        </div>
-                        <div className="mt-0.5 line-clamp-2 text-[11px] leading-[14px] text-[#787b86]">
-                          {templateSubtitle(tpl)}
-                        </div>
-                      </button>
-                      <div className="flex shrink-0 items-center gap-0.5">
-                        <button
-                          type="button"
-                          title={tpl.favorite ? "Unfavorite" : "Favorite"}
-                          className={`flex h-7 w-7 items-center justify-center rounded-[4px] hover:bg-[#2a2e39] ${
-                            tpl.favorite ? "text-[#d1d4dc]" : "text-[#787b86]"
-                          }`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleIndicatorTemplateFavorite(tpl.id);
-                          }}
-                        >
-                          <Star
-                            size={14}
-                            fill={tpl.favorite ? "currentColor" : "none"}
-                            strokeWidth={1.6}
-                          />
-                        </button>
-                        <button
-                          type="button"
-                          title="Delete template"
-                          className="flex h-7 w-7 items-center justify-center rounded-[4px] text-[#787b86] hover:bg-[#2a2e39] hover:text-[#f23645]"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeIndicatorTemplate(tpl.id);
-                          }}
-                        >
-                          <Trash2 size={14} strokeWidth={1.6} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  <div className="my-1 border-t border-[#2a2e39]" />
-                  <button
-                    type="button"
-                    className="menu-row w-full"
-                    onClick={() => setTplBrowseAll(true)}
-                  >
-                    <FolderOpen size={15} className="text-[#b2b5be]" />
-                    Open template...
-                  </button>
-                </>
-              ) : (
-                <div className="border-t border-[#2a2e39] px-3 py-3 text-[12px] leading-[16px] text-[#787b86]">
-                  No saved templates yet. Set up your indicators, then save and name
-                  this layout to reuse it later.
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        <VelaTemplateMenu />
 
-        <div className="relative mr-1" ref={layoutRef}>
-          <ToolbarBtn
-            label="Layouts"
-            active={layoutMenuOpen}
-            onClick={toggleLayoutMenu}
-          >
-            <LayoutGrid size={15} />
-          </ToolbarBtn>
-          {layoutMenuOpen && (
-            <div className="menu right-0 left-auto w-[260px]" data-dropdown-open>
-              <div className="grid grid-cols-4 gap-2 p-2">
-                {LAYOUT_COUNTS.map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    title={
-                      layoutCount === n
-                        ? "Reset pane sizes to default"
-                        : `Switch to ${n} chart${n === 1 ? "" : "s"}`
-                    }
-                    onClick={() => setLayout(n)}
-                    className={`flex flex-col items-center gap-1 rounded p-1 hover:bg-[#1a1a1a] ${
-                      layoutCount === n ? "ring-1 ring-[#d1d4dc]" : ""
-                    }`}
-                  >
-                    <LayoutGlyph n={n} />
-                    <span className="text-[10px] text-[#787b86]">{n}</span>
-                  </button>
-                ))}
-              </div>
-              {(layoutCount === 2 || layoutCount === 6) && (
-                <button type="button" className="menu-row w-full" onClick={toggleOrientation}>
-                  Flip orientation
-                </button>
-              )}
-              <div className="border-t border-[#2a2e39] px-3 pb-2 pt-2.5">
-                <div className="mb-1.5 text-[10px] font-semibold tracking-[0.06em] text-[#787b86]">
-                  SYNC IN LAYOUT
-                </div>
-                {SYNC_ROWS.map((row) => (
-                  <div
-                    key={row.key}
-                    className="flex h-[32px] items-center justify-between gap-2 text-[13px] text-[#d1d4dc]"
-                  >
-                    <span className="flex items-center gap-1.5">
-                      {row.label}
-                      <span title={row.tip} className="text-[#787b86]">
-                        <Info size={12} strokeWidth={2} />
-                      </span>
-                    </span>
-                    <SyncSwitch
-                      on={layoutSync[row.key]}
-                      onClick={() => patchLayoutSync({ [row.key]: !layoutSync[row.key] })}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+        <div className="mr-1 flex items-center">
+          <VelaLayoutButton />
         </div>
         <ToolbarBtn
           label="Settings"
           className="rounded-full"
-          active={settingsOpen}
-          data-settings-trigger
           onClick={toggleSettings}
         >
           <Settings size={15} />
+        </ToolbarBtn>
+        <ToolbarBtn
+          label="Keyboard shortcuts"
+          className="rounded-full"
+          active={settingsOpen}
+          data-settings-trigger
+          onClick={() => { closeAllMenus(); setSettingsOpen(!settingsOpen); }}
+        >
+          <Keyboard size={15} />
         </ToolbarBtn>
         <ToolbarBtn
           label="Fullscreen"
@@ -1001,11 +784,18 @@ export function TopBar() {
           className="rounded-full"
           onClick={() => {
             closeAllMenus();
+            if (USE_VELA_WORKSPACE) {
+              // Workspace engine: the composite screenshot covers every cell.
+              getWorkspace()?.downloadScreenshot();
+              return;
+            }
             const handle = getChart(pane.id);
             if (!handle) return;
-            const canvas = handle.chart.takeScreenshot(true, true);
+            // Vela public seam: renderer.screenshot() returns a PNG data URL.
+            const dataUrl = handle.vela.renderer.screenshot();
+            if (!dataUrl) return;
             const a = document.createElement("a");
-            a.href = canvas.toDataURL("image/png");
+            a.href = dataUrl;
             a.download = `${pane.symbol}-${pane.timeframe}.png`;
             a.click();
           }}
@@ -1015,9 +805,8 @@ export function TopBar() {
         {showBuySell ? (
           <BuySellStrip
             symbol={pane.symbol}
-            marginLabel={marginLabel}
-            onSell={(price) => placeMarket("sell", price)}
-            onBuy={(price) => placeMarket("buy", price)}
+            onSell={(price, qty) => placeMarket("sell", price, qty)}
+            onBuy={(price, qty) => placeMarket("buy", price, qty)}
             onContextMenu={(x, y) => {
               closeAllMenus();
               setBuySellMenu({ x, y, symbol: pane.symbol });

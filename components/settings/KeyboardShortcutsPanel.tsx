@@ -83,7 +83,7 @@ export function KeyboardShortcutsPanel({ active }: { active: boolean }) {
         Click a shortcut, then press the new key combination. Esc cancels recording.
       </p>
       {conflict && (
-        <p className="mb-3 rounded-[4px] bg-[#2a2e39] px-3 py-2 text-[12px] text-[#f23645]">
+        <p className="mb-3 rounded-[4px] bg-(--app-hover) px-3 py-2 text-[12px] text-[#f23645]">
           {conflict}
         </p>
       )}
@@ -108,8 +108,8 @@ export function KeyboardShortcutsPanel({ active }: { active: boolean }) {
                       }}
                       className={`min-w-[108px] rounded-[4px] border px-2.5 py-1.5 text-[12px] font-medium tabular-nums ${
                         isRec
-                          ? "border-white bg-[#2a2e39] text-white"
-                          : "border-[#363a45] bg-[#1a1a1a] text-[#d1d4dc] hover:border-[#787b86]"
+                          ? "border-white bg-(--app-hover) text-white"
+                          : "border-[#363a45] bg-(--app-hover) text-(--app-text) hover:border-[#787b86]"
                       }`}
                     >
                       {isRec ? "Press keys…" : formatShortcut(chord)}
@@ -117,7 +117,7 @@ export function KeyboardShortcutsPanel({ active }: { active: boolean }) {
                     <button
                       type="button"
                       title="Clear"
-                      className="rounded-[4px] px-1.5 py-1 text-[11px] text-[#787b86] hover:bg-[#2a2e39] hover:text-[#d1d4dc]"
+                      className="rounded-[4px] px-1.5 py-1 text-[11px] text-(--app-muted) hover:bg-(--app-hover) hover:text-(--app-text)"
                       onClick={() => {
                         setRecording(null);
                         assign(def.id, null);
@@ -128,7 +128,7 @@ export function KeyboardShortcutsPanel({ active }: { active: boolean }) {
                     <button
                       type="button"
                       title="Reset"
-                      className="rounded-[4px] px-1.5 py-1 text-[11px] text-[#787b86] hover:bg-[#2a2e39] hover:text-[#d1d4dc]"
+                      className="rounded-[4px] px-1.5 py-1 text-[11px] text-(--app-muted) hover:bg-(--app-hover) hover:text-(--app-text)"
                       onClick={() => {
                         setRecording(null);
                         assign(def.id, DEFAULT_SHORTCUTS[def.id]);

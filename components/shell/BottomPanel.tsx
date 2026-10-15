@@ -82,7 +82,7 @@ function PanelDateTime() {
 
   return (
     <time
-      className="ml-2 shrink-0 whitespace-nowrap border-l border-[var(--maws-border)] pl-2 text-[11px] text-[#787b86]"
+      className="ml-2 shrink-0 whitespace-nowrap border-l border-[var(--maws-border)] pl-2 text-[11px] text-(--app-muted)"
       dateTime={value || undefined}
       aria-label="Current date and time"
     >

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" shape-rendering="crispEdges">
+  <rect width="32" height="32" rx="6" fill="#0A0A0A"/>
+  <!-- 7×7 pixel M, cell = 3, origin = (5.5, 5.5) -->
+  <g fill="#E8EAED">
+    <!-- left stem -->
+    <rect x="5.5" y="5.5" width="3" height="3"/>
+    <rect x="5.5" y="8.5" width="3" height="3"/>
+    <rect x="5.5" y="11.5" width="3" height="3"/>
+    <rect x="5.5" y="14.5" width="3" height="3"/>
+    <rect x="5.5" y="17.5" width="3" height="3"/>
+    <rect x="5.5" y="20.5" width="3" height="3"/>
+    <rect x="5.5" y="23.5" width="3" height="3"/>
+    <!-- right stem -->
+    <rect x="23.5" y="5.5" width="3" height="3"/>
+    <rect x="23.5" y="8.5" width="3" height="3"/>
+    <rect x="23.5" y="11.5" width="3" height="3"/>
+    <rect x="23.5" y="14.5" width="3" height="3"/>
+    <rect x="23.5" y="17.5" width="3" height="3"/>
+    <rect x="23.5" y="20.5" width="3" height="3"/>
+    <rect x="23.5" y="23.5" width="3" height="3"/>
+    <!-- V bridge -->
+    <rect x="8.5" y="8.5" width="3" height="3"/>
+    <rect x="11.5" y="11.5" width="3" height="3"/>
+    <rect x="14.5" y="14.5" width="3" height="3"/>
+    <rect x="17.5" y="11.5" width="3" height="3"/>
+    <rect x="20.5" y="8.5" width="3" height="3"/>
+  </g>
+</svg>

@@ -13,11 +13,11 @@ import { createPortal } from "react-dom";
 
 /** Match settings panel chrome (`settingsUi`). */
 const popoverShell =
-  "overflow-hidden rounded-[8px] border border-[#2a2e39] bg-[#1b1b1b] shadow-[0_8px_28px_rgba(0,0,0,0.65)]";
-const divider = "h-px bg-[#2a2e39]";
-const labelClass = "text-[12px] text-[#787b86]";
+  "overflow-hidden rounded-[8px] border border-(--app-border) bg-(--app-elevated) shadow-[0_8px_28px_rgba(0,0,0,0.65)]";
+const divider = "h-px bg-(--app-hover)";
+const labelClass = "text-[12px] text-(--app-muted)";
 const inputClass =
-  "h-7 min-w-0 rounded-[4px] border border-[#363a45] bg-[#1a1a1a] px-2 text-[12px] text-[#d1d4dc] outline-none focus:border-[#787b86]";
+  "h-7 min-w-0 rounded-[4px] border border-[#363a45] bg-(--app-hover) px-2 text-[12px] text-(--app-text) outline-none focus:border-[#787b86]";
 const primaryBtnClass =
   "h-7 shrink-0 rounded-[4px] bg-white px-2.5 text-[12px] font-semibold text-black hover:bg-[#e0e3eb]";
 
@@ -305,7 +305,7 @@ function CustomColorEditor({
       <div className="flex gap-2">
         <div
           ref={svRef}
-          className="relative h-[148px] min-w-0 flex-1 cursor-crosshair rounded-[4px] border border-[#2a2e39]"
+          className="relative h-[148px] min-w-0 flex-1 cursor-crosshair rounded-[4px] border border-(--app-border)"
           style={{
             background: `
               linear-gradient(to top, #000, transparent),
@@ -321,7 +321,7 @@ function CustomColorEditor({
         </div>
         <div
           ref={hueRef}
-          className="relative h-[148px] w-3.5 shrink-0 cursor-ns-resize rounded-[4px] border border-[#2a2e39]"
+          className="relative h-[148px] w-3.5 shrink-0 cursor-ns-resize rounded-[4px] border border-(--app-border)"
           style={{
             background:
               "linear-gradient(to bottom, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)",
@@ -530,7 +530,7 @@ export function SettingsColorSwatch({
                         e.stopPropagation();
                         setCustomOpen(true);
                       }}
-                      className="flex aspect-square w-full items-center justify-center rounded-[2px] border border-[#363a45] bg-[#1a1a1a] text-[13px] leading-none text-[#d1d4dc] hover:border-[#787b86] hover:bg-[#2a2e39] hover:text-white"
+                      className="flex aspect-square w-full items-center justify-center rounded-[2px] border border-[#363a45] bg-(--app-hover) text-[13px] leading-none text-(--app-text) hover:border-[#787b86] hover:bg-(--app-hover) hover:text-white"
                     >
                       +
                     </button>
@@ -540,7 +540,7 @@ export function SettingsColorSwatch({
                     <div className="mt-3">
                       <div className={`mb-1.5 ${labelClass}`}>Opacity</div>
                       <div className="flex items-center gap-2">
-                        <div className="relative h-2 min-w-0 flex-1 overflow-hidden rounded-full border border-[#2a2e39]">
+                        <div className="relative h-2 min-w-0 flex-1 overflow-hidden rounded-full border border-(--app-border)">
                           <div
                             className="absolute inset-0 rounded-full"
                             style={{
@@ -561,7 +561,7 @@ export function SettingsColorSwatch({
                             max={100}
                             value={opacity}
                             onChange={(e) => emitOpacity(Number(e.target.value))}
-                            className="absolute inset-0 w-full cursor-pointer appearance-none bg-transparent accent-white [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-[#2a2e39] [&::-webkit-slider-thumb]:bg-white"
+                            className="absolute inset-0 w-full cursor-pointer appearance-none bg-transparent accent-white [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-(--app-border) [&::-webkit-slider-thumb]:bg-white"
                           />
                         </div>
                         <input

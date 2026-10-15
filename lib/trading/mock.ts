@@ -3,6 +3,7 @@ import { mawsFeed } from "@/lib/maws/feed";
 import { useAppStore } from "@/lib/store";
 import { liquidationPrice } from "@/lib/trade-marks";
 import { resolveExitCondition } from "@/lib/trading/exit-conditions";
+import { playExecutionSound } from "@/lib/trading/sounds";
 import { protectFromSettings, resolveSymbolTrading } from "@/lib/trading/symbol-settings";
 import type {
   ChartOrder,
@@ -284,6 +285,7 @@ function recordFilledOrder(
       ? `Order ${id} for symbol ${symbol} has been executed at price ${fillPrice} for ${qty} units`
       : `Order for symbol ${symbol} has been executed at price ${fillPrice} for ${qty} units`,
   });
+  playExecutionSound();
 }
 
 function applyFill(

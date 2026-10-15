@@ -65,10 +65,10 @@ function Metric({
   tone?: "up" | "down" | "muted";
 }) {
   const color =
-    tone === "up" ? "text-[#089981]" : tone === "down" ? "text-[#f23645]" : "text-[#d1d4dc]";
+    tone === "up" ? "text-[#089981]" : tone === "down" ? "text-[#f23645]" : "text-(--app-text)";
   return (
     <span className="flex flex-col justify-center gap-[3px] whitespace-nowrap border-l border-[var(--maws-border)] px-4 py-[5px] first:border-l-0">
-      <span className="text-[9px] font-semibold uppercase leading-none tracking-[0.08em] text-[#787b86]">{label}</span>
+      <span className="text-[9px] font-semibold uppercase leading-none tracking-[0.08em] text-(--app-muted)">{label}</span>
       <span className={`text-[13px] font-semibold leading-none ${color}`}>{value}</span>
     </span>
   );
@@ -114,7 +114,7 @@ export function PnlCell({
 
 function Empty({ text }: { text: string }) {
   return (
-    <div className="flex h-full min-h-[120px] items-center justify-center text-[13px] text-[#787b86]">
+    <div className="flex h-full min-h-[120px] items-center justify-center text-[13px] text-(--app-muted)">
       {text}
     </div>
   );
@@ -145,13 +145,13 @@ function StatusTone({ status }: { status: string }) {
         ? "text-[#ff9800]"
         : status === "rejected"
           ? "text-[#f23645]"
-          : "text-[#787b86]";
+          : "text-(--app-muted)";
   return <span className={`capitalize ${color}`}>{status}</span>;
 }
 
 function SymbolChip({ symbol }: { symbol: string }) {
   return (
-    <span className="inline-flex items-center rounded-[4px] bg-[#2a2e39] px-1.5 py-0.5 text-[11px] text-[#d1d4dc]">
+    <span className="inline-flex items-center rounded-[4px] bg-(--app-hover) px-1.5 py-0.5 text-[11px] text-(--app-text)">
       {formatTicker(symbol)}
     </span>
   );
@@ -159,7 +159,7 @@ function SymbolChip({ symbol }: { symbol: string }) {
 
 function TableTools() {
   return (
-    <span className="flex justify-end gap-1.5 text-[#787b86]">
+    <span className="flex justify-end gap-1.5 text-(--app-muted)">
       <Download size={13} />
       <Columns3 size={13} />
     </span>
@@ -370,7 +370,8 @@ export function PositionsPanel() {
   useEffect(() => {
     if (!brokerMenuOpen) return;
     const onDown = (e: MouseEvent) => {
-      if (!brokerMenuRef.current?.contains(e.target as Node)) setBrokerMenuOpen(false);
+      if (!(e.target instanceof Node)) return;
+      if (!brokerMenuRef.current?.contains(e.target)) setBrokerMenuOpen(false);
     };
     const id = window.setTimeout(() => {
       window.addEventListener("mousedown", onDown);
@@ -457,7 +458,7 @@ export function PositionsPanel() {
         <div className="relative shrink-0" ref={brokerMenuRef}>
           <button
             type="button"
-            className="flex items-center gap-1 text-[13px] font-semibold text-[#d1d4dc] hover:text-white"
+            className="flex items-center gap-1 text-[13px] font-semibold text-(--app-text) hover:text-white"
             onClick={() => setBrokerMenuOpen((v) => !v)}
           >
             {connected === "mock"
@@ -467,13 +468,13 @@ export function PositionsPanel() {
                   ? profileLabel(liveProfileId)
                   : "Binance Futures"
                 : "Trade with your broker"}
-            <ChevronDown size={14} className="text-[#787b86]" />
+            <ChevronDown size={14} className="text-(--app-muted)" />
             {freshness}
             {live && !liveReady ? <span className="ml-1 text-[10px] font-normal text-[#f0b90b]">{profilePhaseLabel(livePhase)}</span> : null}
           </button>
           {brokerMenuOpen && (
             <div
-              className="absolute top-full left-0 z-50 mt-1 w-[210px] rounded-[8px] border border-[#2a2e39] bg-[#1b1b1b] py-1 shadow-[0_8px_28px_rgba(0,0,0,0.65)]"
+              className="absolute top-full left-0 z-50 mt-1 w-[210px] rounded-[8px] border border-(--app-border) bg-(--app-elevated) py-1 shadow-[0_8px_28px_rgba(0,0,0,0.65)]"
               role="menu"
               onMouseDown={(e) => e.stopPropagation()}
             >
@@ -485,7 +486,7 @@ export function PositionsPanel() {
                   setBrokerDialogOpen(true);
                 }}
               >
-                <Plug size={14} className="shrink-0 text-[#787b86]" />
+                <Plug size={14} className="shrink-0 text-(--app-muted)" />
                 Connect to a broker
               </button>
               <button
@@ -502,19 +503,19 @@ export function PositionsPanel() {
                   setBottomOpen(false);
                 }}
               >
-                <LogOut size={14} className="shrink-0 text-[#787b86]" />
+                <LogOut size={14} className="shrink-0 text-(--app-muted)" />
                 Log out
               </button>
             </div>
           )}
         </div>
 
-        <div className="flex shrink-0 items-center gap-1 text-[12px] text-[#d1d4dc]">
+        <div className="flex shrink-0 items-center gap-1 text-[12px] text-(--app-text)">
           <span>Account</span>
           <button
             type="button"
             title="Account settings"
-            className="flex h-5 w-5 items-center justify-center rounded-[3px] text-[#787b86] hover:bg-[#1a1a1a] hover:text-[#d1d4dc]"
+            className="flex h-5 w-5 items-center justify-center rounded-[3px] text-(--app-muted) hover:bg-(--app-hover) hover:text-(--app-text)"
             onClick={() => setAccountSettingsOpen(true)}
           >
             <Settings size={13} />
@@ -524,7 +525,7 @@ export function PositionsPanel() {
         <div className="ml-auto flex shrink-0 items-center gap-0.5">
           <button
             type="button"
-            className="flex h-6 w-6 items-center justify-center rounded-[3px] text-[#787b86] hover:bg-[#1a1a1a] hover:text-[#d1d4dc]"
+            className="flex h-6 w-6 items-center justify-center rounded-[3px] text-(--app-muted) hover:bg-(--app-hover) hover:text-(--app-text)"
             title="Collapse"
             onClick={() => setBottomOpen(false)}
           >
@@ -532,7 +533,7 @@ export function PositionsPanel() {
           </button>
           <button
             type="button"
-            className="flex h-6 w-6 items-center justify-center rounded-[3px] text-[#787b86] hover:bg-[#1a1a1a] hover:text-[#d1d4dc]"
+            className="flex h-6 w-6 items-center justify-center rounded-[3px] text-(--app-muted) hover:bg-(--app-hover) hover:text-(--app-text)"
             title="Expand to half screen"
             onClick={(event) => {
               const section = event.currentTarget.closest<HTMLElement>("section");
@@ -556,7 +557,7 @@ export function PositionsPanel() {
             <Empty text="There are no open positions in your trading account yet" />
           ) : (
             <table className="w-full min-w-[980px] text-left text-[12px]">
-              <thead className="sticky top-0 bg-[var(--maws-panel)] text-[#787b86]">
+              <thead className="sticky top-0 bg-[var(--maws-panel)] text-(--app-muted)">
                 <tr>
                   <th className="px-2 py-1.5 font-normal">Symbol</th>
                   <th className="px-2 py-1.5 font-normal">Side</th>
@@ -570,7 +571,7 @@ export function PositionsPanel() {
                   <th className="px-2 py-1.5 font-normal">Unrealized P&L</th>
                   <th className="px-2 py-1.5 font-normal">Expiration date</th>
                   <th className="px-2 py-1.5 font-normal">
-                    <span className="flex justify-end gap-1 text-[#787b86]">
+                    <span className="flex justify-end gap-1 text-(--app-muted)">
                       <Download size={13} />
                       <Columns3 size={13} />
                     </span>
@@ -588,7 +589,7 @@ export function PositionsPanel() {
                   const initialMargin = mgn > 0 ? mgn : notional / Math.max(1, p.leverage);
                   const pct = initialMargin === 0 ? 0 : (pnl / initialMargin) * 100;
                   return (
-                    <tr key={p.id} className="border-t border-[#222222] text-[#d1d4dc]">
+                    <tr key={p.id} className="border-t border-(--app-border) text-(--app-text)">
                       <td className="px-2 py-1.5">{formatTicker(p.symbol)}</td>
                       <td className={`px-2 py-1.5 ${p.side === "long" ? "text-[#2962ff]" : "text-[#f23645]"}`}>
                         {p.side === "long" ? "Buy" : "Sell"}
@@ -606,13 +607,13 @@ export function PositionsPanel() {
                       <td className={`px-2 py-1.5 ${pnl >= 0 ? "text-[#089981]" : "text-[#f23645]"}`}>
                         <PnlCell pnl={pnl} markPriceStale={p.markPriceStale} markAgeMs={p.markAgeMs} />
                       </td>
-                      <td className="px-2 py-1.5 text-[#787b86]">—</td>
+                      <td className="px-2 py-1.5 text-(--app-muted)">—</td>
                       <td className="px-2 py-1.5 text-right">
                         <button
                           type="button"
                           disabled={mutationBlocked}
                           title={mutationBlocked ? "Switching profile…" : undefined}
-                          className="text-[#787b86] hover:text-[#d1d4dc] disabled:cursor-not-allowed disabled:opacity-40"
+                          className="text-(--app-muted) hover:text-(--app-text) disabled:cursor-not-allowed disabled:opacity-40"
                           onClick={() => {
                             void dispatchClosePosition(p.id);
                           }}
@@ -633,7 +634,7 @@ export function PositionsPanel() {
             <Empty text="There are no working orders in your trading account yet" />
           ) : (
             <table className="w-full text-left text-[12px]">
-              <thead className="sticky top-0 bg-[var(--maws-panel)] text-[#787b86]">
+              <thead className="sticky top-0 bg-[var(--maws-panel)] text-(--app-muted)">
                 <tr>
                   <th className="px-2 py-1.5 font-normal">Symbol</th>
                   <th className="px-2 py-1.5 font-normal">Side</th>
@@ -645,7 +646,7 @@ export function PositionsPanel() {
               </thead>
               <tbody>
                 {ordRows.map((o) => (
-                  <tr key={o.id} className="border-t border-[#222222] text-[#d1d4dc]">
+                  <tr key={o.id} className="border-t border-(--app-border) text-(--app-text)">
                     <td className="px-2 py-1.5">{formatTicker(o.symbol)}</td>
                     <td className={`px-2 py-1.5 ${o.side === "buy" ? "text-[#2962ff]" : "text-[#f23645]"}`}>
                       {o.side === "buy" ? "Buy" : "Sell"}
@@ -658,7 +659,7 @@ export function PositionsPanel() {
                         type="button"
                         disabled={mutationBlocked}
                         title={mutationBlocked ? "Switching profile…" : undefined}
-                        className="text-[#787b86] hover:text-[#d1d4dc] disabled:cursor-not-allowed disabled:opacity-40"
+                        className="text-(--app-muted) hover:text-(--app-text) disabled:cursor-not-allowed disabled:opacity-40"
                         onClick={() => {
                           void dispatchCancelOrder(o.id);
                         }}
@@ -695,8 +696,8 @@ export function PositionsPanel() {
                       onClick={() => setOrderFilter(f.id)}
                       className={`h-[22px] rounded-[4px] px-2.5 text-[12px] ${
                         on
-                          ? "bg-[#2a2e39] text-[#d1d4dc]"
-                          : "text-[#787b86] hover:text-[#d1d4dc]"
+                          ? "bg-(--app-hover) text-(--app-text)"
+                          : "text-(--app-muted) hover:text-(--app-text)"
                       }`}
                     >
                       {f.label}
@@ -710,7 +711,7 @@ export function PositionsPanel() {
               </div>
               <div className="min-h-0 flex-1 overflow-auto">
                 <table className="w-full min-w-[1280px] text-left text-[12px]">
-                  <thead className="sticky top-0 bg-[var(--maws-panel)] text-[#787b86]">
+                  <thead className="sticky top-0 bg-[var(--maws-panel)] text-(--app-muted)">
                     <tr>
                       <th className="px-2 py-1.5 font-normal">Symbol</th>
                       <th className="px-2 py-1.5 font-normal">Side</th>
@@ -730,7 +731,7 @@ export function PositionsPanel() {
                   </thead>
                   <tbody>
                     {filteredOrders.map((o) => (
-                      <tr key={o.id} className="border-t border-[#222222] text-[#d1d4dc]">
+                      <tr key={o.id} className="border-t border-(--app-border) text-(--app-text)">
                         <td className="px-2 py-1.5">
                           <SymbolChip symbol={o.symbol} />
                         </td>
@@ -743,12 +744,12 @@ export function PositionsPanel() {
                         </td>
                         <td className="px-2 py-1.5 capitalize">{o.type}</td>
                         <td className="px-2 py-1.5">{o.qty}</td>
-                        <td className="px-2 py-1.5 text-[#787b86]">
+                        <td className="px-2 py-1.5 text-(--app-muted)">
                           {o.limitPrice != null
                             ? formatPrice(o.symbol, o.limitPrice)
                             : ""}
                         </td>
-                        <td className="px-2 py-1.5 text-[#787b86]">
+                        <td className="px-2 py-1.5 text-(--app-muted)">
                           {o.stopPrice != null
                             ? formatPrice(o.symbol, o.stopPrice)
                             : ""}
@@ -761,16 +762,16 @@ export function PositionsPanel() {
                         <td className="px-2 py-1.5">
                           <StatusTone status={o.status} />
                         </td>
-                        <td className="px-2 py-1.5 whitespace-nowrap text-[#d1d4dc]">
+                        <td className="px-2 py-1.5 whitespace-nowrap text-(--app-text)">
                           {formatStamp(o.time, stampTz)}
                         </td>
-                        <td className="px-2 py-1.5 whitespace-nowrap text-[#d1d4dc]">
+                        <td className="px-2 py-1.5 whitespace-nowrap text-(--app-text)">
                           {formatStamp(o.closingTime ?? o.time, stampTz)}
                         </td>
-                        <td className="px-2 py-1.5 font-mono text-[11px] text-[#787b86]">
+                        <td className="px-2 py-1.5 font-mono text-[11px] text-(--app-muted)">
                           {o.id}
                         </td>
-                        <td className="px-2 py-1.5 text-[#787b86]" />
+                        <td className="px-2 py-1.5 text-(--app-muted)" />
                         <td className="px-2 py-1.5">
                           {o.leverage != null ? `${o.leverage}x` : "—"}
                         </td>
@@ -798,7 +799,7 @@ export function PositionsPanel() {
               </div>
               <div className="min-h-0 flex-1 overflow-auto">
                 <table className="w-full min-w-[960px] text-left text-[12px]">
-                  <thead className="sticky top-0 bg-[var(--maws-panel)] text-[#787b86]">
+                  <thead className="sticky top-0 bg-[var(--maws-panel)] text-(--app-muted)">
                     <tr>
                       <th className="px-2 py-1.5 font-normal">Time</th>
                       <th className="px-2 py-1.5 font-normal">Balance before</th>
@@ -816,14 +817,14 @@ export function PositionsPanel() {
                           ? "text-[#089981]"
                           : b.amount < 0
                             ? "text-[#f23645]"
-                            : "text-[#d1d4dc]";
+                            : "text-(--app-text)";
                       return (
-                        <tr key={b.id} className="border-t border-[#222222] text-[#d1d4dc]">
+                        <tr key={b.id} className="border-t border-(--app-border) text-(--app-text)">
                           <td className="px-2 py-1.5 whitespace-nowrap">
                             {formatStamp(b.time, stampTz)}
                           </td>
                           <td className="px-2 py-1.5">{formatNum(before)}</td>
-                          <td className={`px-2 py-1.5 whitespace-nowrap ${isPnl ? pnlColor : "text-[#787b86]"}`}>
+                          <td className={`px-2 py-1.5 whitespace-nowrap ${isPnl ? pnlColor : "text-(--app-muted)"}`}>
                             {isPnl
                               ? `${b.amount < 0 ? "-" : ""}${formatNum(Math.abs(b.amount))} USD`
                               : b.type === "deposit" || b.type === "withdrawal"
@@ -831,7 +832,7 @@ export function PositionsPanel() {
                                 : "—"}
                           </td>
                           <td className="px-2 py-1.5">{formatNum(b.balanceAfter)}</td>
-                          <td className="max-w-[520px] px-2 py-1.5 text-[11px] leading-snug text-[#d1d4dc]">
+                          <td className="max-w-[520px] px-2 py-1.5 text-[11px] leading-snug text-(--app-text)">
                             {b.note}
                           </td>
                         </tr>
@@ -854,7 +855,7 @@ export function PositionsPanel() {
               </div>
               <div className="min-h-0 flex-1 overflow-auto">
                 <table className="w-full min-w-[640px] text-left text-[12px]">
-                  <thead className="sticky top-0 bg-[var(--maws-panel)] text-[#787b86]">
+                  <thead className="sticky top-0 bg-[var(--maws-panel)] text-(--app-muted)">
                     <tr>
                       <th className="w-[180px] px-2 py-1.5 font-normal">Time</th>
                       <th className="px-2 py-1.5 font-normal">Text</th>
@@ -862,7 +863,7 @@ export function PositionsPanel() {
                   </thead>
                   <tbody>
                     {journalRows.map((j) => (
-                      <tr key={j.id} className="border-t border-[#222222] text-[#d1d4dc]">
+                      <tr key={j.id} className="border-t border-(--app-border) text-(--app-text)">
                         <td className="px-2 py-1.5 whitespace-nowrap align-top">
                           {formatStamp(j.time, stampTz)}
                         </td>

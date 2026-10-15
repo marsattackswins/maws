@@ -5,11 +5,13 @@
   "description": "MAWS — Market Analysis & Workflow System",
   "scripts": {
     "dev": "node scripts/dev.mjs",
+    "dev:restart": "node scripts/dev.mjs --restart",
     "build": "next build && node scripts/prepare-standalone.mjs",
     "start": "node scripts/supervisor.mjs",
     "start:bare": "node scripts/start-standalone.mjs",
     "lint": "eslint",
     "test": "jest",
+    "test:charting": "vitest run --root lib/charting",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:integration": "node -r dotenv/config node_modules/.bin/jest --testPathPattern=tests/integration --runInBand --detectOpenHandles dotenv_config_path=.env.integration",
@@ -21,9 +23,17 @@
     "gen-operator-auth": "node scripts/gen-operator-auth.mjs"
   },
   "dependencies": {
+    "@luxalgo/vela": "^0.8.3",
+    "@luxalgo/vela-pinets": "^0.2.15",
+    "@zag-js/core": "^1.42.0",
+    "@zag-js/dialog": "^1.42.0",
+    "@zag-js/dom-query": "^1.42.0",
+    "@zag-js/menu": "^1.42.0",
+    "@zag-js/tooltip": "^1.42.0",
+    "@zag-js/types": "^1.42.0",
+    "@zag-js/vanilla": "^1.42.0",
     "better-sqlite3": "^12.4.1",
     "dotenv": "^17.4.2",
-    "lightweight-charts": "^5.2.1",
     "lucide-react": "^1.33.0",
     "next": "16.3.2",
     "react": "19.2.8",
@@ -45,9 +55,11 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.2",
     "jest": "^30.5.0",
+    "jsdom": "^29.1.1",
     "tailwindcss": "^4",
     "ts-jest": "^29.4.12",
     "tsx": "^4.23.13",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.0"
   }
 }

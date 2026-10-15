@@ -48,7 +48,7 @@ export function AssetLogo({ symbol, size = 18, className = "" }: Props) {
       width={size}
       height={size}
       draggable={false}
-      className={`inline-block shrink-0 rounded-full bg-[#1a1a1a] object-cover ${className}`}
+      className={`inline-block shrink-0 rounded-full bg-(--app-hover) object-cover ${className}`}
       style={{ width: size, height: size }}
       onError={() => setFailed(true)}
     />

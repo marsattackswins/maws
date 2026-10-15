@@ -5,6 +5,7 @@
   --app-panel: #111111;
   --app-elevated: #1a1a1a;
   --app-border: #222222;
+  --app-bar: #171b26;
   --app-hover: #1a1a1a;
   --app-text: #d1d4dc;
   --app-muted: #787b86;
@@ -12,6 +13,7 @@
   --maws-panel: var(--app-panel);
   --maws-elevated: var(--app-elevated);
   --maws-border: var(--app-border);
+  --maws-bar: var(--app-bar);
   --maws-hover: var(--app-hover);
   --maws-text: var(--app-text);
   --maws-muted: var(--app-muted);
@@ -23,8 +25,8 @@
   --color-tv-settings: var(--app-elevated);
   --color-tv-settings-input: var(--app-elevated);
   --color-tv-border: var(--app-border);
-  --color-tv-border-strong: #2a2e39;
-  --color-tv-input-border: #363a45;
+  --color-tv-border-strong: var(--app-border);
+  --color-tv-input-border: var(--app-hover);
   --color-tv-text: var(--app-text);
   --color-tv-muted: var(--app-muted);
   --color-tv-blue: #2962ff;
@@ -139,23 +141,34 @@ input[type="number"]::-webkit-inner-spin-button {
   gap: 8px;
   padding: 8px 12px;
   font-size: 13px;
-  color: #d1d4dc;
+  color: var(--app-text);
   background: transparent;
   border: 0;
   cursor: pointer;
 }
 
 .menu-row:hover {
-  background: #222222;
+  background: var(--app-hover);
 }
 
 .menu-row input {
   accent-color: #ffffff;
 }
 
+/* Section header inside a dropdown menu (e.g. the add-indicator catalog). */
+.menu-section-title {
+  padding: 6px 12px 2px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--app-muted);
+  pointer-events: none;
+}
+
 .legend-sym {
   font-weight: 700;
-  color: #d1d4dc;
+  color: var(--app-text);
 }
 
 .legend-logo {
@@ -176,7 +189,7 @@ input[type="number"]::-webkit-inner-spin-button {
   width: 14px;
   border-radius: 999px;
   object-fit: cover;
-  background: #1a1a1a;
+  background: var(--app-hover);
   vertical-align: -2px;
 }
 
@@ -191,11 +204,11 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 
 .legend-tf {
-  color: #787b86;
+  color: var(--app-muted);
 }
 
 .legend-muted {
-  color: #787b86;
+  color: var(--app-muted);
 }
 
 .ctx-menu {
@@ -203,9 +216,9 @@ input[type="number"]::-webkit-inner-spin-button {
   z-index: 80;
   width: 300px;
   padding: 6px 0;
-  border: 1px solid #2a2e39;
+  border: 1px solid var(--app-border);
   border-radius: 8px;
-  background: #1b1b1b;
+  background: var(--app-elevated);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.65);
 }
 
@@ -215,12 +228,12 @@ input[type="number"]::-webkit-inner-spin-button {
   align-items: center;
   gap: 10px;
   padding: 8px 12px;
-  color: #d1d4dc;
+  color: var(--app-text);
   text-align: left;
 }
 
 .ctx-item:hover {
-  background: #222222;
+  background: var(--app-hover);
 }
 
 .ctx-ico {
@@ -230,7 +243,7 @@ input[type="number"]::-webkit-inner-spin-button {
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  color: #787b86;
+  color: var(--app-muted);
 }
 
 .ctx-body {
@@ -247,21 +260,21 @@ input[type="number"]::-webkit-inner-spin-button {
   min-width: 0;
   font-size: 13px;
   line-height: 16px;
-  color: #d1d4dc;
+  color: var(--app-text);
 }
 
 .ctx-shortcut {
   flex-shrink: 0;
   font-size: 12px;
   line-height: 16px;
-  color: #787b86;
+  color: var(--app-muted);
   white-space: nowrap;
 }
 
 .ctx-trail {
   flex-shrink: 0;
   margin-left: auto;
-  color: #787b86;
+  color: var(--app-muted);
 }
 
 .ctx-split {
@@ -279,9 +292,9 @@ input[type="number"]::-webkit-inner-spin-button {
   left: calc(100% - 4px);
   z-index: 81;
   width: 168px;
-  border: 1px solid #2a2e39;
+  border: 1px solid var(--app-border);
   border-radius: 8px;
-  background: #1b1b1b;
+  background: var(--app-elevated);
   padding: 4px 0;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.65);
 }
@@ -289,7 +302,7 @@ input[type="number"]::-webkit-inner-spin-button {
 .ctx-sep {
   height: 1px;
   margin: 4px 0;
-  background: #2a2e39;
+  background: var(--app-hover);
 }
 
 /* ── Scale / price-axis settings menu ─────────────────────────────────────── */
@@ -303,21 +316,21 @@ input[type="number"]::-webkit-inner-spin-button {
   border: none;
   background: transparent;
   padding: 0;
-  color: #787b86;
+  color: var(--app-muted);
   cursor: pointer;
   transition: color 0.1s;
 }
 .scale-menu-gear:hover,
 .scale-menu-gear--open {
-  color: #d1d4dc;
+  color: var(--app-text);
 }
 
 .scale-menu-dropdown {
   width: 256px;
   padding: 6px 0;
-  border: 1px solid #2a2e39;
+  border: 1px solid var(--app-border);
   border-radius: 8px;
-  background: #1b1b1b;
+  background: var(--app-elevated);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.65);
   overflow: hidden;
 }
@@ -335,7 +348,7 @@ input[type="number"]::-webkit-inner-spin-button {
   align-items: center;
   gap: 6px;
   padding: 6px 10px 6px 8px;
-  border-bottom: 1px solid #2a2e39;
+  border-bottom: 1px solid var(--app-border);
 }
 
 .scale-menu-tz-back {
@@ -346,25 +359,25 @@ input[type="number"]::-webkit-inner-spin-button {
   height: 20px;
   border: none;
   background: transparent;
-  color: #787b86;
+  color: var(--app-muted);
   cursor: pointer;
   flex-shrink: 0;
   border-radius: 3px;
 }
 .scale-menu-tz-back:hover {
-  background: #222222;
-  color: #d1d4dc;
+  background: var(--app-hover);
+  color: var(--app-text);
 }
 
 .scale-menu-tz-title {
   font-size: 12px;
   font-weight: 600;
-  color: #d1d4dc;
+  color: var(--app-text);
 }
 
 .scale-menu-tz-search {
   padding: 6px 8px;
-  border-bottom: 1px solid #2a2e39;
+  border-bottom: 1px solid var(--app-border);
 }
 
 .scale-menu-tz-search-label {
@@ -373,14 +386,14 @@ input[type="number"]::-webkit-inner-spin-button {
   gap: 6px;
   height: 28px;
   padding: 0 8px;
-  border: 1px solid #2a2e39;
+  border: 1px solid var(--app-border);
   border-radius: 4px;
-  background: #222222;
+  background: var(--app-hover);
 }
 
 .scale-menu-tz-search-icon {
   flex-shrink: 0;
-  color: #787b86;
+  color: var(--app-muted);
 }
 
 .scale-menu-tz-search-input {
@@ -391,10 +404,10 @@ input[type="number"]::-webkit-inner-spin-button {
   border: none;
   outline: none;
   font-size: 12px;
-  color: #d1d4dc;
+  color: var(--app-text);
 }
 .scale-menu-tz-search-input::placeholder {
-  color: #787b86;
+  color: var(--app-muted);
 }
 
 .scale-menu-tz-list {
@@ -407,7 +420,7 @@ input[type="number"]::-webkit-inner-spin-button {
   padding: 16px 12px;
   text-align: center;
   font-size: 12px;
-  color: #787b86;
+  color: var(--app-muted);
 }
 
 .scale-menu-tz-region {
@@ -418,8 +431,8 @@ input[type="number"]::-webkit-inner-spin-button {
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.08em;
-  color: #787b86;
-  background: #1b1b1b;
+  color: var(--app-muted);
+  background: var(--app-elevated);
 }
 
 .scale-menu-tz-row {
@@ -429,14 +442,14 @@ input[type="number"]::-webkit-inner-spin-button {
   width: 100%;
   padding: 5px 10px;
   font-size: 12px;
-  color: #d1d4dc;
+  color: var(--app-text);
   text-align: left;
   background: transparent;
   border: none;
   cursor: pointer;
 }
 .scale-menu-tz-row:hover {
-  background: #222222;
+  background: var(--app-hover);
 }
 
 .scale-menu-tz-check {
@@ -458,7 +471,7 @@ input[type="number"]::-webkit-inner-spin-button {
 .scale-menu-tz-offset {
   flex-shrink: 0;
   font-size: 11px;
-  color: #787b86;
+  color: var(--app-muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -483,7 +496,7 @@ input[type="number"]::-webkit-inner-spin-button {
 
 .scale-menu-sub-label {
   font-size: 12px;
-  color: #d1d4dc;
+  color: var(--app-text);
   flex: 1;
 }
 
@@ -496,14 +509,14 @@ input[type="number"]::-webkit-inner-spin-button {
   padding: 2px 6px;
   font-size: 11px;
   border-radius: 3px;
-  border: 1px solid #2a2e39;
+  border: 1px solid var(--app-border);
   background: transparent;
-  color: #787b86;
+  color: var(--app-muted);
   cursor: pointer;
 }
 .scale-menu-sub-opt:hover {
-  background: #222222;
-  color: #d1d4dc;
+  background: var(--app-hover);
+  color: var(--app-text);
 }
 .scale-menu-sub-opt--on {
   background: #2962ff;
@@ -518,14 +531,14 @@ input[type="number"]::-webkit-inner-spin-button {
   width: 100%;
   padding: 7px 12px;
   font-size: 13px;
-  color: #d1d4dc;
+  color: var(--app-text);
   text-align: left;
   background: transparent;
   border: none;
   cursor: pointer;
 }
 .scale-menu-check-row:hover {
-  background: #222222;
+  background: var(--app-hover);
 }
 
 .scale-menu-check-box {
@@ -535,12 +548,12 @@ input[type="number"]::-webkit-inner-spin-button {
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  color: #d1d4dc;
+  color: var(--app-text);
 }
 
 .scale-menu-check-label {
   font-size: 13px;
-  color: #d1d4dc;
+  color: var(--app-text);
 }
 
 .col-resizer {
@@ -578,10 +591,10 @@ input[type="number"]::-webkit-inner-spin-button {
   pointer-events: auto;
   align-items: center;
   justify-content: center;
-  border: 1px solid #d1d4dc;
+  border: 1px solid var(--app-text);
   border-radius: 50%;
-  background: #1b1b1b;
-  color: #d1d4dc;
+  background: var(--app-elevated);
+  color: var(--app-text);
 }
 
 .plus-hit:hover {
@@ -593,9 +606,9 @@ input[type="number"]::-webkit-inner-spin-button {
   z-index: 90;
   width: 340px;
   padding: 6px 0;
-  border: 1px solid #2a2e39;
+  border: 1px solid var(--app-border);
   border-radius: 8px;
-  background: #1b1b1b;
+  background: var(--app-elevated);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.65);
 }
 
@@ -605,12 +618,12 @@ input[type="number"]::-webkit-inner-spin-button {
   align-items: center;
   gap: 10px;
   padding: 8px 12px;
-  color: #d1d4dc;
+  color: var(--app-text);
   text-align: left;
 }
 
 .plus-row:hover {
-  background: #222222;
+  background: var(--app-hover);
 }
 
 .plus-row-label {
@@ -626,139 +639,15 @@ input[type="number"]::-webkit-inner-spin-button {
 .plus-row-k {
   flex-shrink: 0;
   font-size: 12px;
-  color: #787b86;
+  color: var(--app-muted);
   white-space: nowrap;
-}
-
-.ind-row {
-  display: flex;
-  height: 22px;
-  max-width: 100%;
-  align-items: center;
-  gap: 4px;
-  padding: 0 6px;
-  border: 1px solid transparent;
-  border-radius: 2px;
-  color: #bbbdc2;
-  cursor: pointer;
-}
-
-.ind-row:hover {
-  color: #bbbdc2;
-}
-
-.ind-row.is-on {
-  border-color: #2962ff;
-  background: rgba(0, 0, 0, 0.55);
-  color: #ffffff;
-}
-
-.ind-row.is-on .ind-values {
-  color: #ffffff;
-}
-
-.ind-row.is-on .ind-inputs {
-  color: rgba(255, 255, 255, 0.55);
-}
-
-.ind-row.is-off,
-.ind-row.is-off:hover,
-.ind-row.is-off.is-on {
-  color: #5d606b;
-}
-
-.ind-row.is-off .ind-inputs,
-.ind-row.is-off .ind-values,
-.ind-row.is-off.is-on .ind-inputs,
-.ind-row.is-off.is-on .ind-values {
-  color: #5d606b;
-}
-
-.ind-title {
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-}
-
-.ind-row:not(.is-off):not(.is-on) .ind-title:hover {
-  color: #bbbdc2;
-}
-
-.ind-inputs {
-  color: #787b86;
-}
-
-.ind-values {
-  color: #d1d4dc;
-}
-
-.ind-hide {
-  display: flex;
-  height: 18px;
-  width: 18px;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  color: #787b86;
-}
-
-.ind-hide:hover {
-  color: #d1d4dc;
-}
-
-.ind-row.is-off .ind-hide {
-  color: #5d606b;
-}
-
-.ind-row.is-off .ind-hide:hover {
-  color: #787b86;
-}
-
-.ind-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  max-width: 0;
-  margin-left: 0;
-  opacity: 0;
-  overflow: hidden;
-  pointer-events: none;
-  transition:
-    max-width 0.16s ease,
-    opacity 0.14s ease,
-    margin-left 0.16s ease;
-}
-
-.ind-actions.is-open {
-  max-width: 44px;
-  margin-left: 2px;
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.ind-actions button {
-  flex-shrink: 0;
-}
-
-.pane-ind-legend {
-  position: absolute;
-  top: 4px;
-  left: 8px;
-  z-index: 6;
-  pointer-events: none;
-}
-
-.pane-ind-legend [data-ind-legend] {
-  pointer-events: auto;
 }
 
 .top-sep {
   margin: 0 4px;
   height: 18px;
   width: 1px;
-  background: #222222;
+  background: var(--app-border);
 }
 
 ::-webkit-scrollbar {
@@ -773,4 +662,115 @@ input[type="number"]::-webkit-inner-spin-button {
 
 ::-webkit-scrollbar-track {
   background: #000000;
+}
+
+/* ── Watchlist icon button — theme-reactive hover ─────────────────────────── */
+.wl-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  width: 28px;
+  border-radius: 4px;
+  color: var(--app-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+.wl-icon-btn:hover {
+  background: var(--app-hover);
+  color: var(--app-text);
+}
+
+/* ── Watchlist rows — theme-reactive hover/select ─────────────────────────── */
+.wl-row {
+  position: relative;
+  transition: background 0.1s;
+}
+.wl-row:hover {
+  background: var(--app-hover);
+}
+/* Selected instrument: the Vela-style marker bar hugging the row's left edge. */
+.wl-row.is-selected::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--app-text);
+  pointer-events: none;
+}
+.wl-row.is-selected {
+  background: var(--app-elevated);
+}
+.wl-row.is-dragging {
+  background: var(--app-elevated);
+  outline: 1px solid #2962ff;
+  outline-offset: -1px;
+  z-index: 10;
+}
+
+/* ── Watchlist group header ────────────────────────────────────────────────── */
+.wl-group-header {
+  transition: background 0.1s;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.wl-group-header:hover {
+  background: var(--app-hover);
+}
+
+/* ── Topbar trade strip: Sell / qty / Buy each in their own rounded block ── */
+.trade-block {
+  border-radius: 10px;
+  transition: border-color 0.15s, background 0.15s;
+}
+/* Margin block: mirrors the Trade button's hover highlight; no border/outline. */
+.trade-hover {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 10px;
+  transition: background 0.15s;
+}
+.trade-block:hover {
+  border-color: var(--app-muted);
+  background: rgba(255, 255, 255, 0.03);
+}
+.trade-hover:hover {
+  background: var(--app-hover);
+}
+/* Muted directional tints on the buy/sell blocks (qty block stays neutral). */
+.trade-block.trade-block-sell {
+  background: rgba(242, 54, 69, 0.1);
+}
+.trade-block.trade-block-sell:hover {
+  background: rgba(242, 54, 69, 0.22);
+  border-color: rgba(242, 54, 69, 0.5);
+}
+.trade-block.trade-block-buy {
+  background: rgba(46, 189, 133, 0.1);
+}
+.trade-block.trade-block-buy:hover {
+  background: rgba(46, 189, 133, 0.22);
+  border-color: rgba(46, 189, 133, 0.5);
+}
+
+/* ── Vela chrome stays on the app font ──────────────────────────────────────
+ * Vela's static token sheet (`.vela-ui { font-family: var(--vela-font) }`) is
+ * injected LAZILY — on the first popover open — so chart dialogs and overlays
+ * accidentally inherit the page font until the first dropdown opens, at which
+ * point the whole settings dialog visibly flipped to the theme's `sans-serif`.
+ * The app owns the chrome font: pin every Vela DOM surface (kit hosts,
+ * popovers, dialogs) to the app stack so the font never changes under the
+ * user. `!important` because the kit sheet lands after this file at equal
+ * specificity (same pattern as the VelaDrawingBar override).
+ * Canvas-drawn text (axis, legends) follows the chart theme, not this rule. */
+.vela-ui,
+.vela-ui-layer,
+.vela-dialog,
+.vela-popover {
+  font-family: "Trebuchet MS", Roboto, Ubuntu, sans-serif !important;
 }

@@ -79,12 +79,12 @@ function EventCard({
       <div className="px-3 py-2.5 pr-3 pb-6 pl-3.5">
         <div className="flex flex-col gap-1.5">
           <div className="flex items-baseline justify-between gap-3 text-[11px] leading-[16px]">
-            <div className="flex min-w-0 items-baseline gap-2 text-[#787b86]">
-              <span className="shrink-0 tabular-nums font-medium text-[#d1d4dc]">
+            <div className="flex min-w-0 items-baseline gap-2 text-(--app-muted)">
+              <span className="shrink-0 tabular-nums font-medium text-(--app-text)">
                 {time}
               </span>
               {live && (
-                <span className="shrink-0 text-[9px] font-semibold uppercase tracking-wide text-[#d1d4dc]">
+                <span className="shrink-0 text-[9px] font-semibold uppercase tracking-wide text-(--app-text)">
                   Live
                 </span>
               )}
@@ -101,7 +101,7 @@ function EventCard({
           </div>
 
           <div className="flex items-baseline justify-between gap-3 text-[13px] leading-[18px]">
-            <div className="min-w-0 font-medium text-[#d1d4dc]">{event.title}</div>
+            <div className="min-w-0 font-medium text-(--app-text)">{event.title}</div>
             {event.previous ? (
               <span className="shrink-0 text-[11px] leading-[16px] tabular-nums text-[#ffa726]">
                 Previous: {event.previous}
@@ -130,19 +130,19 @@ function EventCard({
               <div className="mb-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#4c525e]">
                 Description
               </div>
-              <p className="text-[#b2b5be]">{guide.description}</p>
+              <p className="text-(--app-muted)">{guide.description}</p>
             </div>
             <div>
               <div className="mb-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#4c525e]">
                 Usual effect
               </div>
-              <p className="text-[#b2b5be]">{guide.usualEffect}</p>
+              <p className="text-(--app-muted)">{guide.usualEffect}</p>
             </div>
             <div>
               <div className="mb-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#4c525e]">
                 Why traders care
               </div>
-              <p className="text-[#b2b5be]">{guide.whyTradersCare}</p>
+              <p className="text-(--app-muted)">{guide.whyTradersCare}</p>
             </div>
             <div
               className={`text-[10px] font-semibold uppercase tracking-wide ${
@@ -261,7 +261,7 @@ export function EconomicCalendar() {
 
   if (!economicEvents) {
     return (
-      <div className="flex h-full items-center justify-center px-4 text-center text-[13px] text-[#787b86]">
+      <div className="flex h-full items-center justify-center px-4 text-center text-[13px] text-(--app-muted)">
         Economic events are hidden in Settings → Events
       </div>
     );
@@ -269,9 +269,9 @@ export function EconomicCalendar() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex h-8 shrink-0 items-center justify-between border-b border-[#222222] px-2">
+      <div className="flex h-8 shrink-0 items-center justify-between border-b border-(--app-border) px-2">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="text-[13px] font-semibold text-[#d1d4dc]">Calendar</span>
+          <span className="text-[13px] font-semibold text-(--app-text)">Calendar</span>
           <span
             className="truncate text-[10px] uppercase tracking-wide text-[#4c525e]"
             title={status ?? undefined}
@@ -285,7 +285,7 @@ export function EconomicCalendar() {
           <button
             type="button"
             title="Reload calendar"
-            className="h-5 rounded px-1 text-[10px] text-[#4c525e] hover:bg-[#222222] hover:text-[#d1d4dc]"
+            className="h-5 rounded px-1 text-[10px] text-[#4c525e] hover:bg-(--app-hover) hover:text-(--app-text)"
             onClick={() => setReloadToken((n) => n + 1)}
           >
             Reload
@@ -296,14 +296,14 @@ export function EconomicCalendar() {
             type="button"
             title="Previous day"
             disabled={!canPrev}
-            className="flex h-6 w-6 items-center justify-center rounded-[4px] text-[#787b86] hover:bg-[#222222] disabled:opacity-30"
+            className="flex h-6 w-6 items-center justify-center rounded-[4px] text-(--app-muted) hover:bg-(--app-hover) disabled:opacity-30"
             onClick={() => setCursor(Math.max(minDay, cursor - DAY_MS))}
           >
             <ChevronLeft size={14} />
           </button>
           <button
             type="button"
-            className="min-w-[4.5rem] px-1 text-center text-[12px] text-[#d1d4dc] hover:text-white"
+            className="min-w-[4.5rem] px-1 text-center text-[12px] text-(--app-text) hover:text-white"
             onClick={() => setCursor(todayStart)}
           >
             {isToday ? "Today" : label}
@@ -312,7 +312,7 @@ export function EconomicCalendar() {
             type="button"
             title="Next day"
             disabled={!canNext}
-            className="flex h-6 w-6 items-center justify-center rounded-[4px] text-[#787b86] hover:bg-[#222222] disabled:opacity-30"
+            className="flex h-6 w-6 items-center justify-center rounded-[4px] text-(--app-muted) hover:bg-(--app-hover) disabled:opacity-30"
             onClick={() => setCursor(Math.min(maxDay, cursor + DAY_MS))}
           >
             <ChevronRight size={14} />
@@ -321,14 +321,14 @@ export function EconomicCalendar() {
       </div>
 
       {source === "mock" && status && (
-        <div className="shrink-0 border-b border-[#222222] px-2 py-1 text-[10px] text-[#787b86]">
+        <div className="shrink-0 border-b border-(--app-border) px-2 py-1 text-[10px] text-(--app-muted)">
           {status}
         </div>
       )}
 
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 py-2">
         {dayEvents.length === 0 && (
-          <div className="px-2 py-8 text-center text-[12px] text-[#787b86]">
+          <div className="px-2 py-8 text-center text-[12px] text-(--app-muted)">
             {loading ? "Loading events…" : "No events this day"}
           </div>
         )}

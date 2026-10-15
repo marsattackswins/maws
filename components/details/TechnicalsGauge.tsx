@@ -21,14 +21,14 @@ export type GaugeLean =
   | "strongLong";
 
 const LEAN_LABEL: Record<GaugeLean, string> = {
-  strongShort: "Strong short",
-  short: "Short",
+  strongShort: "Strong sell",
+  short: "Sell",
   neutral: "Neutral",
-  long: "Long",
-  strongLong: "Strong long",
+  long: "Buy",
+  strongLong: "Strong buy",
 };
 
-/** Needle score 0 (strong short) → 100 (strong long). */
+/** Needle score 0 (strong sell) → 100 (strong buy). */
 const LEAN_SCORE: Record<GaugeLean, number> = {
   strongShort: 10,
   short: 30,
@@ -67,107 +67,91 @@ export function leanFromRsi(rsi: number): GaugeLean {
   return "strongShort";
 }
 
-export function TechnicalsGauge({ lean }: { lean: GaugeLean }) {
+/**
+ * Technicals dial — five rounded segments (deep red → soft red → silver →
+ * soft blue → deep blue) around a 200° sweep with clear gaps, a slim tapered
+ * gradient needle and ONE bold label under the dial (the current lean).
+ */
+/** Dial sweep: SWEEP_HI (left end) down to SWEEP_LO (right end), symmetric
+ *  about 90° (straight up) so Neutral sits dead-center. */
+const SWEEP_HI = 190;
+const SWEEP_LO = -10;
+const SWEEP = SWEEP_HI - SWEEP_LO; // 200°
+/** Segment colors: red (sell) → grey (neutral) → blue (buy). */
+const COLORS = ["#f0334b", "#eb5f6d", "#c2c6cc", "#57a0f8", "#2962ff"];
+
+export function TechnicalsGauge({
+  lean,
+  size = 265,
+  stroke = 8,
+}: {
+  lean: GaugeLean;
+  /** Rendered arc width (px) — pass a smaller number for a smaller dial. */
+  size?: number;
+  /** Segment stroke width — pass a smaller number for a thinner dial. */
+  stroke?: number;
+}) {
   const gid = useId().replaceAll(":", "");
   const score = LEAN_SCORE[lean];
-  const angle = 180 - (score / 100) * 180;
+  // Needle: 0 (left end) → 100 (right end) across the sweep.
+  const angle = SWEEP_HI - (score / 100) * SWEEP;
   const label = LEAN_LABEL[lean];
 
   const cx = 150;
-  const cy = 150;
-  const r = 95;
-  const tip = polar(cx, cy, angle, r - 16);
+  const cy = 115;
+  const r = 86;
+  const STROKE = stroke;
+  const GAP = 8;
+  // Segment pitch centers the 5 segments on the sweep: segment i's center is
+  // at SWEEP_HI − STEP·(i + 0.5); center 2 (the grey one) lands exactly on 90°.
+  const STEP = SWEEP / 5;
+  const segments = COLORS.map((color, i) => {
+    const center = SWEEP_HI - STEP * (i + 0.5);
+    const half = (STEP - GAP) / 2;
+    return { color, from: center + half, to: center - half };
+  });
 
-  const around: { text: string; deg: number; extra: number }[] = [
-    { text: "Short", deg: 138, extra: 26 },
-    { text: "Neutral", deg: 90, extra: 28 },
-    { text: "Long", deg: 42, extra: 26 },
-  ];
+  // Slim tapered needle: sharp tip inside the arc, short symmetric base at
+  // the hub, tiny tail behind it.
+  const tip = polar(cx, cy, angle, r - 18);
+  const bl = polar(cx, cy, angle + 90, 3.25);
+  const tail = polar(cx, cy, angle, -7);
+  const br = polar(cx, cy, angle - 90, 3.25);
+  const needle = [
+    `M ${tip.x.toFixed(2)} ${tip.y.toFixed(2)}`,
+    `L ${bl.x.toFixed(2)} ${bl.y.toFixed(2)}`,
+    `L ${tail.x.toFixed(2)} ${tail.y.toFixed(2)}`,
+    `L ${br.x.toFixed(2)} ${br.y.toFixed(2)}`,
+    "Z",
+  ].join(" ");
 
   return (
     <div className="px-3 pb-3 pt-1">
-      <div className="mb-0.5 text-[13px] font-semibold text-[#d1d4dc]">Technicals</div>
-      <svg viewBox="0 0 300 220" width={220} height={161} className="mx-auto block shrink-0">
+      <div className="mb-0.5 text-[13px] font-semibold text-(--app-text)">Technicals</div>
+      <svg viewBox="0 0 300 190" width="100%" style={{ maxWidth: size }} className="mx-auto block shrink-0">
         <defs>
-          <linearGradient id={`${gid}-arc`} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#f23645" />
-            <stop offset="20%" stopColor="#e04080" />
-            <stop offset="50%" stopColor="#9c27b0" />
-            <stop offset="80%" stopColor="#5c6bc0" />
-            <stop offset="100%" stopColor="#2962ff" />
+          <linearGradient id={`${gid}-needle`} x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#f7f8fa" />
+            <stop offset="100%" stopColor="#d4d7dc" />
           </linearGradient>
         </defs>
-        <path
-          d={arcPath(cx, cy, r, 180, 0)}
-          fill="none"
-          stroke="#2a2a2a"
-          strokeWidth="7"
-          strokeLinecap="butt"
-        />
-        <path
-          d={arcPath(cx, cy, r, 174, 6)}
-          fill="none"
-          stroke={`url(#${gid}-arc)`}
-          strokeWidth="5.5"
-          strokeLinecap="butt"
-        />
-        {around.map((item) => {
-          const p = polar(cx, cy, item.deg, r + item.extra);
-          return (
-            <text
-              key={item.text}
-              x={p.x}
-              y={p.y}
-              fill="#d1d4dc"
-              fontSize="12"
-              fontWeight="600"
-              fontFamily="Trebuchet MS, sans-serif"
-              textAnchor="middle"
-              dominantBaseline="middle"
-            >
-              {item.text}
-            </text>
-          );
-        })}
-        <text
-          x={cx - r}
-          y={cy + 22}
-          fill="#d1d4dc"
-          fontSize="12"
-          fontWeight="600"
-          fontFamily="Trebuchet MS, sans-serif"
-          textAnchor="middle"
-        >
-          Strong short
-        </text>
-        <text
-          x={cx + r}
-          y={cy + 22}
-          fill="#d1d4dc"
-          fontSize="12"
-          fontWeight="600"
-          fontFamily="Trebuchet MS, sans-serif"
-          textAnchor="middle"
-        >
-          Strong long
-        </text>
-        <line
-          x1={cx}
-          y1={cy}
-          x2={tip.x}
-          y2={tip.y}
-          stroke="#ffffff"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-        />
-        <circle cx={cx} cy={cy} r="3.25" fill="#ffffff" />
+        {segments.map((s) => (
+          <path
+            key={s.from}
+            d={arcPath(cx, cy, r, s.from, s.to)}
+            fill="none"
+            stroke={s.color}
+            strokeWidth={STROKE}
+            strokeLinecap="round"
+          />
+        ))}
+        <path d={needle} fill={`url(#${gid}-needle)`} />
         <text
           x={cx}
-          y={cy + 40}
+          y={cy + 48}
           fill="#ffffff"
-          fontSize="16"
+          fontSize="22"
           fontWeight="700"
-          fontFamily="Trebuchet MS, sans-serif"
           textAnchor="middle"
         >
           {label}
