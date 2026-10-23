@@ -1,4 +1,5 @@
 import type { Vela, NativeRenderer } from "@/lib/charting";
+import type { WorkspaceReplay } from "@/lib/charting/workspace";
 
 /**
  * Per-chart-pane Vela handle registry (Vela migration).
@@ -32,6 +33,8 @@ if (process.env.NODE_ENV !== "production" && typeof window !== "undefined") {
 // When the workspace engine hosts the grid, shell surfaces (TopBar screenshot,
 // AppShell shortcuts) reach the shared VelaWorkspace through this accessor.
 type WorkspaceHandle = {
+  /** Shared replay controller for all live workspace cells. */
+  replay: WorkspaceReplay;
   /** Composite screenshot of the whole grid → PNG data URL (null when empty). */
   screenshot(): string | null;
   /** Download the composite screenshot (workspace's own filename). */

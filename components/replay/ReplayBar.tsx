@@ -3,13 +3,19 @@
 /**
  * ReplayBar.tsx — Vela-driven replay controls (UI only).
  *
- * Vela owns the replay clock (`chart.replay` on the replaying pane's chart);
+ * Vela owns the replay clock (`workspace.replay` across the chart grid);
  * this bar issues commands straight to it — step, play/pause, seek, speed,
  * exit — and mirrors position via the store fields Vela's `replay:*` events
  * keep updated (cursorTime + remaining). No feed-derived index math here.
  */
 
-import { getChart } from "@/lib/chart-registry";
+import { getChart, getWorkspace } from "@/lib/chart-registry";
+import {
+  replaySliderMax,
+  replaySliderPosition,
+  replaySliderTime,
+  seekReplayFromBar,
+} from "@/lib/replay-bar-actions";
 import { useAppStore } from "@/lib/store";
 import { Pause, Play, SkipBack, SkipForward, X } from "lucide-react";
 
@@ -25,10 +31,6 @@ export function ReplayBar() {
   const stopReplay = useAppStore((s) => s.stopReplay);
 
   const paneId = replay?.paneId;
-  const activePane = useAppStore((s) =>
-    s.panes.find((p) => p.id === paneId),
-  );
-  const symbol = activePane?.symbol ?? "";
   const tfMs = useAppStore((s) => {
     const p = s.panes.find((x) => x.id === paneId);
     if (!p) return 0;
@@ -46,6 +48,8 @@ export function ReplayBar() {
     const handle = paneId ? getChart(paneId) : undefined;
     return handle?.vela.replay ?? null;
   };
+  const bounds = vela()?.bounds ?? null;
+  const sliderMax = replaySliderMax(bounds, tfMs);
 
   const stamp = replay.cursorTime
     ? (() => {
@@ -59,7 +63,28 @@ export function ReplayBar() {
     : "";
 
   const seek = (cursorTime: number) => {
-    patchReplay({ cursorTime, playing: false });
+    const controller = getWorkspace()?.replay;
+    if (!controller || !paneId) {
+      console.error("[maws] Could not seek replay because the chart workspace is unavailable.");
+      return;
+    }
+    void seekReplayFromBar(
+      (from) => controller.start({ from, cell: paneId }),
+      cursorTime,
+      () => patchReplay({ cursorTime, playing: false }),
+    ).catch((error: unknown) => {
+      console.error("[maws] Could not seek chart replay.", error);
+      const state = controller.state;
+      if (state.active && state.cursorTime != null) {
+        patchReplay({
+          cursorTime: state.cursorTime,
+          remaining: state.remaining,
+          playing: state.playing,
+        });
+      } else {
+        stopReplay();
+      }
+    });
   };
 
   return (
@@ -68,8 +93,12 @@ export function ReplayBar() {
         type="button"
         className="flex h-7 items-center gap-1 rounded-[4px] px-2 text-[var(--maws-muted)] hover:bg-[var(--maws-elevated)] hover:text-[var(--maws-text)]"
         onClick={() => {
-          const r = vela();
-          if (r?.state.active) r.stop();
+          const controller = getWorkspace()?.replay;
+          if (!controller) {
+            console.error("[maws] Could not exit replay because the chart workspace is unavailable.");
+            return;
+          }
+          controller.stop();
           stopReplay();
         }}
       >
@@ -89,7 +118,15 @@ export function ReplayBar() {
       <button
         type="button"
         className="flex h-7 w-7 items-center justify-center rounded-[4px] bg-[var(--maws-elevated)] hover:bg-[var(--maws-hover)]"
-        onClick={() => patchReplay({ playing: !replay.playing })}
+        onClick={() => {
+          const controller = getWorkspace()?.replay;
+          if (!controller) {
+            console.error("[maws] Could not control replay because the chart workspace is unavailable.");
+            return;
+          }
+          if (replay.playing) controller.pause();
+          else controller.play(replayIntervalMs(replay.speed));
+        }}
       >
         {replay.playing ? <Pause size={14} /> : <Play size={14} />}
       </button>
@@ -97,13 +134,31 @@ export function ReplayBar() {
         type="button"
         className="flex h-7 w-7 items-center justify-center rounded-[4px] hover:bg-[var(--maws-elevated)]"
         title="Step forward one bar"
-        onClick={() => vela()?.step()}
+        onClick={() => {
+          const controller = getWorkspace()?.replay;
+          if (!controller) {
+            console.error("[maws] Could not step replay because the chart workspace is unavailable.");
+            return;
+          }
+          controller.step();
+        }}
       >
         <SkipForward size={14} />
       </button>
       <select
         value={replay.speed}
-        onChange={(e) => patchReplay({ speed: Number(e.target.value) })}
+        onChange={(e) => {
+          const speed = Number(e.target.value);
+          patchReplay({ speed });
+          if (replay.playing) {
+            const controller = getWorkspace()?.replay;
+            if (!controller) {
+              console.error("[maws] Could not change replay speed because the chart workspace is unavailable.");
+              return;
+            }
+            controller.play(replayIntervalMs(speed));
+          }
+        }}
         className="h-7 border border-[var(--maws-border)] bg-[var(--maws-bg)] px-1 text-[12px] text-[var(--maws-text)]"
       >
         {SPEEDS.map((s) => (
@@ -115,15 +170,11 @@ export function ReplayBar() {
       <input
         type="range"
         min={0}
-        max={Math.max(1, replay.total - 1)}
-        value={Math.max(0, replay.remaining ?? 0)}
+        max={sliderMax}
+        value={replaySliderPosition(replay.cursorTime, bounds, tfMs)}
         onChange={(e) => {
-          // Slider seeks relative to the newest loaded bar (bounds.last):
-          // N bars back from the end, matching the pre-migration semantics.
-          const r = vela();
-          if (!r?.bounds) return;
-          const back = Number(e.target.value);
-          seek(r.bounds.last - back * tfMs);
+          const cursorTime = replaySliderTime(Number(e.target.value), bounds, tfMs);
+          if (cursorTime != null) seek(cursorTime);
         }}
         className="mx-2 h-1 min-w-0 flex-1 accent-[#2962ff]"
       />

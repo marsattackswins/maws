@@ -116,6 +116,7 @@ export function VelaWorkspaceHost() {
     setWsState(ws);
     // Shell surfaces (TopBar screenshot, AppShell) reach the workspace here.
     setWorkspaceHandle({
+      replay: ws.replay,
       screenshot: () => ws.screenshot(),
       downloadScreenshot: () => ws.downloadScreenshot(),
       maximizeCell: (id) => ws.maximizeCell(id),

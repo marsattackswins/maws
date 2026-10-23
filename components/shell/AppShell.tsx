@@ -16,7 +16,7 @@ import { BottomPanel } from "@/components/shell/BottomPanel";
 import { RightDock } from "@/components/shell/RightDock";
 import { RightSidebar } from "@/components/shell/RightSidebar";
 import { TopBar } from "@/components/shell/TopBar";
-import { getChart, getLastCrosshair } from "@/lib/chart-registry";
+import { getChart, getLastCrosshair, getWorkspace } from "@/lib/chart-registry";
 import { restoreServerProfile } from "@/lib/live/bridge";
 import { useLiveStore } from "@/lib/live/store";
 import { mawsFeed } from "@/lib/maws/feed";
@@ -293,8 +293,12 @@ export function AppShell() {
         }
         if (s.replay) {
           // Stop Vela replay so live data resumes, then clear the store.
-          const chart = getChart(s.replay.paneId)?.vela;
-          if (chart?.replay.state.active) chart.replay.stop();
+          const workspaceReplay = getWorkspace()?.replay;
+          if (workspaceReplay?.state.active) workspaceReplay.stop();
+          else {
+            const chart = getChart(s.replay.paneId)?.vela;
+            if (chart?.replay.state.active) chart.replay.stop();
+          }
           s.stopReplay();
           return;
         }

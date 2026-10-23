@@ -24,6 +24,13 @@ import type { Unsubscribe } from '../core/util/types';
 import { registerChartType, unregisterChartType, type SeriesDataEngineHost } from '../chart-types/registry';
 import { registerNativeIndicator, unregisterNativeIndicator, type NativeIndicatorContext } from '../core/native-indicators/NativeIndicator';
 import { barsToTicks, lowerTimeframeTicks, type ReplayTick, type ReplayTickSource } from '../index';
+import {
+    replaySliderMax,
+    replaySliderPosition,
+    replaySliderTime,
+    seekReplayFromBar,
+} from '../../replay-bar-actions';
+import { WorkspaceReplay } from '../workspace/WorkspaceReplay';
 
 const flush = async (): Promise<void> => {
     for (let i = 0; i < 6; i += 1) await new Promise((r) => setTimeout(r, 0));
@@ -126,6 +133,8 @@ class RecordingEngine implements ScriptingEngine {
     readonly language = 'pine';
     readonly capabilities: EngineCapabilities = { streaming: true, visibleRange: false, inputs: true };
     executions: number[] = [];
+    executionTimes: number[][] = [];
+    overlayTimes: number[][] = [];
     notifications = 0;
 
     prepare(_source: string, instanceId: string): Promise<PreparedScript> {
@@ -136,9 +145,12 @@ class RecordingEngine implements ScriptingEngine {
         const id = (req.prepared.token as { instanceId: string }).instanceId;
         const bars = req.getBars?.() ?? req.bars;
         this.executions.push(bars[bars.length - 1]?.close ?? NaN);
+        this.executionTimes.push(bars.map((bar) => bar.time));
+        const points = bars.map((b) => ({ time: b.time, value: b.close }));
+        this.overlayTimes.push(points.map((point) => point.time));
         handlers.onModel({
             id, title: 'Rec', overlay: true, paneHint: 'price',
-            series: [{ id: `${id}:line:x#0`, title: 'Rec', paneId: 'unrouted', kind: 'line', points: bars.map((b) => ({ time: b.time, value: b.close })), style: { color: '#f00', width: 1, lineStyle: 'solid' } }],
+            series: [{ id: `${id}:line:x#0`, title: 'Rec', paneId: 'unrouted', kind: 'line', points, style: { color: '#f00', width: 1, lineStyle: 'solid' } }],
             fills: [], backgrounds: [], priceLines: [], inputs: req.prepared.inputs, inputValues: req.inputs ?? {},
         });
         handlers.onDone?.();
@@ -148,6 +160,7 @@ class RecordingEngine implements ScriptingEngine {
 
 const EL = {} as unknown as HTMLElement;
 const charts: Vela[] = [];
+const workspaces: WorkspaceReplay[] = [];
 function make(opts: { live?: boolean; bars?: number; total?: number; priceStyle?: string; engine?: ScriptingEngine } = {}) {
     const feed = new ReplayFeed(opts.total ?? 200);
     const renderer = new FakeRenderer();
@@ -158,6 +171,7 @@ function make(opts: { live?: boolean; bars?: number; total?: number; priceStyle?
 }
 
 afterEach(() => {
+    for (const replay of workspaces.splice(0)) replay.destroy();
     for (const c of charts.splice(0)) c.destroy();
     unregisterChartType('replay-probe');
     unregisterNativeIndicator('replay-native');
@@ -165,6 +179,71 @@ afterEach(() => {
 });
 
 describe('chart.replay', () => {
+    it('seeks from the replay bar, updates indicator overlays, hides future bars, and restores live data on exit', async () => {
+        const engine = new RecordingEngine();
+        const { chart, feed, renderer } = make({ engine });
+        await chart.ready();
+        chart.addIndicator('probe');
+        await flush();
+        const full = [...renderer.bars];
+        const workspaceReplay = new WorkspaceReplay({
+            cells: () => [{ id: 'pane-0', chart }],
+            activeId: () => 'pane-0',
+            onCells: () => () => {},
+        });
+        workspaces.push(workspaceReplay);
+        let replayMode = false;
+        workspaceReplay.on('replay:end', () => { replayMode = false; });
+        const beginReplayBarSeek = (from: number) => seekReplayFromBar(
+            (time) => workspaceReplay.start({ from: time, cell: 'pane-0' }),
+            from,
+            () => { replayMode = true; },
+        );
+
+        await beginReplayBarSeek(full[59]!.time);
+        await flush();
+
+        expect(replayMode).toBe(true);
+        expect(renderer.bars).toEqual(full.slice(0, 60));
+        expect(engine.executionTimes.at(-1)).toEqual(full.slice(0, 60).map((bar) => bar.time));
+        expect(engine.executionTimes.at(-1)!.every((time) => time <= full[59]!.time)).toBe(true);
+        expect(engine.executionTimes.at(-1)!.some((time) => time > full[59]!.time)).toBe(false);
+        expect(engine.overlayTimes.at(-1)).toEqual(full.slice(0, 60).map((bar) => bar.time));
+        expect(workspaceReplay.state.cursorTime).toBe(full[59]!.time);
+        expect(replaySliderPosition(workspaceReplay.state.cursorTime, chart.replay.bounds, HOUR)).toBe(59);
+
+        await seekReplayFromBar(
+            (time) => workspaceReplay.start({ from: time, cell: 'pane-0' }),
+            full[19]!.time,
+            () => { replayMode = true; },
+        );
+        await flush();
+        expect(renderer.bars).toEqual(full.slice(0, 20));
+        expect(engine.executionTimes.at(-1)).toEqual(full.slice(0, 20).map((bar) => bar.time));
+        expect(engine.executionTimes.at(-1)!.some((time) => time > full[19]!.time)).toBe(false);
+        expect(engine.overlayTimes.at(-1)).toEqual(full.slice(0, 20).map((bar) => bar.time));
+        expect(workspaceReplay.state.cursorTime).toBe(full[19]!.time);
+        expect(replaySliderPosition(workspaceReplay.state.cursorTime, chart.replay.bounds, HOUR)).toBe(19);
+        expect(replaySliderMax(chart.replay.bounds, HOUR)).toBe(98);
+        expect(replaySliderTime(19, chart.replay.bounds, HOUR)).toBe(full[19]!.time);
+        expect(replaySliderTime(59, chart.replay.bounds, HOUR)).toBe(full[59]!.time);
+        expect(replaySliderTime(19, chart.replay.bounds, HOUR)).toBeLessThan(
+            replaySliderTime(59, chart.replay.bounds, HOUR)!,
+        );
+
+        workspaceReplay.stop();
+        await flush();
+        expect(replayMode).toBe(false);
+        expect(renderer.bars).toEqual(full);
+        expect(engine.executionTimes.at(-1)).toEqual(full.map((bar) => bar.time));
+        expect(engine.overlayTimes.at(-1)).toEqual(full.map((bar) => bar.time));
+        expect(feed.subs).toBe(2);
+
+        const nextLiveBar = { ...full.at(-1)!, time: full.at(-1)!.time + HOUR };
+        feed.onBar?.(nextLiveBar);
+        expect(renderer.bars.at(-1)?.time).toBe(nextLiveBar.time);
+    });
+
     it('start() cuts the history at `from`, pauses live updates, and reports the queue', async () => {
         const { chart, feed, renderer } = make();
         await chart.ready();

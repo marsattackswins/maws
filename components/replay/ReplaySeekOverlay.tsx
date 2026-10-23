@@ -16,7 +16,8 @@
  * On unmount→ cleans up.
  */
 
-import { getChart } from "@/lib/chart-registry";
+import { getChart, getWorkspace } from "@/lib/chart-registry";
+import { seekReplayFromBar } from "@/lib/replay-bar-actions";
 import { useAppStore } from "@/lib/store";
 import { timeframeSeconds } from "@/lib/timeframes";
 import type { ChartPaneState } from "@/types";
@@ -113,8 +114,27 @@ export function ReplaySeekOverlay({ pane, hostRef }: Props) {
       ? Math.max(2, Math.ceil((clickTime - bounds.first) / tfMs))
       : 2;
 
-    startReplay(pane.id, 0, span, clickTime);
-    // startReplay already sets replaySeeking=false via the store action.
+    const controller = getWorkspace()?.replay;
+    if (!controller) {
+      setReplaySeeking(false);
+      console.error("[maws] Could not start chart replay because the chart workspace is unavailable.");
+      return;
+    }
+
+    void seekReplayFromBar(
+      async (from) => {
+        await controller.start({ from, cell: pane.id });
+        if (!controller.state.active) {
+          throw new Error("Replay could not start at the requested time.");
+        }
+      },
+      clickTime,
+      () => startReplay(pane.id, 0, span, clickTime),
+    ).catch((error: unknown) => {
+      console.error("[maws] Could not start chart replay.", error);
+      useAppStore.getState().stopReplay();
+    });
+    // startReplay sets replaySeeking=false before the workspace applies the cutoff.
   };
 
   // lineX is a 0-1 fraction; convert to percent for CSS.

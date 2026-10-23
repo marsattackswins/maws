@@ -719,8 +719,12 @@ export function TopBar() {
             closeAllMenus();
             if (replay) {
               // Stop active replay — also stop Vela so live data resumes.
-              const chart = getChart(pane.id)?.vela;
-              if (chart?.replay.state.active) chart.replay.stop();
+              const workspaceReplay = getWorkspace()?.replay;
+              if (workspaceReplay?.state.active) workspaceReplay.stop();
+              else {
+                const chart = getChart(pane.id)?.vela;
+                if (chart?.replay.state.active) chart.replay.stop();
+              }
               stopReplay();
               return;
             }
