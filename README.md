@@ -2,223 +2,106 @@
 
 **Market Analysis & Workflow System**
 
-MAWS is a browser-based workspace for studying markets and, when you choose, trading through Binance Futures. It combines a professional multi-chart terminal (powered by LuxAlgo's Vela charting engine), indicators, drawings, replay tools, market news, the Xoomar economic calendar, Paper Trading, and optional Binance Testnet or Production connections.
+MAWS is a browser-based market-analysis and trading-workflow terminal. It brings Binance Futures market data, multi-chart analysis, technical indicators, drawings, replay, news, an economic calendar, and paper trading into one workspace. Server-managed Binance Testnet and Production trading are available only in the corresponding non-local runtime modes and remain subject to authentication and safety checks.
 
-> **Safety first:** Start in Chart Only or Paper Trading. Use Testnet before Production. Binance API keys must not have withdrawal permission. MAWS is a tool, not financial advice.
+> **Trading risk:** Start in Chart Only or Paper Trading. Test exchange workflows on Testnet before considering Production. Binance API keys must not have withdrawal permission. MAWS is software, not financial advice.
 
-## What MAWS does
+## What is in the workspace
 
-MAWS keeps the charting experience in the browser, but keeps trading authority on the server:
+- **Market analysis:** Binance USDT-M Futures candles and quotes, a watchlist, multiple chart layouts, indicators, drawing tools, and saved templates.
+- **Chart tools:** The app integrates LuxAlgo's Vela charting engine from vendored source in `lib/charting/`. It includes replay, Pine indicators through `@luxalgo/vela-pinets`, timeline marks, and chart settings.
+- **Market context:** News is available through the Finnhub integration when configured; economic-calendar data is supplied by Xoomar. The Sessions card shows Tokyo, London, and New York cash-market hours (08:00–17:00 local venue time, weekdays).
+- **Trading workflows:** Browser-local Paper Trading plus server-managed Binance profiles in non-local modes. Orders and positions for a live profile are not browser-owned state.
 
-```text
-Your browser
-  Vela multi-chart workspace, indicators, drawings, calendar, news, and Trade controls
-        |
-        v
-MAWS server
-  login, profile switching, Binance connection, safety checks,
-  order handling, account state, history, and local database
-        |
-        v
-Paper Trading or Binance
-  simulated orders, Binance Testnet, or Binance Production
-```
+The Vela workspace host is feature-flagged with `NEXT_PUBLIC_MAWS_VELA_WORKSPACE`; see `.env.example` and `components/charts/VelaWorkspaceHost.tsx` for the current integration boundary. When a saved chart template named `maws` is available, the host applies it to the initial chart cells. The vendored charting source retains its upstream Apache-2.0 `LICENSE` and `NOTICE`.
 
-The browser never receives Binance secrets. The server checks account state, connection health, fresh market/account data, reconciliation, execution settings, and risk limits before accepting a live order. If something is uncertain or unhealthy, MAWS blocks the action instead of guessing.
+## Runtime modes
 
-### Charting engine
+| Mode | Use | Trading behavior |
+|---|---|---|
+| `local` | Local development and chart analysis; this is the default | Chart Only and browser-local Paper Trading. Server live-trading routes reject requests in local mode. |
+| `testnet` | Binance USD-M Futures Testnet server runtime | Uses Testnet credentials, operator authentication, and server safety checks. Testnet orders affect the Testnet account. |
+| `production` | Binance USD-M Futures Production server runtime | Real orders may be submitted; authentication, confirmation, health, reconciliation, and risk checks apply. |
+| `shadow` | Internal read-only production-data runtime | Not a normal selectable UI profile; order submission is not allowed. |
 
-MAWS uses LuxAlgo's Vela charting library (Apache-2.0) as its primary charting engine. The vendored source lives in `lib/charting/` and is consumed directly by the app, allowing local fixes and customization. Key features:
+`MAWS_ENV=local` does **not** allow you to attach a Binance profile from the UI. Changing the active Binance runtime requires configuring the appropriate non-local environment, credentials, and operator authentication, then restarting the server. Paper Trading does not contact Binance.
 
-- **Multi-cell workspace**: Grid layout with synchronized crosshair, viewport, symbol, and timeframe
-- **Native indicators**: Bollinger Bands, MACD, RSI, order blocks, PMO, volume profiles, and more
-- **Drawing tools**: Trend lines, horizontal lines, rectangles, fib retracements, and custom drawings
-- **Event marks**: Economic calendar releases and news headlines on the timeline
-- **Replay mode**: Historical playback with seek controls and bar-by-bar stepping
-- **Layout persistence**: Save and restore workspace layouts with drawings and settings
-- **Pine Script support**: Execute TradingView-style Pine indicators via @luxalgo/vela-pinets
+## Run locally
 
-The Vela integration is documented in `docs/vela-integration-audit.md` and `lib/charting/README.md`.
-
-### The four choices you can use
-
-| Choice | What it means |
-|---|---|
-| **Chart Only** | Study the market without an attached trading account. This is how MAWS starts. |
-| **Paper Trading** | Simulated orders and positions. No Binance account is contacted. |
-| **Binance Testnet** | Practice with Binance's separate test account. It is not real-money trading, but Testnet orders are still real activity on that account. |
-| **Binance Production** | Real Binance Futures trading. Use only after careful testing and confirmation. |
-
-The normal setup uses `MAWS_ENV=local`. This only controls how the server starts; it does not prevent you from attaching a configured Testnet or Production profile from the Trade screen. You do not change the environment or restart MAWS when switching profiles.
-
-## Install MAWS
-
-### Requirements
-
-- Node.js 20 or newer
-- npm
-- Git
-- A modern browser
-
-### 1. Download and start
+Requirements: Node.js 20+, npm, Git, and a modern browser.
 
 ```bash
-git clone -b master https://github.com/marsattackswins/maws.git
+git clone https://github.com/marsattackswins/maws.git
 cd maws
 npm install
-cp .env.example .env.local
-npm run dev
 ```
 
-On Windows PowerShell, use this instead of `cp`:
+Copy the example environment file:
 
 ```powershell
 Copy-Item .env.example .env.local
+```
+
+On macOS or Linux:
+
+```bash
+cp .env.example .env.local
+```
+
+Keep `MAWS_ENV=local` and leave exchange credentials empty for charting and Paper Trading. Start the development server:
+
+```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). MAWS starts in Chart Only. You can use charts immediately; no Binance keys are needed for charting or Paper Trading.
+Open [http://localhost:3000](http://localhost:3000). MAWS uses port **3000 only**: browser workspace state is saved by origin, so another port would appear as a separate, empty workspace. The development launcher refuses to use a different port if 3000 is occupied.
 
-Your local database is stored in `.maws/maws.db`. It is local working data and should not be committed.
+The browser stores workspace preferences and Paper Trading state in origin-scoped local storage. Server-side trading and audit data uses SQLite at `.maws/maws.db` by default. Keep both local working data and `.env.local` out of source control.
 
-### Local pages
+## Configure a server-managed Binance runtime
 
-- [`/`](http://localhost:3000/) — Main MAWS trading dashboard
-- [`/login`](http://localhost:3000/login) — Operator login
-- [`/admin`](http://localhost:3000/admin) — Operations Console: system health, Binance connectivity, risk, and execution activity
-- [`/admin/journal`](http://localhost:3000/admin/journal) — Trade journal
-- `/status` — redirects to the Operations Console
-
-The status page separates public Binance connectivity from optional server-side trading. In Chart Only, **Server Trading: Not running** is expected; it does not mean Binance market data or the charts are disconnected.
-
-### Optional: run the standalone production server
-
-To test the optimized standalone build locally:
+For an exchange-connected environment, set `MAWS_ENV=testnet` or `MAWS_ENV=production` and configure the matching profile's API key and secret in the server environment. Set `MAWS_OPERATOR_AUTH` to the generated scrypt credential; the plain password is entered at login and is not stored in the environment file.
 
 ```bash
-npm run build
-npm start
+npm run gen-operator-auth -- "choose-a-strong-password"
 ```
 
-This serves the same app at [http://localhost:3000](http://localhost:3000). The launcher loads `.env.local` and `.env`, keeps the SQLite database at `.maws/maws.db`, and serves the standalone static assets. On Windows, stop `npm start` before running another build so the build output and SQLite files are not locked.
+Use separate Testnet and Production keys, disable withdrawal permission, and keep all credentials server-side. Production also requires explicit confirmation. Leave execution switches disabled until the environment is intentionally configured. Never expose credentials through `NEXT_PUBLIC_*` variables or commit value-bearing environment files. Check [.env.example](.env.example) and [Security](docs/SECURITY.md) before deploying.
 
-### 2. Fill in the environment file only when needed
+## Main pages
 
-The copied `.env.local` is intentionally small. In normal use:
+- `/` — charting and trading workspace
+- `/login` — operator login for protected non-local environments
+- `/admin` — operations console
+- `/admin/journal` — trade journal
+- `/status` — trading-health status page
 
-1. Leave `MAWS_ENV=local`.
-2. Leave the Testnet and Production fields empty until you need them.
-3. Leave both profile execution switches set to `false` while setting up. These are static gates for their respective Binance profiles.
-4. Leave both profile execution switches set to `false` until you deliberately decide to enable live order submission.
-
-For Paper Trading, you do not need to add Binance keys or create an operator password.
-
-### 3. Add the operator password for Binance profiles
-
-Binance Testnet and Production require an operator login. MAWS does not store the plain password in the environment file. Instead:
-
-1. Choose a strong password.
-2. Run:
-
-   ```bash
-   npm run gen-operator-auth -- "your-password"
-   ```
-
-3. Copy the generated value into `MAWS_OPERATOR_AUTH` in `.env.local`.
-4. Keep the original password safe; you will type it into the MAWS login dialog when attaching a Binance profile.
-5. Restart MAWS after changing `.env.local`.
-
-Keep `.env.local` private. Never place Binance keys, secrets, or the operator password in source code or in a variable beginning with `NEXT_PUBLIC_`.
-
-### 4. Add Binance Testnet
-
-When you are ready to practise:
-
-1. Create Binance Futures Testnet API credentials.
-2. Put the Testnet key and secret in the two Testnet fields in `.env.local`.
-3. Make sure withdrawals are disabled for the key.
-4. Restart MAWS.
-5. Use **Trade** in MAWS and choose **Binance Testnet**.
-6. Enter the operator password and wait for the readiness checks.
-
-Once the profile is authenticated and connected, MAWS enables normal submissions automatically. Health, stream, account, reconciliation, position-mode, freeze, kill-switch, and risk checks still block unsafe orders.
-
-### 5. Add Binance Production
-
-Only do this after Testnet works as expected:
-
-1. Create a separate Binance Production API key and secret.
-2. Disable withdrawals on the key.
-3. Put the values in the Production fields in `.env.local`.
-4. Restart MAWS.
-5. Choose **Binance Production** from **Trade**, enter the operator password, and complete the extra Production confirmation.
-
-MAWS will still block orders if health, reconciliation, account state, risk limits, or another safety check is not ready.
-
-## Use MAWS
-
-### Charting
-
-MAWS uses LuxAlgo's Vela charting engine (vendored source in `lib/charting/`) for professional-grade charting:
-
-1. Start MAWS and remain in Chart Only.
-2. Choose a symbol and timeframe.
-3. Add indicators, drawings, linked charts, volume, layouts, replay, news, and calendar views as needed.
-4. Use the economic calendar as an information source; MAWS currently gets those events from Xoomar.
-5. Explore chart settings via the settings dialog (symbol type, canvas styling, scales, margins, session breaks, event marks, and theme).
-6. Open **Trade** only when you intentionally want to attach Paper Trading or a Binance profile.
-
-**Chart features:**
-- Multi-cell workspace with synchronized crosshair and viewport
-- Native indicators (Bollinger, MACD, RSI, order blocks, PMO, volume profiles)
-- Custom drawings with toolbar and context menu
-- Session breaks shading (by market or custom sessions)
-- Event marks on the timeline (economic calendar releases, news headlines)
-- Replay mode with seek controls and historical playback
-- Layout templates and workspace persistence
-- Pine Script indicator support via @luxalgo/vela-pinets
-
-### Paper Trading
-
-1. Click **Trade**.
-2. Choose **Paper Trading**.
-3. Use the trading panel to create simulated orders and review positions, history, balance, journal, and metrics.
-4. Remember that Paper Trading never sends an order to Binance.
-5. Return to Chart Only when you want to detach the simulated trading session.
-
-### Testnet
-
-Testnet is the safest way to learn the connected workflow. After selecting it, wait for the connection, stream, account snapshot, and reconciliation checks to become ready. Review the trading panel before every order. Testnet orders can still create positions and balances on the Testnet account, so close or clean up test exposure when finished.
-
-### Production
-
-Production can send real orders. Confirm the symbol, side, amount, price, account, and protection before submitting. Keep the health and trading panels visible. If an order result is unclear, do not click again immediately; let MAWS reconcile with Binance first.
-
-If MAWS shows a freeze, stale data, stream problem, reconciliation problem, circuit breaker, or risk rejection, stop and resolve that condition. A connected account does not mean that order submission is allowed.
-
-### Returning to charting or Paper Trading
-
-Use **Trade** and select Chart Only or Paper Trading. MAWS detaches the Binance profile before changing to another profile. No environment change or server restart is needed for normal profile switching.
-
-## Checks for contributors
+## Development checks
 
 ```bash
-npm test
-npx tsc --noEmit --pretty false
-npm run build
-npx playwright test
-npm run secret-scan
-npm run test:charting  # Vela engine test suite (vitest)
+npm test                 # Jest application/unit suite
+npm run test:charting     # Vitest suite for vendored Vela charting source
+npx tsc --noEmit          # TypeScript check
+npm run build             # Production build and standalone preparation
+npx playwright test       # Browser workflows
+npm run secret-scan       # Scan tracked/project files for likely secrets
 ```
 
-Integration tests use Binance Testnet only and require a separate `.env.integration` file. Never use Production credentials for tests.
+Integration tests in `tests/integration/` can create and modify **Binance Testnet** orders and positions. Configure a separate `.env.integration`, check the test setup, and clean up Testnet exposure after running them. Never use Production credentials for tests.
 
-## More information
+## Project map
 
-- [`docs/README.md`](docs/README.md) — detailed architecture and deployment notes
-- [`docs/API.md`](docs/API.md) — API reference
-- [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — operations and troubleshooting
-- [`docs/SECURITY.md`](docs/SECURITY.md) — security details
-- [`docs/vela-integration-audit.md`](docs/vela-integration-audit.md) — Vela charting engine integration audit
-- [`lib/charting/README.md`](lib/charting/README.md) — Vela charting engine documentation
-- [`obsidian-vault/`](obsidian-vault/) — local Obsidian notes; ignored by Git
+| Path | Responsibility |
+|---|---|
+| `app/` | Next.js pages and API route handlers |
+| `components/` | Workspace, chart overlays, settings, trading, news, and calendar UI |
+| `lib/market/` | Binance market-data feed and candle normalization |
+| `lib/trading/` | Client-facing trading helpers and paper-trading logic |
+| `lib/server/` | Server-only authentication, profiles, broker runtime, risk, persistence, health, and audit |
+| `lib/charting/` | Vendored Vela charting engine |
+| `tests/`, `lib/tests/` | Jest tests |
+| `lib/charting/test/` | Vela Vitest tests |
+| `tests/integration/` | Testnet integration tests |
+| `e2e/` | Playwright browser tests |
+
+For API and operations references, see [docs/](docs/). For Vela-specific details, see [lib/charting/README.md](lib/charting/README.md). The Obsidian notes in `obsidian-vault/` are local and intentionally ignored by Git; they are not included in repository clones.
