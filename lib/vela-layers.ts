@@ -8,6 +8,7 @@
  * indicator — lib/vela-native-indicators.ts.)
  */
 import { registerRendererLayer } from "@/lib/charting";
+import { clipBreaksToBars } from "@/lib/vela-break-times";
 
 // ── payload types ───────────────────────────────────────────────────────────
 
@@ -55,21 +56,23 @@ registerRendererLayer({
         el = canvas;
         ctx = canvas.getContext("2d");
       },
-      render({ data, coords, bounds }) {
+      render({ data, coords, bounds, bars }) {
         if (!ctx || !el) return;
         const d = data as SessionBreaksData | undefined;
-        if (!d || d.times.length === 0) {
-          ctx.clearRect(0, 0, el.width, el.height);
-          return;
-        }
         const g = prep(el, coords.dpr || 1);
         if (!g) return;
-        g.strokeStyle = d.color;
-        g.lineWidth = d.width;
-        g.setLineDash(d.dash);
+        // A separator is only real BETWEEN two loaded bars. The payload comes from
+        // a feed that can hold bars this chart has not loaded, and Vela's time→x
+        // extrapolates — painting those leaves dashed lines floating in the empty
+        // right-hand space (and a survivor of a stale payload across a switch).
+        const times = d && d.times.length > 0 ? clipBreaksToBars(d.times, bars) : [];
+        if (times.length === 0) return; // prep() already cleared the canvas
+        g.strokeStyle = d!.color;
+        g.lineWidth = d!.width;
+        g.setLineDash(d!.dash);
         const top = bounds.top;
         const bottom = bounds.top + bounds.height;
-        for (const t of d.times) {
+        for (const t of times) {
           const x = coords.timeToX(t);
           if (x < -1 || x > coords.width + 1) continue;
           g.beginPath();

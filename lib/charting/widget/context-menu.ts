@@ -123,13 +123,14 @@ export class ChartContextMenu {
             return [...timeAxisItems(tz), ...this.contributed('time-axis')];
         }
         const chart = this.chart;
-        return [
-            ...bodyItems({
-                drawings: chart?.drawings.supported ? chart.drawings.all().length : 0,
-                indicators: chart?.indicators().length ?? 0,
-            }),
-            ...this.contributed('body'),
-        ];
+        const base = bodyItems({
+            drawings: chart?.drawings.supported ? chart.drawings.all().length : 0,
+            indicators: chart?.indicators().length ?? 0,
+        });
+        // Settings stays pinned to the bottom, after the host's contributed actions —
+        // a preferences verb belongs at the end of an action menu, not mid-list.
+        const settings = base.filter((i) => i.id.startsWith('settings'));
+        return [...base.filter((i) => !i.id.startsWith('settings')), ...this.contributed('body'), ...settings];
     }
 
     private run(id: string): void {

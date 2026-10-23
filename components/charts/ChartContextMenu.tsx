@@ -293,7 +293,10 @@ export function ChartContextMenu() {
                 type="button"
                 className="ctx-item"
                 onClick={() => {
-                  applyTemplate(t.id);
+                  if (!applyTemplate(t.id)) {
+                    window.alert("Could not apply the chart template. Make sure a chart is open.");
+                    return;
+                  }
                   close();
                 }}
               >
@@ -307,7 +310,10 @@ export function ChartContextMenu() {
               className="ctx-item"
               onClick={() => {
                 const name = window.prompt("Chart template name", "My template");
-                if (name?.trim()) saveTemplate(name.trim());
+                if (name?.trim() && !saveTemplate(name.trim())) {
+                  window.alert("Could not save the chart template. Make sure a chart is open and browser storage is available.");
+                  return;
+                }
                 close();
               }}
             >

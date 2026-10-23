@@ -16,7 +16,12 @@
  */
 
 import {
+  legendSettingsInput,
+  legendValuesInput,
+  legendTitle,
   registerNativeIndicator,
+  scaleLabelsInput,
+  scaleLabelsOn,
   stableSeriesId,
 } from "@/lib/charting";
 import type {
@@ -24,7 +29,7 @@ import type {
   NativeIndicatorContext,
   NativeIndicatorDescriptor,
 } from "@/lib/charting";
-import type { DrawingBox, DrawingLabel, InputValue, SeriesSpec } from "@/lib/charting";
+import type { DrawingBox, DrawingLabel, DrawingLine, InputSchema, InputValue, SeriesSpec } from "@/lib/charting";
 import { computePmo } from "@/lib/indicators";
 import type { Candle, MaSource } from "@/types";
 import {
@@ -107,6 +112,11 @@ class PmoIndicator implements NativeIndicator {
     const { pmo, signal } = computePmo(toCandles(bars), p1, p2, sigLen, source);
     const toPoints = (values: (number | null)[]) =>
       bars.map((b, i) => ({ time: b.time, value: values[i] ?? null }));
+    // "Labels on price scale" — OFF by default, so the study's values stay off the
+    // price axis until the user asks for them in the indicator's settings. The legend
+    // chip names the instance after its settings (`PMO 35 20 10 Close`); the renderer
+    // keeps the live numbers off the chip while that name is on.
+    const display = { priceScale: scaleLabelsOn(this.inputs) };
 
     const series: SeriesSpec[] = [
       {
@@ -116,6 +126,7 @@ class PmoIndicator implements NativeIndicator {
         kind: "line",
         points: toPoints(pmo),
         style: { color: pmoColor, width: 2, lineStyle: "solid" },
+        display,
       },
       {
         id: stableSeriesId({ instanceId: "pmo", kind: "line", title: "Signal", ordinal: 1 }),
@@ -124,11 +135,26 @@ class PmoIndicator implements NativeIndicator {
         kind: "line",
         points: toPoints(signal),
         style: { color: sigColor, width: 1, lineStyle: "solid" },
+        display,
       },
     ];
     this.ctx.emit({ series });
   }
 }
+
+// The lengths and the source are what the instance IS — they ride in its legend name
+// (`PMO 35 20 10 Close`). The two colors are look only.
+const PMO_INPUTS: InputSchema[] = [
+  { key: "period1", title: "PMO Length 1", type: "int", defval: 35, min: 1, max: 5000, step: 1, legend: true },
+  { key: "period2", title: "PMO Length 2", type: "int", defval: 20, min: 1, max: 5000, step: 1, legend: true },
+  { key: "signalPeriod", title: "Signal Length", type: "int", defval: 10, min: 1, max: 500, step: 1, legend: true },
+  { key: "source", title: "Source", type: "string", defval: "Close", options: PMO_SOURCE_OPTIONS, legend: true },
+  { key: "pmoColor", title: "PMO Color", type: "color", defval: "#2962ff" },
+  { key: "signalColor", title: "Signal Color", type: "color", defval: "#ff9800" },
+  legendSettingsInput(),
+  legendValuesInput(),
+  scaleLabelsInput(),
+];
 
 const pmoDescriptor: NativeIndicatorDescriptor = {
   type: "pmo",
@@ -137,18 +163,9 @@ const pmoDescriptor: NativeIndicatorDescriptor = {
   paneHint: "new",
   overlay: false,
   multiInstance: true,
-  inputsSchema: () => [
-    { key: "period1", title: "PMO Length 1", type: "int", defval: 35, min: 1, max: 5000, step: 1 },
-    { key: "period2", title: "PMO Length 2", type: "int", defval: 20, min: 1, max: 5000, step: 1 },
-    { key: "signalPeriod", title: "Signal Length", type: "int", defval: 10, min: 1, max: 500, step: 1 },
-    { key: "source", title: "Source", type: "string", defval: "Close", options: PMO_SOURCE_OPTIONS },
-    { key: "pmoColor", title: "PMO Color", type: "color", defval: "#2962ff" },
-    { key: "signalColor", title: "Signal Color", type: "color", defval: "#ff9800" },
-  ],
-  defaultInputs: () => ({
-    period1: 35, period2: 20, signalPeriod: 10,
-    source: "Close", pmoColor: "#2962ff", signalColor: "#ff9800",
-  }),
+  inputsSchema: () => [...PMO_INPUTS],
+  defaultInputs: () => Object.fromEntries(PMO_INPUTS.map((i) => [i.key, i.defval])),
+  titleFor: (inputs) => legendTitle("PMO", PMO_INPUTS, inputs),
   create: () => new PmoIndicator(),
 };
 
@@ -179,6 +196,7 @@ function drawBox(
   bottom: number,
   fill: string,
   border: string,
+  showBorder: boolean,
 ): DrawingBox {
   return {
     id,
@@ -190,8 +208,8 @@ function drawBox(
     bottom,
     extend: right == null ? "right" : "none",
     bgColor: fill,
-    borderColor: border,
-    borderWidth: 1,
+    borderColor: showBorder ? border : "transparent",
+    borderWidth: showBorder ? 1 : 0,
     borderStyle: "solid",
     textSize: "tiny",
     hAlign: "center",
@@ -238,6 +256,9 @@ class OrderBlocksIndicator implements NativeIndicator {
       showLastBear: Math.max(0, Math.trunc(num(this.inputs, "showLastBear", 3))),
       useBody: bool(this.inputs, "useBody", false),
       showLabels: bool(this.inputs, "showLabels", true),
+      requireVolumePivot: bool(this.inputs, "requireVolumePivot", false),
+      volumePivotLength: Math.max(1, Math.trunc(num(this.inputs, "volumePivotLength", 5))),
+      mitigationMethod: str(this.inputs, "mitigationMethod", "Wick") === "Close" ? "Close" : "Wick",
     };
   }
 
@@ -259,23 +280,57 @@ class OrderBlocksIndicator implements NativeIndicator {
       this.cache = null;
     }
 
-    const { result } = computeOrderBlocksLive(candles, cfg, this.cache);
+    const computed = computeOrderBlocksLive(candles, cfg, this.cache);
+    this.cache = computed.cache;
+    const { result } = computed;
 
-    const bullFill = withAlpha(str(this.inputs, "bullColor", BULL_DEFAULT), num(this.inputs, "opacity", 20));
-    const bearFill = withAlpha(str(this.inputs, "bearColor", BEAR_DEFAULT), num(this.inputs, "opacity", 20));
-    const bullBorder = str(this.inputs, "bullColor", BULL_DEFAULT);
-    const bearBorder = str(this.inputs, "bearColor", BEAR_DEFAULT);
-    const lastTime = bars[bars.length - 1]!.time;
+    const bullColor = cfg.requireVolumePivot
+      ? str(this.inputs, "detectorBullColor", "#169400")
+      : str(this.inputs, "bullColor", BULL_DEFAULT);
+    const bearColor = cfg.requireVolumePivot
+      ? str(this.inputs, "detectorBearColor", "#ff1100")
+      : str(this.inputs, "bearColor", BEAR_DEFAULT);
+    const bullFill = withAlpha(bullColor, num(this.inputs, "opacity", 20));
+    const bearFill = withAlpha(bearColor, num(this.inputs, "opacity", 20));
+    const bullBorder = cfg.requireVolumePivot ? withAlpha(bullColor, 30) : bullColor;
+    const bearBorder = cfg.requireVolumePivot ? withAlpha(bearColor, 30) : bearColor;
+    const showBorder = bool(this.inputs, "showBorder", true);
 
     const boxes: DrawingBox[] = [];
+    const lines: DrawingLine[] = [];
     result.displayed.forEach((ob, i) => {
       const isBull = ob.side === "bull";
       const fill = isBull ? bullFill : bearFill;
       const border = isBull ? bullBorder : bearBorder;
+      if (cfg.requireVolumePivot) {
+        const left = ob.loc * 1000;
+        boxes.push(drawBox(`${this.ctx!.id}:box#${i}`, left, null, ob.top, ob.btm, fill, border, showBorder));
+        lines.push({
+          id: `${this.ctx!.id}:average#${i}`,
+          paneId: "",
+          xloc: "bar_time",
+          x1: left,
+          y1: (ob.top + ob.btm) / 2,
+          x2: left + 1,
+          y2: (ob.top + ob.btm) / 2,
+          extend: "right",
+          color: withAlpha(str(this.inputs, "averageColor", "#9598a1"), 63),
+          invisible: false,
+          width: Math.max(1, Math.trunc(num(this.inputs, "averageWidth", 1))),
+          style: str(this.inputs, "averageStyle", "Solid") === "Dotted"
+            ? "dotted"
+            : str(this.inputs, "averageStyle", "Solid") === "Dashed"
+              ? "dashed"
+              : "solid",
+          arrowLeft: false,
+          arrowRight: false,
+        });
+        return;
+      }
       const breakMs = ob.breakLoc != null ? ob.breakLoc * 1000 : null;
       // Original block (solid) up to the mitigation point, then the breaker
       // extending right — matching the previous MAWS rendering.
-      boxes.push(drawBox(`${this.ctx!.id}:box#${i * 2}`, ob.loc * 1000, breakMs, ob.top, ob.btm, fill, border));
+      boxes.push(drawBox(`${this.ctx!.id}:box#${i * 2}`, ob.loc * 1000, breakMs, ob.top, ob.btm, fill, border, showBorder));
       boxes.push(
         drawBox(
           `${this.ctx!.id}:box#${i * 2 + 1}`,
@@ -286,6 +341,7 @@ class OrderBlocksIndicator implements NativeIndicator {
           // The breaker phase takes the opposite side's hue (the Pine rendering).
           withAlpha(isBull ? bearBorder : bullBorder, num(this.inputs, "opacity", 20)),
           isBull ? bearBorder : bullBorder,
+          showBorder,
         ),
       );
     });
@@ -314,9 +370,35 @@ class OrderBlocksIndicator implements NativeIndicator {
       }
     }
 
-    this.ctx.emit({ boxes, labels });
+    this.ctx.emit({ boxes, lines, labels: cfg.requireVolumePivot ? [] : labels });
   }
 }
+
+// The lookback and the block counts are the instance's settings (`Order Blocks 10 3 3`);
+// booleans, colors and the fill opacity are look only and stay out of the name.
+const ORDER_BLOCKS_INPUTS: InputSchema[] = [
+  { key: "swingLookback", title: "Swing Lookback", type: "int", defval: 10, min: 3, max: 500, step: 1, legend: true, when: { key: "requireVolumePivot", equals: false } },
+  { key: "showLastBull", title: "Show Last Bullish OB", type: "int", defval: 3, min: 0, max: 50, step: 1, legend: true },
+  { key: "showLastBear", title: "Show Last Bearish OB", type: "int", defval: 3, min: 0, max: 50, step: 1, legend: true },
+  { key: "requireVolumePivot", title: "Use Volume Pivot Detector Logic", type: "bool", defval: false },
+  { key: "volumePivotLength", title: "Volume Pivot Length", type: "int", defval: 5, min: 1, max: 500, step: 1, legend: true, when: { key: "requireVolumePivot", equals: true } },
+  { key: "mitigationMethod", title: "Mitigation Method", type: "string", defval: "Wick", options: ["Wick", "Close"], when: { key: "requireVolumePivot", equals: true } },
+  { key: "detectorBullColor", title: "Bullish Color", type: "color", defval: "#169400", when: { key: "requireVolumePivot", equals: true } },
+  { key: "detectorBearColor", title: "Bearish Color", type: "color", defval: "#ff1100", when: { key: "requireVolumePivot", equals: true } },
+  { key: "averageColor", title: "Average Line Color", type: "color", defval: "#9598a1", when: { key: "requireVolumePivot", equals: true } },
+  { key: "averageStyle", title: "Average Line Style", type: "string", defval: "Solid", options: ["Solid", "Dashed", "Dotted"], when: { key: "requireVolumePivot", equals: true } },
+  { key: "averageWidth", title: "Average Line Width", type: "int", defval: 1, min: 1, max: 5, step: 1, when: { key: "requireVolumePivot", equals: true } },
+  { key: "useBody", title: "Use Candle Body", type: "bool", defval: false, when: { key: "requireVolumePivot", equals: false } },
+  { key: "showLabels", title: "Show Historical Polarity Changes", type: "bool", defval: true, when: { key: "requireVolumePivot", equals: false } },
+  { key: "bullColor", title: "Bullish Color", type: "color", defval: BULL_DEFAULT, when: { key: "requireVolumePivot", equals: false } },
+  { key: "bearColor", title: "Bearish Color", type: "color", defval: BEAR_DEFAULT, when: { key: "requireVolumePivot", equals: false } },
+  { key: "bullBreakColor", title: "Bullish Breaker Color", type: "color", defval: BEAR_DEFAULT, when: { key: "requireVolumePivot", equals: false } },
+  { key: "bearBreakColor", title: "Bearish Breaker Color", type: "color", defval: BULL_DEFAULT, when: { key: "requireVolumePivot", equals: false } },
+  { key: "opacity", title: "Fill Opacity %", type: "int", defval: 20, min: 0, max: 100, step: 1 },
+  { key: "showBorder", title: "Show Border", type: "bool", defval: true },
+  legendSettingsInput(),
+  legendValuesInput(),
+];
 
 const orderBlocksDescriptor: NativeIndicatorDescriptor = {
   type: "order-blocks",
@@ -325,25 +407,9 @@ const orderBlocksDescriptor: NativeIndicatorDescriptor = {
   paneHint: "price",
   overlay: true,
   multiInstance: true,
-  inputsSchema: () => [
-    { key: "swingLookback", title: "Swing Lookback", type: "int", defval: 10, min: 3, max: 500, step: 1 },
-    { key: "showLastBull", title: "Show Last Bullish OB", type: "int", defval: 3, min: 0, max: 50, step: 1 },
-    { key: "showLastBear", title: "Show Last Bearish OB", type: "int", defval: 3, min: 0, max: 50, step: 1 },
-    { key: "useBody", title: "Use Candle Body", type: "bool", defval: false },
-    { key: "showLabels", title: "Show Historical Polarity Changes", type: "bool", defval: true },
-    { key: "bullColor", title: "Bullish Color", type: "color", defval: BULL_DEFAULT },
-    { key: "bearColor", title: "Bearish Color", type: "color", defval: BEAR_DEFAULT },
-    { key: "bullBreakColor", title: "Bullish Breaker Color", type: "color", defval: BEAR_DEFAULT },
-    { key: "bearBreakColor", title: "Bearish Breaker Color", type: "color", defval: BULL_DEFAULT },
-    { key: "opacity", title: "Fill Opacity %", type: "int", defval: 20, min: 0, max: 100, step: 1 },
-  ],
-  defaultInputs: () => ({
-    swingLookback: 10, showLastBull: 3, showLastBear: 3,
-    useBody: false, showLabels: true,
-    bullColor: BULL_DEFAULT, bearColor: BEAR_DEFAULT,
-    bullBreakColor: BEAR_DEFAULT, bearBreakColor: BULL_DEFAULT,
-    opacity: 20,
-  }),
+  inputsSchema: () => [...ORDER_BLOCKS_INPUTS],
+  defaultInputs: () => Object.fromEntries(ORDER_BLOCKS_INPUTS.map((i) => [i.key, i.defval])),
+  titleFor: (inputs) => legendTitle("Order Blocks", ORDER_BLOCKS_INPUTS, inputs),
   create: () => new OrderBlocksIndicator(),
 };
 

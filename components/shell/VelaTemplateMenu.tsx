@@ -2,9 +2,8 @@
 
 /**
  * VelaTemplateMenu.tsx — the top-bar chart-template switcher, built on Vela's
- * OWN template core (lib/vela-templates.ts): each template is a full renderer
- * config document (what the settings dialog's export produces) applied back
- * with the renderer's `applyConfig` — no custom reducer in between.
+ * OWN template core (lib/vela-templates.ts): each template includes renderer
+ * config and the pane's indicator set.
  *
  * Visual language matches the TopBar's other dropdowns (`menu` rows, token
  * colors) so it reads as native chart chrome.
@@ -12,7 +11,6 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ChevronDown, FolderOpen, Trash2 } from "lucide-react";
-import { useAppStore } from "@/lib/store";
 import {
   applyTemplate,
   getTemplates,
@@ -22,7 +20,7 @@ import {
   templateSummary,
   type VelaChartTemplate,
 } from "@/lib/vela-templates";
-import { forEachChart, getChart } from "@/lib/chart-registry";
+import { forEachChart } from "@/lib/chart-registry";
 
 const EMPTY: readonly VelaChartTemplate[] = [];
 function getServerTemplates(): readonly VelaChartTemplate[] {
@@ -33,11 +31,12 @@ export function VelaTemplateMenu() {
   const templates = useSyncExternalStore(subscribeTemplates, getTemplates, getServerTemplates);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const activePaneId = useAppStore((s) => s.activePaneId);
-  const paneId = activePaneId ?? useAppStore.getState().panes[0]?.id ?? "";
 
   /** Which template patch most recently landed on this pane (actor highlight). */
   const [activeName, setActiveName] = useState<string | null>(null);
+  const defaultTemplate = templates.find(
+    (template) => template.name.trim().toLowerCase() === "maws",
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -51,23 +50,24 @@ export function VelaTemplateMenu() {
   const save = () => {
     const name = window.prompt("Name this chart template", activeName ?? "My template");
     if (!name?.trim()) return;
-    saveTemplate(name.trim());
+    if (!saveTemplate(name.trim())) {
+      window.alert("Could not save the chart template. Make sure a chart is open and browser storage is available.");
+      return;
+    }
     setActiveName(name.trim());
     setOpen(false);
   };
 
-  /** Apply to every open chart — the workspace style-sync keeps linked cells coherent. */
+  /** Apply chart styling and the saved indicator set to every open chart. */
   const applyToAll = (id: string, name: string) => {
-    applyTemplate(id);
+    let applied = true;
     forEachChart((pid) => {
-      if (pid === paneId) return;
-      const tpl = getTemplates().find((t) => t.id === id);
-      try {
-        getChart(pid)?.vela.renderer.applyConfig?.(tpl?.config ?? {});
-      } catch {
-        /* pane renderer without the rich-config seam */
-      }
+      if (!applyTemplate(id, pid)) applied = false;
     });
+    if (!applied) {
+      window.alert("Could not apply the chart template to every open chart.");
+      return;
+    }
     setActiveName(name);
     setOpen(false);
   };
@@ -85,7 +85,7 @@ export function VelaTemplateMenu() {
         className={`toolbar-btn gap-1 px-2 text-[12px] ${open ? "is-active" : ""} text-(--app-text)`}
       >
         <TemplateGlyph />
-        <span className="max-w-[140px] truncate">{activeName ?? "Template"}</span>
+        <span className="max-w-[140px] truncate">{activeName ?? defaultTemplate?.name ?? "Template"}</span>
         <ChevronDown size={11} className="text-(--app-muted)" />
       </button>
       {open && (
@@ -105,7 +105,10 @@ export function VelaTemplateMenu() {
                       type="button"
                       className="min-w-0 flex-1 py-2 text-left"
                       onClick={() => {
-                        applyTemplate(tpl.id);
+                        if (!applyTemplate(tpl.id)) {
+                          window.alert("Could not apply the chart template. Make sure a chart is open.");
+                          return;
+                        }
                         setActiveName(tpl.name);
                         setOpen(false);
                       }}
@@ -143,8 +146,8 @@ export function VelaTemplateMenu() {
             </>
           ) : (
             <div className="border-t border-(--app-border) px-3 py-3 text-[12px] leading-[16px] text-(--app-muted)">
-              No chart templates yet. Style the chart (types, colors, grid, scales),
-              then save the snapshot — it applies to any pane, in any symbol.
+              No chart templates yet. Configure chart styling and indicators, then save
+              a snapshot to apply them to any pane or symbol.
             </div>
           )}
         </div>

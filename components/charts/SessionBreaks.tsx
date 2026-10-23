@@ -8,36 +8,16 @@
  * breaks at/beyond the replay cursor are hidden.
  */
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { getChart } from "@/lib/chart-registry";
 import { mawsFeed } from "@/lib/maws/feed";
 import { useAppStore } from "@/lib/store";
-import { timeframeSeconds } from "@/lib/timeframes";
+import { sessionBreakTimes } from "@/lib/vela-break-times";
 import type { SessionBreaksData } from "@/lib/vela-layers";
 import "@/lib/vela-layers";
-import type { Candle, ChartPaneState, DrawingLineStyle, Timeframe } from "@/types";
+import type { ChartPaneState, DrawingLineStyle } from "@/types";
 
 const LAYER = "maws-session-breaks";
-
-/** UTC day bucket — same key VWAP session anchor uses (`floor(unix / 86400)`). */
-function utcDayKey(unixSec: number): number {
-  return Math.floor(unixSec / 86400);
-}
-
-/** First bar of each UTC calendar day (sub-daily only). Aligns with session VWAP resets. */
-function sessionBreakTimes(candles: Candle[], timeframe: Timeframe): number[] {
-  if (timeframeSeconds(timeframe) >= 86_400 || candles.length < 2) return [];
-  const out: number[] = [];
-  let prev = utcDayKey(candles[0].time);
-  for (let i = 1; i < candles.length; i++) {
-    const key = utcDayKey(candles[i].time);
-    if (key !== prev) {
-      out.push(candles[i].time);
-      prev = key;
-    }
-  }
-  return out;
-}
 
 function dashFor(style: DrawingLineStyle): number[] {
   if (style === "dashed") return [6, 4];
@@ -104,6 +84,22 @@ export function SessionBreaks({ pane }: { pane: ChartPaneState }) {
       }
     };
 
+    /** Blank the layer — a separator from a series this pane no longer shows must not
+     *  survive the switch (the layer paints only what the chart's own bars allow, but
+     *  the payload itself is ours to drop). */
+    const clear = () => {
+      try {
+        getChart(pane.id)?.renderer.setNativeData(LAYER, {
+          times: [],
+          color,
+          width: lineWidth,
+          dash: dashFor(lineStyle),
+        } satisfies SessionBreaksData);
+      } catch {
+        /* chart mid-teardown */
+      }
+    };
+
     if (!enabled) {
       push();
       return () => {
@@ -129,6 +125,11 @@ export function SessionBreaks({ pane }: { pane: ChartPaneState }) {
       if (raf) cancelAnimationFrame(raf);
       if (timer) window.clearTimeout(timer);
       unsub();
+      // Symbol/timeframe/settings change (or unmount): wipe the old payload NOW, so
+      // the gap until the next push shows no stale separators — the flicker that used
+      // to pop up on every TF switch.
+      clear();
+      breaksKeyRef.current = "";
     };
   }, [pane.id, pane.symbol, pane.timeframe, enabled, color, lineStyle, lineWidth, replayCutoffSec]);
 

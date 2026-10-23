@@ -137,6 +137,15 @@ module.exports = {
   TypedEventBus: jest.fn(),
   registerNativeIndicator: jest.fn(),
   unregisterNativeIndicator: jest.fn(),
+  // SDK renderer layers: lib/vela-layers.ts registers its canvas layers at import
+  // time, so the mock must accept the call (tests read the captured definitions).
+  registerRendererLayer: jest.fn(),
+  unregisterRendererLayer: jest.fn(),
+  // Symbol-search contributions (lib/vela-symbol-search.ts) — the workspace host
+  // registers a ranking + a watchlist favorite hook on mount.
+  registerSymbolRanking: jest.fn(() => () => {}),
+  registerSymbolFavorite: jest.fn(() => () => {}),
+  rendererLayers: jest.fn(() => []),
   getNativeIndicator: jest.fn(),
   nativeIndicatorTypes: [],
   nativeIndicatorDescriptors: [],

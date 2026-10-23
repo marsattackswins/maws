@@ -231,22 +231,10 @@ export const DEFAULT_SYMBOLS = SEED_UNIVERSE.slice(0, 12).map((s) => s.symbol);
 
 export const DEFAULT_WATCHLIST_GROUPS: WatchlistGroup[] = [
   {
-    id: "line-up",
-    name: "LINE UP",
+    id: "watchlist",
+    name: "Watchlist",
     collapsed: false,
     symbols: ["BTCUSDT.P", "XAUUSDT.P", "MUUSDT.P", "SOLUSDT.P", "SKHYNIXUSDT.P", "BNBUSDT.P"],
-  },
-  {
-    id: "bench",
-    name: "BENCH",
-    collapsed: false,
-    symbols: [],
-  },
-  {
-    id: "coach",
-    name: "COACH",
-    collapsed: false,
-    symbols: [],
   },
 ];
 

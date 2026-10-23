@@ -213,6 +213,34 @@ export class IndicatorInputsDialog {
         this.dialog = ui.panel;
         this.backdrop = ui.backdrop;
         ui.show();
+        // LOCAL (MAWS): the panel is `width: fit-content` with no explicit height, so
+        // switching tabs (different row counts) or a live `when` gate re-sized and
+        // re-centered it under the pointer. Lock it to the largest tab's natural size
+        // once, up front; a shorter tab's overflow simply scrolls (the body is already
+        // `overflow-y: auto`), and the panel holds its size and position.
+        if (bodies.length > 0) {
+            // Zag flips the dialog's open state asynchronously: measure (and lock) on the
+            // NEXT frames, once the panel is actually visible — measuring synchronously
+            // here reads a display:none panel (all rects 0). The lock is the largest tab's
+            // natural size, so re-opening or rebuilding (reset defaults) starts from the
+            // cleared inline size below and never inherits the previous lock.
+            ui.panel.style.width = '';
+            ui.panel.style.height = '';
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+                if (this.uiDialog !== ui) return; // closed/rebuilt while waiting
+                let maxW = 0;
+                let maxH = 0;
+                for (let i = 0; i < bodies.length; i += 1) {
+                    activate(i);
+                    const r = ui.panel.getBoundingClientRect();
+                    maxW = Math.max(maxW, Math.ceil(r.width));
+                    maxH = Math.max(maxH, Math.ceil(r.height));
+                }
+                activate(active);
+                if (maxW > 0) ui.panel.style.width = `${maxW}px`;
+                if (maxH > 0) ui.panel.style.height = `${maxH}px`;
+            }));
+        }
         document.addEventListener('keydown', this.onDialogKey);
     }
 

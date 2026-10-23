@@ -1,13 +1,15 @@
 import { describe, it, expect, afterAll } from 'vitest';
 import type { OHLCV } from '../core/model/ohlcv';
 import type { InputValue } from '../core/model/inputs';
-import type { SeriesPoint, SeriesSpec } from '../core/model/series';
+import type { LineLikeSeries, SeriesPoint, SeriesSpec } from '../core/model/series';
 import { isLineLikeSeries } from '../core/model/series';
 import type { NativeIndicatorContext, NativeIndicatorOutput } from '../core/native-indicators/NativeIndicator';
 import { getNativeIndicator, nativeIndicatorTypes, unregisterNativeIndicator } from '../core/native-indicators/NativeIndicator';
 import { classicSpecs, registerClassicIndicators, classicDescriptor } from '../core/native-indicators/classics';
 import { sma, ema, rma, wma, stdev, rsi, linreg, highest, lowest, percentRank, swma, cumSum, change } from '../core/native-indicators/classics/math';
 import type { ClassicIndicatorSpec } from '../core/native-indicators/classics';
+import { BULLISH, BEARISH } from '../core/palette';
+import { DARK_THEME } from '../core/theme';
 
 function bar(close: number, i: number, volume?: number): OHLCV {
     return { time: i * 60000, open: close, high: close + 1, low: close - 1, close, ...(volume != null ? { volume } : {}) };
@@ -272,6 +274,12 @@ describe('classic descriptor adapter', () => {
         return isLineLikeSeries(series!) ? series!.points : [];
     }
 
+    function styleOf(series: SeriesSpec | undefined): LineLikeSeries['style'] {
+        expect(series).toBeDefined();
+        expect(isLineLikeSeries(series!)).toBe(true);
+        return isLineLikeSeries(series!) ? series!.style : { color: '', width: 0, lineStyle: 'solid' };
+    }
+
     it('converts warm-up NaNs to whitespace points and wires bands to plot ids', () => {
         const spec: ClassicIndicatorSpec = {
             type: 'test-classic',
@@ -321,6 +329,32 @@ describe('classic descriptor adapter', () => {
         const l = pointsOf(bbOut.series![2])[i]!.value!;
         expect(u - b).toBeCloseTo(b - l, 8);
         expect(u).toBeGreaterThan(l);
+    });
+
+    it('styles each Bollinger line (color, thickness, style) and the background independently', () => {
+        const spec = classicSpecs.find((s) => s.type === 'bollinger-bands')!;
+        const bars = Array.from({ length: 60 }, (_, i) => bar(100 + Math.sin(i / 5), i));
+
+        // Defaults keep the classic look: three solid 1px lines, blue bands, warm basis.
+        const base = runOnce(spec, bars).series!;
+        expect(base).toHaveLength(3);
+        for (const s of base) expect(styleOf(s)).toMatchObject({ width: 1, lineStyle: 'solid' });
+        expect(styleOf(base[1]).color).toBe(styleOf(base[2]).color);
+        expect(styleOf(base[1]).color).not.toBe(styleOf(base[0]).color);
+
+        // Every knob reaches its own line — colour (alpha included), thickness, style.
+        const out = runOnce(spec, bars, {
+            basisColor: '#112233', basisWidth: 3, basisStyle: 'Dashed',
+            upperColor: '#44556680', upperWidth: 2, upperStyle: 'Dotted',
+            lowerColor: '#778899', lowerWidth: 4, lowerStyle: 'Solid',
+            fillColor: '#aabbcc40',
+        });
+        expect(styleOf(out.series![0])).toMatchObject({ color: '#112233', width: 3, lineStyle: 'dashed' });
+        expect(styleOf(out.series![1])).toMatchObject({ color: '#44556680', width: 2, lineStyle: 'dotted' });
+        expect(styleOf(out.series![2])).toMatchObject({ color: '#778899', width: 4, lineStyle: 'solid' });
+        // The background wash carries its own rgba value (opacity 0x40 here).
+        expect(out.fills).toHaveLength(1);
+        expect(out.fills![0]!.color).toBe('#aabbcc40');
     });
 
     it('keeps volume studies honest on volume-less bars', () => {
@@ -395,14 +429,15 @@ describe('classic descriptor adapter', () => {
 
         // Upper bands lean bearish, lower bands bullish, both at 40% transparency.
         const inkOf = (s: SeriesSpec): string | undefined => (isLineLikeSeries(s) ? s.style.color : undefined);
-        expect(inkOf(out.series![1]!)).toBe('#f2364599');
-        expect(inkOf(out.series![2]!)).toBe('#08998199');
+        expect(inkOf(out.series![1]!)).toBe(BEARISH + '99');
+        expect(inkOf(out.series![2]!)).toBe(BULLISH + '99');
 
         // Only band 1 is on by default; each visible pair gets one fill, and the toggle kills them all.
         expect(runOnce(spec, bars).series).toHaveLength(3);
         expect(out.fills).toHaveLength(2);
         expect(runOnce(spec, bars, { fill: false }).fills).toHaveLength(0);
-        expect(out.fills![0]!.color).toBe('#787b860d');
+        // Fill uses muted secondary text (DARK_THEME.textColor) with transparency.
+        expect(out.fills![0]!.color).toBe(DARK_THEME.textColor + '0d');
     });
 
     it('reads VWAP source through the shared source vocabulary', () => {

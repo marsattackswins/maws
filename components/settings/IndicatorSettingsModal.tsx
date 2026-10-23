@@ -1103,6 +1103,13 @@ function AdxForm({
   }
   return (
     <div>
+      <SettingsFieldRow label="Show midline">
+        <input
+          type="checkbox"
+          checked={value.showMidline !== false}
+          onChange={(e) => onChange({ ...value, showMidline: e.target.checked })}
+        />
+      </SettingsFieldRow>
       <SettingsFieldRow label="Show values on scale">
         <input
           type="checkbox"

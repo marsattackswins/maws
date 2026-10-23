@@ -308,6 +308,12 @@ describe("normalizeDrawingRehydrate (legacy compat)", () => {
     expect(st.drawingTool).toBe("cursor");
   });
 
+  it("does not persist the transient generic position tool as an armed tool", () => {
+    const st = fakeState({ drawingTool: "position", drawingSettingsTarget: null });
+    normalizeDrawingRehydrate(st);
+    expect(st.drawingTool).toBe("cursor");
+  });
+
   it("normalizes any hydrated drawingSettingsTarget back to null", () => {
     const st = fakeState({
       drawingTool: "cursor",

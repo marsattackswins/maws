@@ -42,6 +42,21 @@ describe('resolveSymbolTrading (real store)', () => {
     expect(t.marginPercent).toBe(DEFAULT_SYMBOL_TRADING.marginPercent);
   });
 
+  it('takes the order type from the global chart default until a symbol overrides it', () => {
+    // No per-symbol entry: the ONE global "Order type" row (Settings → Trading →
+    // Defaults) governs the Buy/Sell buttons.
+    useAppStore.setState({
+      chartSettings: { ...DEFAULT_CHART_SETTINGS, defaultOrderType: 'limit' },
+    });
+    expect(resolveSymbolTrading(SYMBOL).defaultOrderType).toBe('limit');
+
+    // A saved per-symbol override still wins over the global default.
+    useAppStore
+      .getState()
+      .setSymbolTrading(SYMBOL, { ...DEFAULT_SYMBOL_TRADING, defaultOrderType: 'market' });
+    expect(resolveSymbolTrading(SYMBOL).defaultOrderType).toBe('market');
+  });
+
   it('prefers per-symbol leverage over chart defaults', () => {
     useAppStore.getState().setSymbolTrading(SYMBOL, { ...DEFAULT_SYMBOL_TRADING, leverage: 3 });
     expect(resolveSymbolTrading(SYMBOL).leverage).toBe(3);

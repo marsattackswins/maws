@@ -1,10 +1,10 @@
 // The per-cell view cluster (src/widget/cell-controls.ts): the proximity reveal (pure),
-// the button set and its maximize gating, and the actions' routing. Node env — the DOM
-// is a MINIMAL stub (element tree, listeners, inline style); real rendering and the
-// workspace's maximize presentation are proven in the browser.
+// the button set (drag + maximize only — MAWS removed zoom/reset) and its gating, and
+// the actions' routing. Node env — the DOM is a MINIMAL stub (element tree, listeners,
+// inline style); real rendering and the workspace's maximize presentation are proven
+// in the browser.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { CellControls, nearBottomCenter, plotCenterX, CELL_CONTROLS_PROXIMITY_PX, CLUSTER_LEFT_CSS, type CellControlsDeps } from '../widget/cell-controls';
-import type { Vela } from '../Vela';
 
 interface StubEl {
     tagName: string;
@@ -84,8 +84,6 @@ function makeHost(): StubEl {
 
 function makeDeps(over: Partial<CellControlsDeps> = {}): CellControlsDeps {
     return {
-        chart: () => null,
-        reset: () => {},
         multiCell: () => true,
         isMaximized: () => false,
         toggleMaximize: () => {},
@@ -149,29 +147,43 @@ describe('CellControls — button set and gating', () => {
         expect(cluster(host).style.transform).toBe('translateX(-50%)');
     });
 
-    it('builds drag / zoom out / zoom in / maximize / reset on a multi-cell grid', () => {
+    it('builds drag + maximize on a multi-cell grid (no zoom / reset buttons)', () => {
         const host = makeHost();
         new CellControls(host as never, makeDeps());
-        expect(titles(host)).toEqual(['Drag to move chart', 'Zoom out', 'Zoom in', 'Maximize chart', 'Reset chart']);
+        expect(titles(host)).toEqual(['Drag to move chart', 'Maximize chart']);
     });
 
-    it('drops the drag handle and maximize on single-cell grids (nowhere to go)', () => {
+    it('builds nothing on a single-cell grid, and never reveals an empty pill', () => {
         const host = makeHost();
         new CellControls(host as never, makeDeps({ multiCell: () => false }));
-        expect(titles(host)).toEqual(['Zoom out', 'Zoom in', 'Reset chart']);
+        expect(titles(host)).toEqual([]);
+        host.fire('pointermove', { clientX: 400, clientY: 554 });
+        expect(cluster(host).style.display).toBe('none');
     });
 
     it('refresh() flips maximize to restore for the maximized cell and hides its drag handle', () => {
         const host = makeHost();
         let maximized = false;
         const controls = new CellControls(host as never, makeDeps({ isMaximized: () => maximized }));
-        expect(cluster(host).children[3]!.className).toBe('vela-cc-btn'); // resting state — no chip
+        expect(cluster(host).children[1]!.className).toBe('vela-cc-btn'); // resting state — no chip
         maximized = true;
         controls.refresh();
         // No drag handle while this chart covers the grid — there is nowhere to move it.
-        expect(titles(host)).toEqual(['Zoom out', 'Zoom in', 'Restore layout', 'Reset chart']);
+        expect(titles(host)).toEqual(['Restore layout']);
         // The maximized state reads as the inverse "selected" chip (the collapsed-pane idiom).
-        expect(cluster(host).children[2]!.className).toBe('vela-cc-btn vela-cc-on');
+        expect(cluster(host).children[0]!.className).toBe('vela-cc-btn vela-cc-on');
+    });
+
+    it('refresh() clearing every button also puts a revealed pill away', () => {
+        const host = makeHost();
+        let multi = true;
+        const controls = new CellControls(host as never, makeDeps({ multiCell: () => multi }));
+        host.fire('pointermove', { clientX: 400, clientY: 554 });
+        expect(cluster(host).style.display).toBe('flex');
+        multi = false; // the layout collapsed to a single cell
+        controls.refresh();
+        expect(titles(host)).toEqual([]);
+        expect(cluster(host).style.display).toBe('none');
     });
 });
 
@@ -214,15 +226,12 @@ describe('CellControls — proximity reveal', () => {
 });
 
 describe('CellControls — actions', () => {
-    it('routes maximize and reset to the deps', () => {
+    it('routes maximize to the deps', () => {
         const host = makeHost();
-        const reset = vi.fn();
         const toggleMaximize = vi.fn();
-        new CellControls(host as never, makeDeps({ reset, toggleMaximize }));
-        cluster(host).children[3]!.fire('click');
+        new CellControls(host as never, makeDeps({ toggleMaximize }));
+        cluster(host).children[1]!.fire('click');
         expect(toggleMaximize).toHaveBeenCalledTimes(1);
-        cluster(host).children[4]!.fire('click');
-        expect(reset).toHaveBeenCalledTimes(1);
     });
 
     it('the drag handle previews the hovered cell and commits the drop on release', () => {
@@ -256,26 +265,5 @@ describe('CellControls — actions', () => {
         grip.fire('pointercancel');
         expect(dropOn).not.toHaveBeenCalled();
         expect(previewDrop).toHaveBeenLastCalledWith(null);
-    });
-
-    it('zoom in glides THIS cell toward a right-anchored narrower range', () => {
-        // Synchronous rAF: the glide converges geometrically, so driving the frames
-        // inline terminates on the snap step (see followStep).
-        vi.stubGlobal('requestAnimationFrame', (cb: () => void): number => {
-            cb();
-            return 1;
-        });
-        vi.stubGlobal('cancelAnimationFrame', () => {});
-        const host = makeHost();
-        const applied: Array<{ from: number; to: number }> = [];
-        const chart = {
-            getVisibleRange: () => ({ from: 0, to: 1_000_000 }),
-            setVisibleRange: (r: { from: number; to: number }) => applied.push(r),
-        } as unknown as Vela;
-        new CellControls(host as never, makeDeps({ chart: () => chart }));
-        cluster(host).children[2]!.fire('click'); // zoom in
-        const last = applied[applied.length - 1]!;
-        expect(last.to).toBe(1_000_000); // right edge anchored
-        expect(last.from).toBeCloseTo(200_000, -3); // span × 0.8
     });
 });

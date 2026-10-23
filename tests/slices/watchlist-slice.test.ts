@@ -45,13 +45,11 @@ const flatOf = (s: Store): string[] =>
 describe("watchlist-slice (real root store)", () => {
   afterEach(resetWatchlist);
 
-  it("moveWatchlistSymbol keeps watchlist === groups flatMap", () => {
+  it("moveWatchlistSymbol keeps the single watchlist ordered", () => {
     resetWatchlist();
     const s = useAppStore.getState();
 
-    // Within the same group: XAUUSDT.P (index 1) toward the end of line-up —
-    // drag-insert semantics shift it in front of SKHYNIXUSDT.P.
-    s.moveWatchlistSymbol("XAUUSDT.P", "line-up", 4);
+    s.moveWatchlistSymbol("XAUUSDT.P", "watchlist", 4);
     let now = useAppStore.getState();
     expect(now.watchlist).toEqual(flatOf(now));
     expect(now.watchlistGroups[0].symbols).toEqual([
@@ -63,20 +61,9 @@ describe("watchlist-slice (real root store)", () => {
       "BNBUSDT.P",
     ]);
 
-    // Across groups: BTCUSDT.P into the currently empty bench group.
-    s.moveWatchlistSymbol("BTCUSDT.P", "bench", 1);
-    now = useAppStore.getState();
-    expect(now.watchlist).toEqual(flatOf(now));
-    expect(now.watchlistGroups.find((g) => g.id === "bench")?.symbols).toEqual(
-      ["BTCUSDT.P"],
-    );
-    expect(now.watchlistGroups.find((g) => g.id === "line-up")?.symbols).toEqual(
-      ["MUUSDT.P", "SOLUSDT.P", "XAUUSDT.P", "SKHYNIXUSDT.P", "BNBUSDT.P"],
-    );
-
-    // Unknown symbol and unknown group are no-ops.
+    // Unknown symbols and groups are no-ops.
     const before = now.watchlist;
-    s.moveWatchlistSymbol("NOPEUSDT", "line-up", 0);
+    s.moveWatchlistSymbol("NOPEUSDT", "watchlist", 0);
     s.moveWatchlistSymbol("BTCUSDT.P", "no-such-group", 0);
     now = useAppStore.getState();
     expect(now.watchlist).toEqual(before);
@@ -113,8 +100,6 @@ describe("watchlist-slice (real root store)", () => {
     ]);
     expect(now.watchlist).toEqual(flatOf(now));
     expect(now.watchlistGroups[0].symbols).toEqual(now.watchlist);
-    expect(now.watchlistGroups[1].symbols).toEqual([]);
-    expect(now.watchlistGroups[2].symbols).toEqual([]);
   });
 
   it("addToWatchlist / removeFromWatchlist keep the flatMap invariant", () => {
@@ -157,18 +142,59 @@ describe("watchlist-slice (real root store)", () => {
     s.toggleWatchlistCollapsed();
     expect(useAppStore.getState().watchlistCollapsed).toBe(false);
 
-    s.toggleWatchlistGroup("bench");
+    s.toggleWatchlistGroup("watchlist");
     expect(
-      useAppStore.getState().watchlistGroups.find((g) => g.id === "bench")
+      useAppStore.getState().watchlistGroups.find((g) => g.id === "watchlist")
         ?.collapsed,
     ).toBe(true);
-    expect(
-      useAppStore.getState().watchlistGroups.find((g) => g.id === "line-up")
-        ?.collapsed,
-    ).toBe(false);
 
     s.setWatchlistHeight(320);
     expect(useAppStore.getState().watchlistHeight).toBe(320);
+  });
+
+  it("renames the single watchlist and ignores blank names", () => {
+    resetWatchlist();
+    const s = useAppStore.getState();
+    s.renameWatchlist("  Crypto  ");
+    expect(useAppStore.getState().watchlistGroups[0].name).toBe("Crypto");
+    s.renameWatchlist("   ");
+    expect(useAppStore.getState().watchlistGroups[0].name).toBe("Crypto");
+  });
+
+  it("creates and switches watchlists without mixing their symbols", () => {
+    resetWatchlist();
+    const s = useAppStore.getState();
+    s.addToWatchlist("AVAXUSDT");
+    s.createWatchlist("  Favorites  ");
+
+    const now = useAppStore.getState();
+    expect(now.watchlist).toEqual([]);
+    expect(now.watchlistGroups[0]).toMatchObject({
+      id: "watchlist-2",
+      name: "Favorites",
+      symbols: [],
+    });
+
+    now.addToWatchlist("ETHUSDT");
+    now.activateWatchlist("watchlist");
+    expect(useAppStore.getState().watchlist).toEqual([...DEFAULT_WATCHLIST, "AVAXUSDT"]);
+
+    useAppStore.getState().activateWatchlist("watchlist-2");
+    expect(useAppStore.getState().watchlist).toEqual(["ETHUSDT"]);
+  });
+
+  it("deletes the active watchlist and selects the next one", () => {
+    resetWatchlist();
+    const s = useAppStore.getState();
+    s.createWatchlist("Favorites");
+    const activeId = useAppStore.getState().watchlistGroups[0].id;
+    useAppStore.getState().addToWatchlist("ETHUSDT");
+    useAppStore.getState().deleteWatchlist(activeId);
+
+    const now = useAppStore.getState();
+    expect(now.watchlistGroups).toHaveLength(1);
+    expect(now.watchlistGroups[0].id).toBe("watchlist");
+    expect(now.watchlist).toEqual(DEFAULT_WATCHLIST);
   });
 
   describe("normalizeWatchlistRehydrate", () => {
@@ -185,15 +211,73 @@ describe("watchlist-slice (real root store)", () => {
       });
       normalizeWatchlistRehydrate(st);
       expect(st.watchlist).toEqual(["POLUSDT", "BTCUSDT"]);
-      expect(st.watchlistGroups[0].symbols).toEqual(["POLUSDT"]);
-      expect(st.watchlistGroups[1].symbols).toEqual(["ETHUSDT"]);
+      expect(st.watchlistGroups).toHaveLength(1);
+      expect(st.watchlistGroups[0].id).toBe("watchlist");
+      expect(st.watchlistGroups[0].symbols).toEqual(st.watchlist);
+    });
+
+    it("rewrites Vela's ticker spelling to the bare MAWS symbol and drops duplicates", () => {
+      // A picker row commits `BINANCE:ETHUSDT.P`; the list must hold `ETHUSDT` or the
+      // sidebar shows an unknown asset while the pane stars a different string.
+      const st = fakeState({
+        watchlist: ["BINANCE:ETHUSDT.P", "BTCUSDT.P", "btcusdt", "MATICUSDT.P"],
+        watchlistGroups: [
+          { id: "a", name: "A", collapsed: false, symbols: ["binance:ethusdt.p", "ETHUSDT"] },
+        ],
+      });
+      normalizeWatchlistRehydrate(st);
+      expect(st.watchlist).toEqual(["ETHUSDT", "BTCUSDT", "POLUSDT"]);
+      expect(st.watchlistGroups).toHaveLength(1);
+      expect(st.watchlistGroups[0].symbols).toEqual(st.watchlist);
     });
 
     it("guards missing watchlist fields", () => {
       const st = fakeState({});
       normalizeWatchlistRehydrate(st);
       expect(st.watchlist).toEqual([]);
-      expect(st.watchlistGroups).toEqual([]);
+      expect(st.watchlistGroups).toEqual([
+        { id: "watchlist", name: "Watchlist", collapsed: false, symbols: [] },
+      ]);
+    });
+
+    it("does not restore symbols from stale groups when the saved list is empty", () => {
+      const st = fakeState({
+        watchlist: [],
+        watchlistGroups: [
+          { id: "legacy-group", name: "Legacy group", collapsed: false, symbols: ["BTCUSDT"] },
+        ],
+      });
+      normalizeWatchlistRehydrate(st);
+      expect(st.watchlist).toEqual([]);
+      expect(st.watchlistGroups).toEqual([
+        { id: "watchlist", name: "Watchlist", collapsed: false, symbols: [] },
+      ]);
+    });
+
+    it("preserves the renamed title of the current watchlist", () => {
+      const st = fakeState({
+        watchlist: ["BTCUSDT"],
+        watchlistGroups: [
+          { id: "watchlist", name: "Crypto", collapsed: false, symbols: ["BTCUSDT"] },
+        ],
+      });
+      normalizeWatchlistRehydrate(st);
+      expect(st.watchlistGroups[0].name).toBe("Crypto");
+    });
+
+    it("preserves multiple named watchlists but discards old category groups", () => {
+      const st = fakeState({
+        watchlist: ["ETHUSDT"],
+        watchlistGroups: [
+          { id: "watchlist", name: "Crypto", collapsed: false, symbols: ["ETHUSDT"] },
+          { id: "watchlist-2", name: "Favorites", collapsed: false, symbols: ["BTCUSDT"] },
+          { id: "bench", name: "BENCH", collapsed: false, symbols: ["SOLUSDT"] },
+        ],
+      });
+      normalizeWatchlistRehydrate(st);
+      expect(st.watchlist).toEqual(["ETHUSDT"]);
+      expect(st.watchlistGroups.map((group) => group.name)).toEqual(["Crypto", "Favorites"]);
+      expect(st.watchlistGroups[1].symbols).toEqual(["BTCUSDT"]);
     });
   });
 });
@@ -230,19 +314,43 @@ describe("watchlist-slice atomicity (counting set harness)", () => {
     expect(h.state.watchlist).toEqual(flatOf(h.state));
   });
 
+  it("renameWatchlist performs exactly one set() with watchlistGroups", () => {
+    const h = makeHarness({ watchlistGroups: defaultGroups() });
+    h.slice.renameWatchlist("  Crypto  ");
+    expect(h.calls).toHaveLength(1);
+    expect(Object.keys(h.calls[0])).toEqual(["watchlistGroups"]);
+    expect(h.state.watchlistGroups[0].name).toBe("Crypto");
+  });
+
+  it("createWatchlist activates a separate empty list", () => {
+    const h = makeHarness({
+      watchlist: ["BTCUSDT"],
+      watchlistGroups: defaultGroups(),
+    });
+    h.slice.createWatchlist("Favorites");
+    expect(h.calls).toHaveLength(1);
+    expect(h.state.watchlist).toEqual([]);
+    expect(h.state.watchlistGroups[0]).toMatchObject({
+      id: "watchlist-2",
+      name: "Favorites",
+      symbols: [],
+    });
+    expect(h.state.watchlistGroups[1].symbols).toEqual(DEFAULT_WATCHLIST);
+  });
+
   it("removeFromWatchlist performs exactly one set() with watchlist + watchlistGroups", () => {
     const h = makeHarness({
       watchlist: [...DEFAULT_WATCHLIST],
       watchlistGroups: defaultGroups(),
     });
-    h.slice.removeFromWatchlist("BTCUSDT");
+    h.slice.removeFromWatchlist("BTCUSDT.P");
     expect(h.calls).toHaveLength(1);
     expect(Object.keys(h.calls[0]).sort()).toEqual([
       "watchlist",
       "watchlistGroups",
     ]);
     expect(h.state.watchlist).toEqual(flatOf(h.state));
-    expect(h.state.watchlist).not.toContain("BTCUSDT");
+    expect(h.state.watchlist).not.toContain("BTCUSDT.P");
   });
 
   it("moveWatchlistSymbol performs exactly one set() with watchlist + watchlistGroups", () => {
@@ -250,7 +358,7 @@ describe("watchlist-slice atomicity (counting set harness)", () => {
       watchlist: [...DEFAULT_WATCHLIST],
       watchlistGroups: defaultGroups(),
     });
-    h.slice.moveWatchlistSymbol("BTCUSDT.P", "bench", 0);
+    h.slice.moveWatchlistSymbol("BTCUSDT.P", "watchlist", 0);
     expect(h.calls).toHaveLength(1);
     expect(Object.keys(h.calls[0]).sort()).toEqual([
       "watchlist",
@@ -293,7 +401,7 @@ describe("watchlist-slice atomicity (counting set harness)", () => {
       watchlistGroups: defaultGroups(),
     });
     h.slice.addToWatchlist("BTCUSDT.P"); // already present
-    h.slice.moveWatchlistSymbol("NOPEUSDT", "line-up", 0);
+    h.slice.moveWatchlistSymbol("NOPEUSDT", "watchlist", 0);
     h.slice.moveWatchlistSymbol("BTCUSDT.P", "no-such-group", 0);
     h.slice.reorderWatchlist(0, 0);
     h.slice.reorderWatchlist(-1, 2);

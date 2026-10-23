@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+**/node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -45,6 +46,13 @@ yarn-error.log*
 
 # MAWS server state (SQLite DB, backups) — never commit
 /.maws/
+
+# debug / inspection artifacts
+.inspect-tmp.db*
+
+# old build outputs accidentally committed
+/MAWS/
+screenshots/
 
 # typescript
 *.tsbuildinfo

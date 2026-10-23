@@ -1,14 +1,23 @@
 "use client";
 
+/**
+ * BuySellContextMenu.tsx — right-click menu on the topbar Buy/Sell strip.
+ *
+ * It carries the ONE action the strip itself cannot express: hiding the strip
+ * (`showBuySell`). Trading knobs deliberately do NOT live here any more — order
+ * type, order size, leverage and the rest are edited in the single global
+ * settings dialog (Settings → Trading), which is also what the chart's own
+ * settings item opens.
+ */
+
 import { useAppStore } from "@/lib/store";
-import { EyeOff, Settings } from "lucide-react";
+import { EyeOff } from "lucide-react";
 import { useEffect, type CSSProperties } from "react";
 
 export function BuySellContextMenu() {
   const menu = useAppStore((s) => s.buySellMenu);
   const setBuySellMenu = useAppStore((s) => s.setBuySellMenu);
   const patchChartSettings = useAppStore((s) => s.patchChartSettings);
-  const setTradingSettingsSymbol = useAppStore((s) => s.setTradingSettingsSymbol);
 
   useEffect(() => {
     if (!menu) return;
@@ -26,7 +35,7 @@ export function BuySellContextMenu() {
 
   const style: CSSProperties = {
     left: Math.min(menu.x, window.innerWidth - 200),
-    top: Math.min(menu.y, window.innerHeight - 100),
+    top: Math.min(menu.y, window.innerHeight - 56),
   };
 
   return (
@@ -49,18 +58,6 @@ export function BuySellContextMenu() {
         </span>
         <span className="ctx-body">
           <span className="ctx-label">Hide Buttons</span>
-        </span>
-      </button>
-      <button
-        type="button"
-        className="ctx-item"
-        onClick={() => setTradingSettingsSymbol(menu.symbol)}
-      >
-        <span className="ctx-ico">
-          <Settings size={15} />
-        </span>
-        <span className="ctx-body">
-          <span className="ctx-label">Trading Settings</span>
         </span>
       </button>
     </div>

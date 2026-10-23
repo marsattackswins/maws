@@ -141,6 +141,17 @@ describe("chart-slice actions (real root store)", () => {
     expect(useAppStore.getState().layoutCount).toBe(4);
   });
 
+  it("clamps every layout write to the 4-pane cap", () => {
+    const s = useAppStore.getState();
+    // Bigger templates still exist in lib/layouts, but the store refuses them.
+    s.setLayout(12);
+    expect(useAppStore.getState().layoutCount).toBe(4);
+    s.applyLayout(9, "v");
+    const after = useAppStore.getState();
+    expect(after.layoutCount).toBe(4);
+    expect(after.orientation).toBe("v");
+  });
+
   it("toggleOrientation flips h <-> v", () => {
     const s = useAppStore.getState();
     s.toggleOrientation();
@@ -573,6 +584,50 @@ describe("chart-slice persistence compat", () => {
 describe("normalizeChartRehydrate (legacy compat)", () => {
   const fakeState = (patch: Record<string, unknown>): Store =>
     ({ ...patch }) as unknown as Store;
+
+  it("clamps a persisted layoutCount into 1–4", () => {
+    const st = fakeState({
+      layoutCount: 9,
+      layoutTracks: {},
+      chartSettings: { ...DEFAULT_CHART_SETTINGS },
+    });
+    normalizeChartRehydrate(st);
+    expect(st.layoutCount).toBe(4);
+    // Junk floors at one pane rather than rendering an empty workspace.
+    const zero = fakeState({
+      layoutCount: 0,
+      layoutTracks: {},
+      chartSettings: { ...DEFAULT_CHART_SETTINGS },
+    });
+    normalizeChartRehydrate(zero);
+    expect(zero.layoutCount).toBe(1);
+  });
+
+  it("re-seats an activePaneId that names no pane on the first pane", () => {
+    // Every active-pane edit (watchlist click, TopBar picker) targets this id; a
+    // stale one silently rewrote a pane the layout does not show.
+    const st = fakeState({
+      layoutCount: 1,
+      activePaneId: "pane-9",
+      panes: [
+        { id: "pane-0", symbol: "BTCUSDT", timeframe: "1D", studies: [], drawings: [] },
+      ],
+      chartSettings: { ...DEFAULT_CHART_SETTINGS },
+    });
+    normalizeChartRehydrate(st);
+    expect(st.activePaneId).toBe("pane-0");
+
+    const kept = fakeState({
+      activePaneId: "pane-1",
+      panes: [
+        { id: "pane-0", symbol: "BTCUSDT", timeframe: "1D", studies: [], drawings: [] },
+        { id: "pane-1", symbol: "ETHUSDT", timeframe: "1D", studies: [], drawings: [] },
+      ],
+      chartSettings: { ...DEFAULT_CHART_SETTINGS },
+    });
+    normalizeChartRehydrate(kept);
+    expect(kept.activePaneId).toBe("pane-1");
+  });
 
   it("merges partial chartSettings over defaults and normalizes timezone", () => {
     const st = fakeState({

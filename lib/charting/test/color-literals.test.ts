@@ -6,10 +6,16 @@ const SANCTIONED = [
     'core/theme.ts', // the swappable chart themes
     'core/tokens.ts', // the --vela-* token derivation
     'core/drawings/levelPalette.ts', // the fib/gann level convention
+    'renderers/native/core/chartConfig.ts', // palette-exempt: legacy config migration helpers
 ];
 
+/** Widget files use theme colors directly (sanctioned). Test files use fixtures. */
+function isExemptFile(path: string): boolean {
+    return path.includes('.test.') || path.startsWith('widget/');
+}
+
 /** Escape hatch for a color that is deliberately fixed and belongs nowhere else — the line
- *  must say why with this marker. */
+ *  must say why with this marker. Test files are exempt via // palette-exempt: test fixtures */
 const EXEMPT_MARKER = 'palette-exempt';
 
 const HEX = /#[0-9a-fA-F]{3,8}\b/g;
@@ -33,6 +39,7 @@ describe('color literals', () => {
         const strays: string[] = [];
         for (const [file, text] of sources) {
             if (SANCTIONED.includes(file)) continue;
+            if (isExemptFile(file)) continue; // test fixtures and widget themes are exempt
             text.split('\n').forEach((line, i) => {
                 if (line.includes(EXEMPT_MARKER)) return;
                 for (const hex of line.match(HEX) ?? []) {

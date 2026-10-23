@@ -40,6 +40,7 @@ import {
 import type { Unsubscribe } from '../../core/util/types';
 import { SecondClock, type WallClock } from '../../core/util/wall-clock';
 import { isLineLikeSeries, seriesShownOn, type SeriesSurface } from '../../core/model/series';
+import { legendValuesOn } from '../../core/native-indicators/legend-settings';
 import { InputsUI, type LegendPlotValue } from '../shared/InputsUI';
 import { PaneControls } from './chrome/PaneControls';
 import { AxisScaleButtons, type AxisScaleView } from './chrome/AxisScaleButtons';
@@ -355,6 +356,8 @@ export class NativeRenderer implements IChartRenderer {
     private readonly crosshairCbs = new Set<(e: CrosshairEvent) => void>();
     private readonly chartTypeSettingsCbs = new Set<(typeId: string, values: Record<string, unknown>) => void>();
     private readonly configChangedCbs = new Set<() => void>();
+    /** Restored pane sizes also seed panes created after the config is applied. */
+    private paneHeightWeights: Record<string, number> = {};
     /** The settings dialog's Canvas → Theme row raises the pick here; the host applies it. */
     private readonly themeSelectCbs = new Set<(theme: ThemeName) => void>();
     /** First-run config snapshot — what "Reset defaults" restores. */
@@ -392,7 +395,7 @@ export class NativeRenderer implements IChartRenderer {
     }
 
     readonly name = 'native';
-    readonly features: readonly string[] = ['logScale', 'currentPriceLine', 'priceLabel', 'countdown', 'upColor', 'downColor', 'glow', 'animZoom', 'animPan', 'animScroll', 'animAutoscale', 'animLiveBar', 'intro', 'zoomAnchor', 'axisDrag', 'paneResize', 'candleZOrder', 'candleVisible', 'seriesOrder', 'highlights', 'sessionZones', 'gridlines', 'axisLabels', 'scaleMode', 'invertScale', 'paneScales', 'autoScale', 'timezone', 'keyboard', 'historyChords', 'priceStyle', 'priceBaseline', 'baselinePrice', 'settings', 'attribution', 'dialogHost', 'tradeMarkers', 'marks', 'indicatorTitles', 'indicatorValues', 'crosshairOverride'];
+    readonly features: readonly string[] = ['logScale', 'currentPriceLine', 'priceLabel', 'countdown', 'upColor', 'downColor', 'glow', 'animZoom', 'animPan', 'animScroll', 'animAutoscale', 'animLiveBar', 'intro', 'zoomAnchor', 'axisDrag', 'paneResize', 'candleZOrder', 'candleVisible', 'seriesOrder', 'highlights', 'sessionZones', 'gridlines', 'axisLabels', 'scaleMode', 'invertScale', 'paneScales', 'autoScale', 'timezone', 'timeLabelFormat', 'keyboard', 'historyChords', 'priceStyle', 'priceBaseline', 'baselinePrice', 'settings', 'attribution', 'dialogHost', 'tradeMarkers', 'marks', 'indicatorTitles', 'indicatorValues', 'crosshairOverride'];
 
     /** Apply a render feature live — mutate the field + invalidate, no engine re-run. */
     applyFeature(key: string, value: unknown): void {
@@ -744,6 +747,10 @@ export class NativeRenderer implements IChartRenderer {
         const s = this.scene.style;
         const chartTypesBag = Object.fromEntries(Object.entries(s.chartTypes).map(([k, v]) => [k, { ...v }]));
         const t = this.theme;
+        const heightWeights = {
+            ...this.paneHeightWeights,
+            ...Object.fromEntries(this.scene.orderedPanes().map((pane) => [pane.id, pane.heightWeight])),
+        };
         return {
             version: CHART_CONFIG_VERSION,
             chartTypes: chartTypesBag,
@@ -781,7 +788,10 @@ export class NativeRenderer implements IChartRenderer {
                 autoscale: this.animAutoscale.on,
                 intro: this.intro.style !== false,
             },
-            panes: { separatorColor: s.separatorColor ?? t.borderColor },
+            panes: {
+                separatorColor: s.separatorColor ?? t.borderColor,
+                ...(Object.keys(heightWeights).length > 0 ? { heightWeights } : {}),
+            },
             margins: { ...s.margins },
             trades: {
                 visible: this.scene.tradeMarkers.visible,
@@ -879,7 +889,8 @@ export class NativeRenderer implements IChartRenderer {
         const explicitTextColor = typeof patchTextColor === 'string' && patchTextColor.trim().length > 0;
         const prevTheme = this.theme;
         let inks = { textColor: next.layout.textColor, gridColor: prevTheme.gridColor, borderColor: prevTheme.borderColor };
-        if (!explicitTextColor && isDarkColor(next.layout.textColor) === isDarkColor(next.layout.background)) {
+        if (!explicitTextColor) {
+            // Background-only patch: always pick matching theme for text/grid/border.
             const rebase = isDarkColor(next.layout.background) ? DARK_THEME : LIGHT_THEME;
             inks = { textColor: rebase.textColor, gridColor: rebase.gridColor, borderColor: rebase.borderColor };
         }
@@ -921,6 +932,11 @@ export class NativeRenderer implements IChartRenderer {
         this.intro = { style: next.animations.intro ? this.introOnStyle : false, duration: this.intro.duration || INTRO_DURATION_DEFAULT_MS };
         // panes
         s.separatorColor = keepInherit(s.separatorColor, next.panes.separatorColor, prevTheme.borderColor);
+        this.paneHeightWeights = { ...(next.panes.heightWeights ?? {}) };
+        for (const pane of this.scene.orderedPanes()) {
+            const weight = this.paneHeightWeights[pane.id];
+            if (weight !== undefined) pane.heightWeight = weight;
+        }
         // margins — top/bottom flow into the next autoscale pass; a right-margin edit
         // re-lands the newest bar on the new whitespace at the current zoom, so it shows
         // immediately instead of on the next fit.
@@ -1004,7 +1020,7 @@ export class NativeRenderer implements IChartRenderer {
         this.scheduler?.invalidate(InvalidateLevel.Full);
         // The settings dialog commits through applyConfig — this is how host chrome
         // that mirrors a config value (bottom-bar timezone) learns about in-chart edits.
-        for (const cb of this.configChangedCbs) cb();
+        this.notifyConfigChanged();
     }
 
     /**
@@ -2035,11 +2051,16 @@ export class NativeRenderer implements IChartRenderer {
 
     // ── panes ──
     ensurePane(pane: Pane): void {
-        this.scene.ensurePane(pane.id, pane.kind, pane.order, pane.heightWeight ?? (pane.kind === 'price' ? 3 : 1));
+        this.scene.ensurePane(
+            pane.id,
+            pane.kind,
+            pane.order,
+            this.paneHeightWeights[pane.id] ?? pane.heightWeight ?? (pane.kind === 'price' ? 3 : 1),
+        );
         this.layoutPanes();
         // A new pane changes the count, so the lone price pane's maximize button appears.
         this.paneControls?.refresh();
-        this.scheduler.invalidate(InvalidateLevel.Full);
+        this.scheduler?.invalidate(InvalidateLevel.Full);
     }
 
     removePane(id: string): void {
@@ -2378,6 +2399,10 @@ export class NativeRenderer implements IChartRenderer {
     onConfigChanged(cb: () => void): Unsubscribe {
         this.configChangedCbs.add(cb);
         return () => this.configChangedCbs.delete(cb);
+    }
+
+    private notifyConfigChanged(): void {
+        for (const cb of this.configChangedCbs) cb();
     }
 
     onThemeSelect(cb: (theme: ThemeName) => void): Unsubscribe {
@@ -3020,8 +3045,11 @@ export class NativeRenderer implements IChartRenderer {
         const next = resizeSplit(split, dyTotal);
         above.heightWeight = next.above;
         below.heightWeight = next.below;
+        this.paneHeightWeights[above.id] = next.above;
+        this.paneHeightWeights[below.id] = next.below;
         this.layoutPanes();
         this.scheduler.invalidate(InvalidateLevel.Full);
+        this.notifyConfigChanged();
     }
 
     /** Double-click a separator → split the two adjacent panes evenly (each gets half of
@@ -3035,8 +3063,11 @@ export class NativeRenderer implements IChartRenderer {
         const half = (above.heightWeight + below.heightWeight) / 2;
         above.heightWeight = half;
         below.heightWeight = half;
+        this.paneHeightWeights[above.id] = half;
+        this.paneHeightWeights[below.id] = half;
         this.layoutPanes();
         this.scheduler.invalidate(InvalidateLevel.Full);
+        this.notifyConfigChanged();
     }
 
     // ── keyboard navigation / accessibility (item 11) ──
@@ -3180,6 +3211,9 @@ export class NativeRenderer implements IChartRenderer {
      *  a row per plot shown on that surface, formatted on its pane's scale. A plot's `display`
      *  decides per surface — a data-window-only plot has a row here and none in the legend. */
     private readoutRowsFor(model: IndicatorModel, idx: number, pricePane: PaneNode | null, surface: SeriesSurface): DataWindowRow[] {
+        // The per-indicator switch hides only this live legend readout. The displayed
+        // title and price-scale labels are independent.
+        if (surface === 'legend' && !legendValuesOn(model.inputValues)) return [];
         // The volume native draws through its bespoke layer and mounts a series-less model, so
         // its readout comes straight from the bar's volume instead of iterating `model.series`.
         if (model.native?.type === 'volume') return this.volumeReadoutRows(model, idx);

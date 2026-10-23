@@ -22,6 +22,7 @@ export type DrawingTool =
   | "fib"
   | "path"
   | "dcurve"
+  | "position"
   | "long"
   | "short"
   | "rect"
@@ -300,6 +301,8 @@ export type ChartSettings = {
   liqLineColor: string;
   defaultQty: number;
   defaultLeverage: number;
+  /** Order type the Buy/Sell buttons submit with (per-symbol overrides win when saved). */
+  defaultOrderType: "market" | "limit";
   showIdeas: boolean;
   ideasFilter: "all" | "following" | "mine";
   sessionBreaks: boolean;
@@ -389,6 +392,7 @@ export const DEFAULT_CHART_SETTINGS: ChartSettings = {
   liqLineColor: "#ff6d00",
   defaultQty: 0.01,
   defaultLeverage: 10,
+  defaultOrderType: "market",
   showIdeas: false,
   ideasFilter: "all",
   sessionBreaks: true,
@@ -433,7 +437,8 @@ export type DockId =
   | "strategy"
   | "alerts"
   | "calendar" // News & Calendar (combined)
-  | "objects";
+  | "objects"
+  | "scripts"; // Pine script editor (Vela scripting engine)
 
 export type PriceAlert = {
   id: string;
@@ -649,6 +654,8 @@ export type AdxIndicatorSettings = {
   lineStyle: DrawingLineStyle;
   /** Show last value on the price scale */
   showScaleValues: boolean;
+  /** Show the key level midline */
+  showMidline?: boolean;
   visibility: ObjectVisibility;
 };
 
@@ -792,6 +799,7 @@ export const DEFAULT_INDICATOR_SETTINGS: IndicatorSettingsMap = {
     lineWidth: 1,
     lineStyle: "solid",
     showScaleValues: true,
+    showMidline: true,
     visibility: { ...DEFAULT_OBJECT_VISIBILITY },
   },
 };

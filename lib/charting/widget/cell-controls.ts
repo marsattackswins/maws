@@ -1,13 +1,16 @@
 // Per-cell view controls — a hover cluster pinned to the bottom-center of a
 // workspace cell's PRICE PLOT (the candles, not the price-scale gutter): a drag
-// handle to move the chart within the grid, zoom out / zoom in, maximize-or-
-// restore, and reset view. Revealed by cursor proximity, the same affordance as
-// the renderer's scroll-to-realtime button, and styled like the pane clusters
-// (a neutral scrim pill over chart content).
+// handle to move the chart within the grid and maximize-or-restore. Revealed by
+// cursor proximity, the same affordance as the renderer's scroll-to-realtime
+// button, and styled like the pane clusters (a neutral scrim pill over chart
+// content).
+//
+// MAWS local change: the zoom out / zoom in / reset buttons were removed. Wheel,
+// pinch and `mod+Arrow` already zoom, and "Reset chart" lives in the context
+// menu — the cluster read as chart clutter. A grid with nothing left to show
+// (a single, un-maximized cell) never reveals it.
 import { icon } from '../core/icons';
 import { injectStyles } from '../ui/styles';
-import { Glider, ZOOM_IN, ZOOM_OUT } from './glide';
-import type { Vela } from '../Vela';
 
 /** Cursor distance (px, from the cluster center) that reveals the cluster —
  *  mirrors the scroll-to-realtime button's proximity radius. */
@@ -68,10 +71,6 @@ export function nearBottomCenter(
 }
 
 export interface CellControlsDeps {
-    /** The cell's LIVE chart (null once the cell is destroyed). */
-    chart(): Vela | null;
-    /** Reset the cell's view — the context menu's "Reset view" action. */
-    reset(): void;
     /** Whether the grid holds more than one cell — gates maximize (a lone chart has
      *  nothing to trade space with, same rule as the pane cluster's maximize) and
      *  the drag handle (nowhere to move to). */
@@ -90,14 +89,15 @@ export interface CellControlsDeps {
 }
 
 /**
- * Owns the cluster DOM inside one cell host. Zooming eases through its own
- * {@link Glider} on THIS cell's chart (the buttons act on the cell they live in,
- * whatever the active cell is); maximize/reset/drag route to the deps.
+ * Owns the cluster DOM inside one cell host. Maximize and drag route to the
+ * deps (they act on the cell the cluster lives in, whatever the active cell is).
  */
 export class CellControls {
     private readonly root: HTMLDivElement;
-    private readonly glider: Glider;
     private near = false;
+    /** No button to show (single-cell grid) — the reveal stays off entirely, so a
+     *  lone chart never grows an empty pill. */
+    private empty = true;
     /** A grip drag is underway — the proximity reveal must not hide the cluster
      *  while captured pointer moves sweep across the whole grid. */
     private dragging = false;
@@ -110,7 +110,6 @@ export class CellControls {
         private readonly deps: CellControlsDeps,
     ) {
         injectStyles(STYLE_ID, CSS, host.ownerDocument);
-        this.glider = new Glider(deps.chart);
         this.root = host.ownerDocument.createElement('div');
         Object.assign(this.root.style, {
             position: 'absolute',
@@ -138,11 +137,13 @@ export class CellControls {
         this.root.textContent = '';
         const multi = this.deps.multiCell();
         const maximized = multi && this.deps.isMaximized();
+        let built = 0;
         // The drag handle only exists when there is somewhere to move to: never on a
         // single-cell grid, and not while this chart covers the grid.
-        if (multi && !maximized) this.root.appendChild(this.makeGrip());
-        this.root.appendChild(this.button('minus', 'Zoom out', () => this.glider.zoom(ZOOM_OUT)));
-        this.root.appendChild(this.button('plus', 'Zoom in', () => this.glider.zoom(ZOOM_IN)));
+        if (multi && !maximized) {
+            this.root.appendChild(this.makeGrip());
+            built++;
+        }
         if (multi) {
             this.root.appendChild(
                 this.button(maximized ? 'restore' : 'maximize', maximized ? 'Restore layout' : 'Maximize chart', () => this.deps.toggleMaximize(), {
@@ -151,13 +152,12 @@ export class CellControls {
                     selected: maximized,
                 }),
             );
+            built++;
         }
-        this.root.appendChild(
-            this.button('reset', 'Reset chart', () => {
-                this.glider.stop(); // a running zoom glide must not fight the reset
-                this.deps.reset();
-            }),
-        );
+        this.empty = built === 0;
+        // A rebuild can empty the cluster (the layout collapsed to one cell) — that
+        // must also put a currently-revealed pill away.
+        if (this.empty) this.setNear(false);
     }
 
     private button(iconId: string, title: string, onClick: () => void, opts: { selected?: boolean } = {}): HTMLButtonElement {
@@ -236,7 +236,7 @@ export class CellControls {
     }
 
     private readonly onHostMove = (e: PointerEvent): void => {
-        if (this.suspended) return;
+        if (this.suspended || this.empty) return;
         if (this.dragging) return; // captured drag moves sweep the grid — keep the cluster up
         const rect = this.host.getBoundingClientRect();
         this.setNear(nearBottomCenter(e.clientX - rect.left, e.clientY - rect.top, rect.width, rect.height, CELL_CONTROLS_PROXIMITY_PX, this.hostGutters()));
@@ -248,13 +248,13 @@ export class CellControls {
     };
 
     private setNear(near: boolean): void {
+        if (near && this.empty) return;
         if (near === this.near) return;
         this.near = near;
         this.root.style.display = near ? 'flex' : 'none';
     }
 
     destroy(): void {
-        this.glider.stop();
         this.host.removeEventListener('pointermove', this.onHostMove);
         this.host.removeEventListener('pointerleave', this.onHostLeave);
         this.root.remove();

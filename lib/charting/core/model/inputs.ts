@@ -72,6 +72,10 @@ export interface InputSchema {
      *  the dialog's current values — re-evaluated live on every edit. Inputs sharing an
      *  `inline=` row show while ANY member's gate passes. A hidden input keeps its value. */
     when?: InputWhen;
+    /** Part of the instance's static legend name (`Stoch 14 1 3`), not of the live value
+     *  readout. Set on the calculation inputs (lengths, multipliers, the source) and left
+     *  off look-only ones (widths, opacities). See `legendSettingsText()`. */
+    legend?: boolean;
     tooltip?: string;
 }
 

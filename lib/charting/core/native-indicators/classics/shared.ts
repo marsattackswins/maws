@@ -1,4 +1,4 @@
-import type { InputSchema } from '../../model/inputs';
+import type { InputSchema, InputValue } from '../../model/inputs';
 import type { OHLCV } from '../../model/ohlcv';
 import type { FillGradientStop } from '../../model/scene';
 import type { LineStyle } from '../../model/series';
@@ -12,16 +12,30 @@ import { SOURCES } from './math';
 export const SETTINGS = 'Settings';
 export const STYLE = 'Style';
 
+/** The labels of a line-style dropdown; {@link lineStyleOf} reads one back. */
+export const LINE_STYLES = ['Solid', 'Dashed', 'Dotted'] as const;
+
+/** A line-style dropdown read back as the renderer's own `LineStyle`. */
+export function lineStyleOf(inputs: Record<string, InputValue>, key: string, fallback: LineStyle): LineStyle {
+    const raw = inputs[key];
+    const style = typeof raw === 'string' ? raw.toLowerCase() : '';
+    return style === 'solid' || style === 'dashed' || style === 'dotted' ? style : fallback;
+}
+
+// The calculation inputs below carry `legend: true`: they are what the on-chart
+// chip names the instance after (`Stoch 14 1 3`, `EMA 20 Close`). Look-only
+// inputs (widths, opacity, colors) never opt in, so they stay out of the name.
+
 export function lengthInput(defval: number, key = 'length', title = 'Length', max = 5000, tooltip?: string): InputSchema {
-    return { key, title, type: 'int', defval, min: 1, max, step: 1, group: SETTINGS, ...(tooltip != null ? { tooltip } : {}) };
+    return { key, title, type: 'int', defval, min: 1, max, step: 1, group: SETTINGS, legend: true, ...(tooltip != null ? { tooltip } : {}) };
 }
 
 export function intInput(key: string, title: string, defval: number, min = 1, max = 5000, tooltip?: string): InputSchema {
-    return { key, title, type: 'int', defval, min, max, step: 1, group: SETTINGS, ...(tooltip != null ? { tooltip } : {}) };
+    return { key, title, type: 'int', defval, min, max, step: 1, group: SETTINGS, legend: true, ...(tooltip != null ? { tooltip } : {}) };
 }
 
 export function floatInput(key: string, title: string, defval: number, min = 0, max = 1000, step = 0.1, tooltip?: string): InputSchema {
-    return { key, title, type: 'float', defval, min, max, step, group: SETTINGS, ...(tooltip != null ? { tooltip } : {}) };
+    return { key, title, type: 'float', defval, min, max, step, group: SETTINGS, legend: true, ...(tooltip != null ? { tooltip } : {}) };
 }
 
 export function boolInput(key: string, title: string, defval: boolean, group = SETTINGS, tooltip?: string): InputSchema {
@@ -29,11 +43,11 @@ export function boolInput(key: string, title: string, defval: boolean, group = S
 }
 
 export function optionInput(key: string, title: string, defval: string, options: readonly string[], tooltip?: string): InputSchema {
-    return { key, title, type: 'string', defval, options, group: SETTINGS, ...(tooltip != null ? { tooltip } : {}) };
+    return { key, title, type: 'string', defval, options, group: SETTINGS, legend: true, ...(tooltip != null ? { tooltip } : {}) };
 }
 
 export function sourceInput(defval: string = 'Close', key = 'source', title = 'Source', tooltip?: string): InputSchema {
-    return { key, title, type: 'string', defval, options: SOURCES, group: SETTINGS, ...(tooltip != null ? { tooltip } : {}) };
+    return { key, title, type: 'string', defval, options: SOURCES, group: SETTINGS, legend: true, ...(tooltip != null ? { tooltip } : {}) };
 }
 
 export function colorInput(defval: string = INFO, title = 'Color', key = 'color', tooltip?: string): InputSchema {

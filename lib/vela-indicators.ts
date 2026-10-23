@@ -14,19 +14,49 @@
  * change adds only what is new and removes only what is gone.
  */
 import type { Vela } from "@/lib/charting";
-import type { IndicatorInstance } from "@/types";
+import type { IndicatorInstance, PaneNative } from "@/types";
+
+/**
+ * The bridge's per-chart bookkeeping, pinned to the page.
+ *
+ * `next dev` re-evaluates a module when it (or something it imports) changes, and a
+ * rebuilt set of maps — all keyed by a chart instance that outlives the evaluation —
+ * came back EMPTY while the live charts kept their mounted indicators. The next sync
+ * then treated every managed handle as foreign and mounted a second copy beside it,
+ * over and over: charts accumulated duplicate VWAPs and the duplicates were persisted
+ * as if the user had added them. One object per page keeps ownership; in production
+ * the module is evaluated once, so this is a no-op.
+ */
+const bridgeHost = globalThis as typeof globalThis & {
+  __mawsIndicatorBridge?: {
+    managed: WeakMap<Vela, Set<string>>;
+    handleToStudy: WeakMap<Vela, Map<string, string>>;
+    latestStudies: WeakMap<Vela, IndicatorInstance[]>;
+    errorWatch: WeakMap<Vela, { off: () => void; attempts: Map<string, number> }>;
+  };
+};
+// `development` only: a production build evaluates modules once, and tests reset the
+// module registry on purpose (a fresh bridge per case).
+const bridge =
+  (process.env.NODE_ENV === "development" ? bridgeHost.__mawsIndicatorBridge : undefined) ??
+  (bridgeHost.__mawsIndicatorBridge = {
+    managed: new WeakMap<Vela, Set<string>>(),
+    handleToStudy: new WeakMap<Vela, Map<string, string>>(),
+    latestStudies: new WeakMap<Vela, IndicatorInstance[]>(),
+    errorWatch: new WeakMap<Vela, { off: () => void; attempts: Map<string, number> }>(),
+  });
 
 /** Ids this bridge has mounted on a chart, keyed by chart instance. */
-const managed = new WeakMap<Vela, Set<string>>();
+const managed = bridge.managed;
 
 /** Reverse map: Vela handle id → MAWS study id, per chart. */
-const handleToStudy = new WeakMap<Vela, Map<string, string>>();
+const handleToStudy = bridge.handleToStudy;
 
 /** Latest studies handed to each chart — what the error watcher re-runs. */
-const latestStudies = new WeakMap<Vela, IndicatorInstance[]>();
+const latestStudies = bridge.latestStudies;
 
 /** One `indicator:error` watcher per chart, with a bounded per-id retry count. */
-const errorWatch = new WeakMap<Vela, { off: () => void; attempts: Map<string, number> }>();
+const errorWatch = bridge.errorWatch;
 
 const MANAGED_PREFIX = "maws-";
 
@@ -120,7 +150,7 @@ function nativeInputs(study: IndicatorInstance): Record<string, number | string 
     case "stoch":
       return {
         kLength: num("length", 14),
-        kSmoothing: num("kSmoothing", 3),
+        kSmoothing: num("kSmoothing", 1),
         dLength: num("dSmoothing", 3),
       };
     case "atr":
@@ -132,6 +162,8 @@ function nativeInputs(study: IndicatorInstance): Record<string, number | string 
       return {
         diLength: num("period", 14),
         adxLength: num("period", 14),
+        ...line("color", "lineWidth", "#26a69a"),
+        showMidline: s["showMidline"] !== false,
       };
     case "vwap":
       return {
@@ -211,6 +243,9 @@ export function velaInputsToStudySettings(
       break;
     case "adx":
       put("period", num("diLength") ?? num("adxLength"));
+      put("color", str("color"));
+      put("lineWidth", num("lineWidth"));
+      put("showMidline", inputs["showMidline"] as boolean | undefined);
       break;
     case "vwap":
       put("anchorPeriod", str("anchor")?.toLowerCase());
@@ -332,6 +367,65 @@ export function studyIdForHandle(chart: Vela, handleId: string): string | null {
 }
 
 /**
+ * Take over a native this session did not mount.
+ *
+ * A cell restores its persisted indicator ledger BEFORE this bridge runs, so last
+ * session's managed handle is already on the chart under an id nobody tracked. Adding
+ * "the" handle for the study would stack a second identical series on every reload —
+ * adopt the restored one (pushing the store's inputs onto it) instead.
+ */
+function adoptRestored(
+  chart: Vela,
+  nativeType: string,
+  current: Set<string>,
+  study: IndicatorInstance,
+): boolean {
+  const reverse = reverseOf(chart);
+  const orphan = chart
+    .indicators()
+    .find((h) => h.nativeType === nativeType && !current.has(h.id) && !reverse.has(h.id));
+  if (!orphan) return false;
+  current.add(orphan.id);
+  reverse.set(orphan.id, study.id);
+  try {
+    const wanted = nativeInputs(study);
+    const live = orphan.inputValues() as Record<string, unknown>;
+    if (Object.entries(wanted).some(([k, v]) => live[k] !== v)) orphan.setInputs(wanted);
+  } catch {
+    /* handle without the inputs seam — it still carries the study's last settings */
+  }
+  return true;
+}
+
+/**
+ * Collapse the duplicate natives older sessions left behind.
+ *
+ * Charts that hit the reload-duplication bug carry the same study native many times
+ * over, as untracked handles (each is a full-series recompute per frame). A stray
+ * that is an EXACT copy of the handle this bridge owns for that type is removed;
+ * a second copy with different settings is the user's and stays.
+ */
+function pruneStrayDuplicates(chart: Vela): void {
+  const reverse = reverseOf(chart);
+  // A copy: removal splices the live array, and iterating that would skip entries.
+  const handles = [...chart.indicators()];
+  const owned = new Map<string, (typeof handles)[number]>();
+  for (const h of handles) {
+    if (h.nativeType !== undefined && reverse.has(h.id)) owned.set(h.nativeType, h);
+  }
+  for (const h of handles) {
+    const twin = h.nativeType !== undefined ? owned.get(h.nativeType) : undefined;
+    if (!twin || twin.id === h.id) continue;
+    try {
+      if (JSON.stringify(h.inputValues()) !== JSON.stringify(twin.inputValues())) continue;
+      h.remove();
+    } catch {
+      /* already gone */
+    }
+  }
+}
+
+/**
  * Reconcile the chart's MAWS studies with what is mounted:
  * add new scripts, remove scripts whose study disappeared.
  */
@@ -386,12 +480,14 @@ export async function syncVelaIndicators(
       }
       continue;
     }
-    const nativeType = NATIVE_SPEC[study.type];
+    const nativeType = NATIVE_SPEC[study.type]!;
+    // Restored ledger handle for this study? Adopt it rather than duplicating it.
+    if (adoptRestored(chart, nativeType, current, study)) continue;
     current.add(id);
     try {
       // addNativeIndicator mints its own registry id; track the returned
       // handle's id so removal below finds the right instance.
-      const handle = chart.addNativeIndicator(nativeType!, {
+      const handle = chart.addNativeIndicator(nativeType, {
         inputs: nativeInputs(study),
       });
       const actualId = handle?.id ?? id;
@@ -408,6 +504,9 @@ export async function syncVelaIndicators(
     }
   }
 
+  // Heal duplicates carried in from earlier sessions (see `pruneStrayDuplicates`).
+  pruneStrayDuplicates(chart);
+
   // A transient failure (e.g. this sync raced the history load) retries once
   // on the next load completion — a broken script without a reload does not
   // fire `load:end` again, so this is bounded.
@@ -416,6 +515,43 @@ export async function syncVelaIndicators(
       offRetry();
       void syncVelaIndicators(chart, studies);
     });
+  }
+}
+
+/** Replace user-managed native indicators on a live chart with the pane's saved set. */
+export function syncPaneNativeIndicators(chart: Vela, natives: PaneNative[]): void {
+  const existing = chart.indicators().filter(
+    (handle) =>
+      handle.nativeType != null &&
+      handle.nativeType !== "volume" &&
+      !isManagedHandle(chart, handle.id),
+  );
+  const current = existing.map((handle) => ({
+    type: handle.nativeType!,
+    inputs: handle.inputValues(),
+    hidden: !handle.visible,
+  }));
+  if (JSON.stringify(current) === JSON.stringify(natives)) return;
+
+  for (const handle of existing) {
+    try {
+      handle.remove();
+    } catch (error) {
+      console.error(`[vela-indicators] Could not remove native indicator "${handle.nativeType}".`, error);
+    }
+  }
+
+  for (const native of natives) {
+    try {
+      const handle = chart.addNativeIndicator(native.type, { inputs: native.inputs });
+      if (handle.nativeType !== native.type) {
+        console.error(`[vela-indicators] Could not add native indicator "${native.type}".`);
+        continue;
+      }
+      handle.setVisible(!native.hidden);
+    } catch (error) {
+      console.error(`[vela-indicators] Could not add native indicator "${native.type}".`, error);
+    }
   }
 }
 

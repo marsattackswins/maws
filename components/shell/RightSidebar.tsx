@@ -3,6 +3,7 @@
 import { AlertsPanel } from "@/components/alerts/AlertsPanel";
 import { NewsCalendarPanel } from "@/components/calendar/NewsCalendarPanel";
 import { ObjectTree } from "@/components/objects/ObjectTree";
+import { PineScriptsPanel } from "@/components/pine/PineScriptsPanel";
 import { StrategyScreener } from "@/components/maws/StrategyScreener";
 import { useAppStore } from "@/lib/store";
 import type { DockId } from "@/types";
@@ -68,6 +69,11 @@ export function RightSidebar() {
         {effectiveDock === "objects" && (
           <div className="min-h-0 flex-1">
             <ObjectTree />
+          </div>
+        )}
+        {effectiveDock === "scripts" && (
+          <div className="min-h-0 flex-1">
+            <PineScriptsPanel />
           </div>
         )}
       </div>

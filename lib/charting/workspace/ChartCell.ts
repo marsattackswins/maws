@@ -484,8 +484,6 @@ export class ChartCell {
         });
         this.syncStatuslineColors();
         this.cellControls = new CellControls(this.host, {
-            chart: () => this.inner,
-            reset: () => this.resetView(),
             multiCell: () => deps.multiCell(),
             isMaximized: () => deps.isMaximized(id),
             toggleMaximize: () => deps.toggleMaximize(id),
@@ -949,6 +947,30 @@ export class ChartCell {
     setIndicatorValuesVisible(visible: boolean): void {
         this.indicatorValuesOn = visible;
         this.inner?.renderer.set('indicatorValues', visible);
+        this.deps.onStateDirty();
+        this.deps.onStatusPrefsChanged(this.id);
+    }
+
+    /** Host-owned display settings included in chart template snapshots. */
+    templatePrefs(): { watermark: boolean; replayWatermark: boolean; indicatorTitles: boolean; indicatorValues: boolean } {
+        return {
+            watermark: this.watermarkOn,
+            replayWatermark: this.replayWatermarkOn,
+            indicatorTitles: this.indicatorTitlesOn,
+            indicatorValues: this.indicatorValuesOn,
+        };
+    }
+
+    /** Apply a chart template's display settings and persist the resulting cell state. */
+    applyTemplatePrefs(prefs: { watermark: boolean; replayWatermark: boolean; indicatorTitles: boolean; indicatorValues: boolean }): void {
+        this.watermarkOn = prefs.watermark;
+        this.watermark?.setVisible(prefs.watermark);
+        this.replayWatermarkOn = prefs.replayWatermark;
+        this.watermark?.setReplayVisible(prefs.replayWatermark);
+        this.indicatorTitlesOn = prefs.indicatorTitles;
+        this.inner?.renderer.set('indicatorTitles', prefs.indicatorTitles);
+        this.indicatorValuesOn = prefs.indicatorValues;
+        this.inner?.renderer.set('indicatorValues', prefs.indicatorValues);
         this.deps.onStateDirty();
         this.deps.onStatusPrefsChanged(this.id);
     }

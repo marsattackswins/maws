@@ -1,0 +1,573 @@
+
+> maws@0.1.0 test:charting
+> vitest run --root lib/charting
+
+[33m(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.[39m
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.11 [39m[90mC:/Users/PC/Desktop/MAWS/lib/charting[39m
+
+ [31m❯[39m test/multi-chart-subscription.test.ts [2m([22m[2m4 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[33m 342[2mms[22m[39m
+[31m     [31m×[31m two charts subscribe to same symbol/timeframe, both receive updates[39m[32m 19[2mms[22m[39m
+[31m     [31m×[31m destroying chart A does not interrupt chart B[39m[32m 2[2mms[22m[39m
+     [32m✓[39m removing final subscriber releases underlying feed[32m 2[2mms[22m[39m
+     [33m[2m✓[22m[39m repeated subscribe/unsubscribe cycles do not accumulate listeners [33m 315[2mms[22m[39m
+[90mstderr[2m | test/multi-provider-feed.test.ts[2m > [22m[2ma parked load is REPORTED and RELEASABLE (never a silent, leaking wait)[2m > [22m[2mreports the unservable symbol once the provider index settles
+[22m[39m[vela] symbol "NOPE" not yet resolvable — registered providers: [hyperliquid]. Register a provider that serves it.
+
+[90mstderr[2m | test/multi-provider-feed.test.ts[2m > [22m[2ma parked load is REPORTED and RELEASABLE (never a silent, leaking wait)[2m > [22m[2mstill reports once the LAST index settles with nothing serving the symbol
+[22m[39m[vela] symbol "NOPE" not yet resolvable — registered providers: [a]. Register a provider that serves it.
+
+[90mstderr[2m | test/multi-provider-feed.test.ts[2m > [22m[2ma parked load is REPORTED and RELEASABLE (never a silent, leaking wait)[2m > [22m[2mstill reports once the LAST index settles with nothing serving the symbol
+[22m[39m[vela] symbol "NOPE" not yet resolvable — registered providers: [a, b]. Register a provider that serves it.
+
+[90mstderr[2m | test/multi-provider-feed.test.ts[2m > [22m[2ma parked load is REPORTED and RELEASABLE (never a silent, leaking wait)[2m > [22m[2mdestroy() drops the parked wait, so a rebuilt chart leaves nothing behind
+[22m[39m[vela] symbol "NOPE" not yet resolvable — registered providers: [a]. Register a provider that serves it.
+
+ [32m✓[39m test/multi-provider-feed.test.ts [2m([22m[2m50 tests[22m[2m)[22m[33m 1166[2mms[22m[39m
+ [32m✓[39m test/widget-mobile-placement.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 565[2mms[22m[39m
+     [33m[2m✓[22m[39m the menu lists primary actions right after Layout, the others at the end [33m 432[2mms[22m[39m
+ [32m✓[39m test/statusline-replay.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 408[2mms[22m[39m
+     [33m[2m✓[22m[39m shows the replay mode while replaying, then the market status again [33m 368[2mms[22m[39m
+ [32m✓[39m test/date-calendar.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 1024[2mms[22m[39m
+     [33m[2m✓[22m[39m opens on the stored date, with the month and year as switches [33m 613[2mms[22m[39m
+ [32m✓[39m test/workspace-replay.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 413[2mms[22m[39m
+ [32m✓[39m test/scale-labels.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 154[2mms[22m[39m
+ [32m✓[39m test/coinbase-provider.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 201[2mms[22m[39m
+ [32m✓[39m test/native-candle-lod.test.ts [2m([22m[2m20 tests[22m[2m)[22m[32m 95[2mms[22m[39m
+ [32m✓[39m test/pane-management.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 1642[2mms[22m[39m
+ [32m✓[39m test/set-market.test.ts [2m([22m[2m35 tests[22m[2m)[22m[33m 2012[2mms[22m[39m
+ [32m✓[39m test/classic-indicators.test.ts [2m([22m[2m31 tests[22m[2m)[22m[32m 203[2mms[22m[39m
+ [32m✓[39m test/session-shading.test.ts [2m([22m[2m23 tests[22m[2m)[22m[32m 227[2mms[22m[39m
+ [32m✓[39m test/replay.test.ts [2m([22m[2m38 tests[22m[2m)[22m[33m 2630[2mms[22m[39m
+     [33m[2m✓[22m[39m native indicators restart without live data, and live again on stop and on finish [33m 381[2mms[22m[39m
+     [33m[2m✓[22m[39m script alerts stay quiet while replaying, and come back once it ends [33m 522[2mms[22m[39m
+ [32m✓[39m test/caching-data-feed.test.ts [2m([22m[2m25 tests[22m[2m)[22m[32m 140[2mms[22m[39m
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2ma stored-input seed boots WITHOUT computing against unloaded bars (the #149 crash) and applies values + hidden
+[22m[39m[vela] renderer "fake" has no feature "attribution" — set ignored.
+[vela] renderer "fake" has no feature "dialogHost" — set ignored.
+[vela] renderer "fake" does not support getConfig().
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2ma stored-input seed boots WITHOUT computing against unloaded bars (the #149 crash) and applies values + hidden
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2ma stored-input seed boots WITHOUT computing against unloaded bars (the #149 crash) and applies values + hidden
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+ [32m✓[39m test/context-menu-model.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 147[2mms[22m[39m
+[90mstderr[2m | test/chart-cell-timezone.test.ts[2m > [22m[2mChartCell — the exchange time-zone rule[2m > [22m[2mresolves 'exchange' to the symbol's own zone once its metadata lands
+[22m[39m[vela] renderer "zone-fake" has no feature "attribution" — set ignored.
+[vela] renderer "zone-fake" has no feature "dialogHost" — set ignored.
+[vela] renderer "zone-fake" does not support getConfig().
+
+[90mstderr[2m | test/chart-cell-timezone.test.ts[2m > [22m[2mChartCell — the exchange time-zone rule[2m > [22m[2mresolves 'exchange' to the symbol's own zone once its metadata lands
+[22m[39m[vela] renderer "zone-fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2mdehydrate captures the live deltas and hidden flags; defaults collapse to bare types
+[22m[39m[vela] renderer "fake" has no feature "attribution" — set ignored.
+[vela] renderer "fake" has no feature "dialogHost" — set ignored.
+[vela] renderer "fake" does not support getConfig().
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2mdehydrate captures the live deltas and hidden flags; defaults collapse to bare types
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2mdehydrate captures the live deltas and hidden flags; defaults collapse to bare types
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2mdehydrate captures the live deltas and hidden flags; defaults collapse to bare types
+[22m[39m[vela] renderer "fake" does not support getConfig().
+
+[90mstderr[2m | test/chart-cell-timezone.test.ts[2m > [22m[2mChartCell — the exchange time-zone rule[2m > [22m[2mre-resolves when the symbol changes market — and falls back to UTC without metadata
+[22m[39m[vela] renderer "zone-fake" has no feature "attribution" — set ignored.
+[vela] renderer "zone-fake" has no feature "dialogHost" — set ignored.
+[vela] renderer "zone-fake" does not support getConfig().
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2mrehydrate converges a DRIFTED chart back to the document
+[22m[39m[vela] renderer "fake" has no feature "attribution" — set ignored.
+[vela] renderer "fake" has no feature "dialogHost" — set ignored.
+[vela] renderer "fake" does not support getConfig().
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2mrehydrate converges a DRIFTED chart back to the document
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2mrehydrate converges a DRIFTED chart back to the document
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-timezone.test.ts[2m > [22m[2mChartCell — the exchange time-zone rule[2m > [22m[2mre-resolves when the symbol changes market — and falls back to UTC without metadata
+[22m[39m[vela] renderer "zone-fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-timezone.test.ts[2m > [22m[2mChartCell — the exchange time-zone rule[2m > [22m[2mre-resolves when the symbol changes market — and falls back to UTC without metadata
+[22m[39m[vela] renderer "zone-fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-timezone.test.ts[2m > [22m[2mChartCell — the exchange time-zone rule[2m > [22m[2mre-resolves when the symbol changes market — and falls back to UTC without metadata
+[22m[39m[vela] renderer "zone-fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-timezone.test.ts[2m > [22m[2mChartCell — the exchange time-zone rule[2m > [22m[2mre-resolves when the symbol changes market — and falls back to UTC without metadata
+[22m[39m[vela] renderer "zone-fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-timezone.test.ts[2m > [22m[2mChartCell — the exchange time-zone rule[2m > [22m[2mre-resolves when the symbol changes market — and falls back to UTC without metadata
+[22m[39m[vela] renderer "zone-fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-timezone.test.ts[2m > [22m[2mChartCell — the exchange time-zone rule[2m > [22m[2mre-resolves when the symbol changes market — and falls back to UTC without metadata
+[22m[39m[vela] renderer "zone-fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2ma LEGACY bare-string ledger resets to declaration defaults, visible, without duplicating
+[22m[39m[vela] renderer "fake" has no feature "attribution" — set ignored.
+[vela] renderer "fake" has no feature "dialogHost" — set ignored.
+[vela] renderer "fake" does not support getConfig().
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2ma LEGACY bare-string ledger resets to declaration defaults, visible, without duplicating
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2ma LEGACY bare-string ledger resets to declaration defaults, visible, without duplicating
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-timezone.test.ts[2m > [22m[2mChartCell — the exchange time-zone rule[2m > [22m[2ma fixed workspace zone ignores the market zone; switching to the rule adopts it
+[22m[39m[vela] renderer "zone-fake" has no feature "attribution" — set ignored.
+[vela] renderer "zone-fake" has no feature "dialogHost" — set ignored.
+[vela] renderer "zone-fake" does not support getConfig().
+
+[90mstderr[2m | test/chart-cell-timezone.test.ts[2m > [22m[2mChartCell — the exchange time-zone rule[2m > [22m[2ma fixed workspace zone ignores the market zone; switching to the rule adopts it
+[22m[39m[vela] renderer "zone-fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2ma native RESTORED HIDDEN still mounts a dimmed legend row (the unhide affordance must exist)
+[22m[39m[vela] renderer "fake" has no feature "attribution" — set ignored.
+[vela] renderer "fake" has no feature "dialogHost" — set ignored.
+[vela] renderer "fake" does not support getConfig().
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2ma native RESTORED HIDDEN still mounts a dimmed legend row (the unhide affordance must exist)
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2ma native RESTORED HIDDEN still mounts a dimmed legend row (the unhide affordance must exist)
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-timezone.test.ts[2m > [22m[2mChartCell — the exchange time-zone rule[2m > [22m[2mthe chart-settings Time zone row is the workspace picker: Exchange listed, the pick stays a CHOICE
+[22m[39m[vela] renderer "zone-fake" has no feature "attribution" — set ignored.
+[vela] renderer "zone-fake" has no feature "dialogHost" — set ignored.
+[vela] renderer "zone-fake" does not support getConfig().
+
+[90mstderr[2m | test/chart-cell-timezone.test.ts[2m > [22m[2mChartCell — the exchange time-zone rule[2m > [22m[2mthe chart-settings Time zone row is the workspace picker: Exchange listed, the pick stays a CHOICE
+[22m[39m[vela] renderer "zone-fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2mun-hiding a RESTORED-HIDDEN native STARTS it (never-started instances must not stay blank)
+[22m[39m[vela] renderer "fake" has no feature "attribution" — set ignored.
+[vela] renderer "fake" has no feature "dialogHost" — set ignored.
+[vela] renderer "fake" does not support getConfig().
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2mun-hiding a RESTORED-HIDDEN native STARTS it (never-started instances must not stay blank)
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2mun-hiding a RESTORED-HIDDEN native STARTS it (never-started instances must not stay blank)
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+ [32m✓[39m test/binance-provider.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 163[2mms[22m[39m
+[90mstderr[2m | test/chart-cell-timezone.test.ts[2m > [22m[2mChartCell — the exchange time-zone rule[2m > [22m[2mapplyTimezone skips the write when the renderer already holds the resolved zone
+[22m[39m[vela] renderer "zone-fake" has no feature "attribution" — set ignored.
+[vela] renderer "zone-fake" has no feature "dialogHost" — set ignored.
+[vela] renderer "zone-fake" does not support getConfig().
+
+[90mstderr[2m | test/chart-cell-timezone.test.ts[2m > [22m[2mChartCell — the exchange time-zone rule[2m > [22m[2mapplyTimezone skips the write when the renderer already holds the resolved zone
+[22m[39m[vela] renderer "zone-fake" has no feature "sessionZones" — set ignored.
+
+ [32m✓[39m test/chart-cell-timezone.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 793[2mms[22m[39m
+     [33m[2m✓[22m[39m resolves 'exchange' to the symbol's own zone once its metadata lands [33m 390[2mms[22m[39m
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2ma price style changed THROUGH the config (applyConfig / template import) reaches the workspace chrome
+[22m[39m[vela] renderer "fake" has no feature "attribution" — set ignored.
+[vela] renderer "fake" has no feature "dialogHost" — set ignored.
+[vela] renderer "fake" does not support getConfig().
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2ma price style changed THROUGH the config (applyConfig / template import) reaches the workspace chrome
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2ma price style changed THROUGH the config (applyConfig / template import) reaches the workspace chrome
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2ma price style changed THROUGH the config (applyConfig / template import) reaches the workspace chrome
+[22m[39m[vela] renderer "fake" does not support getConfig().
+[vela] renderer "fake" does not support getConfig().
+[vela] renderer "fake" does not support getConfig().
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2ma config document marks the cell state dirty (the save trigger for settings-dialog edits)
+[22m[39m[vela] renderer "fake" has no feature "attribution" — set ignored.
+[vela] renderer "fake" has no feature "dialogHost" — set ignored.
+[vela] renderer "fake" does not support getConfig().
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2ma config document marks the cell state dirty (the save trigger for settings-dialog edits)
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2ma config document marks the cell state dirty (the save trigger for settings-dialog edits)
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2ma config document marks the cell state dirty (the save trigger for settings-dialog edits)
+[22m[39m[vela] renderer "fake" does not support getConfig().
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2mthe legend eye marks the cell state dirty (the save trigger for visibility)
+[22m[39m[vela] renderer "fake" has no feature "attribution" — set ignored.
+[vela] renderer "fake" has no feature "dialogHost" — set ignored.
+[vela] renderer "fake" does not support getConfig().
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2mthe legend eye marks the cell state dirty (the save trigger for visibility)
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell native persistence round-trip (#146/#149)[2m > [22m[2mthe legend eye marks the cell state dirty (the save trigger for visibility)
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell external indicators keep their id (ctx.addIndicator({ id }) + undo/redo)[2m > [22m[2ma host id is honored on the chart, and undo/redo re-add the indicator under the SAME id
+[22m[39m[vela] renderer "fake" has no feature "attribution" — set ignored.
+[vela] renderer "fake" has no feature "dialogHost" — set ignored.
+[vela] renderer "fake" does not support getConfig().
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell external indicators keep their id (ctx.addIndicator({ id }) + undo/redo)[2m > [22m[2ma host id is honored on the chart, and undo/redo re-add the indicator under the SAME id
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell external indicators keep their id (ctx.addIndicator({ id }) + undo/redo)[2m > [22m[2ma host id is honored on the chart, and undo/redo re-add the indicator under the SAME id
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell external indicators keep their id (ctx.addIndicator({ id }) + undo/redo)[2m > [22m[2mwithout a host id the minted id is recorded too — a resurrection keeps it
+[22m[39m[vela] renderer "fake" has no feature "attribution" — set ignored.
+[vela] renderer "fake" has no feature "dialogHost" — set ignored.
+[vela] renderer "fake" does not support getConfig().
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell external indicators keep their id (ctx.addIndicator({ id }) + undo/redo)[2m > [22m[2mwithout a host id the minted id is recorded too — a resurrection keeps it
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell external indicators keep their id (ctx.addIndicator({ id }) + undo/redo)[2m > [22m[2mwithout a host id the minted id is recorded too — a resurrection keeps it
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell symbol metadata — the session verdict does not wait for the bars[2m > [22m[2mflips the session toggle while the new market is still loading, and re-probes nothing
+[22m[39m[vela] renderer "fake" has no feature "attribution" — set ignored.
+[vela] renderer "fake" has no feature "dialogHost" — set ignored.
+[vela] renderer "fake" does not support getConfig().
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell symbol metadata — the session verdict does not wait for the bars[2m > [22m[2mflips the session toggle while the new market is still loading, and re-probes nothing
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell symbol metadata — the session verdict does not wait for the bars[2m > [22m[2mflips the session toggle while the new market is still loading, and re-probes nothing
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell symbol metadata — the session verdict does not wait for the bars[2m > [22m[2mflips the session toggle while the new market is still loading, and re-probes nothing
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell symbol metadata — the session verdict does not wait for the bars[2m > [22m[2mflips the session toggle while the new market is still loading, and re-probes nothing
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell symbol metadata — the session verdict does not wait for the bars[2m > [22m[2mdrops a verdict that lands after the cell moved on
+[22m[39m[vela] renderer "fake" has no feature "attribution" — set ignored.
+[vela] renderer "fake" has no feature "dialogHost" — set ignored.
+[vela] renderer "fake" does not support getConfig().
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell symbol metadata — the session verdict does not wait for the bars[2m > [22m[2mdrops a verdict that lands after the cell moved on
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell symbol metadata — the session verdict does not wait for the bars[2m > [22m[2mdrops a verdict that lands after the cell moved on
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell symbol metadata — the session verdict does not wait for the bars[2m > [22m[2mdrops a verdict that lands after the cell moved on
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+ [32m✓[39m test/widget-core.test.ts [2m([22m[2m55 tests[22m[2m)[22m[32m 182[2mms[22m[39m
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell indicator picker library[2m > [22m[2mfiles the built-in indicators under "Built-in", never under the product name
+[22m[39m[vela] renderer "fake" has no feature "attribution" — set ignored.
+[vela] renderer "fake" has no feature "dialogHost" — set ignored.
+[vela] renderer "fake" does not support getConfig().
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell indicator picker library[2m > [22m[2mfiles the built-in indicators under "Built-in", never under the product name
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+[90mstderr[2m | test/chart-cell-persistence.test.ts[2m > [22m[2mChartCell indicator picker library[2m > [22m[2mfiles the built-in indicators under "Built-in", never under the product name
+[22m[39m[vela] renderer "fake" has no feature "sessionZones" — set ignored.
+
+ [32m✓[39m test/hyperliquid-provider.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 143[2mms[22m[39m
+ [32m✓[39m test/chart-cell-persistence.test.ts [2m([22m[2m15 tests[22m[2m)[22m[33m 1577[2mms[22m[39m
+     [33m[2m✓[22m[39m a stored-input seed boots WITHOUT computing against unloaded bars (the #149 crash) and applies values + hidden [33m 314[2mms[22m[39m
+ [32m✓[39m test/mark-popover-toggle.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 311[2mms[22m[39m
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+ [32m✓[39m test/workspace-dock-strip.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 2472[2mms[22m[39m
+     [33m[2m✓[22m[39m sits between the chart row and the bottom bar, in docking order [33m 1557[2mms[22m[39m
+     [33m[2m✓[22m[39m the undock removes only that strip, and is a no-op once the element moved elsewhere [33m 524[2mms[22m[39m
+     [33m[2m✓[22m[39m still docks above where the bottom bar would be when the shell has none [33m 383[2mms[22m[39m
+ [32m✓[39m test/market-status.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 78[2mms[22m[39m
+ [32m✓[39m test/drawings-controller.test.ts [2m([22m[2m47 tests[22m[2m)[22m[32m 72[2mms[22m[39m
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+ [32m✓[39m test/native-chart-config.test.ts [2m([22m[2m44 tests[22m[2m)[22m[32m 81[2mms[22m[39m
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+ [32m✓[39m test/pane-controls.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 209[2mms[22m[39m
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+ [32m✓[39m test/drawings-interaction.test.ts [2m([22m[2m58 tests[22m[2m)[22m[32m 62[2mms[22m[39m
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+ [32m✓[39m test/native-axis-bundle.test.ts [2m([22m[2m23 tests[22m[2m)[22m[32m 83[2mms[22m[39m
+ [32m✓[39m test/workspace-destroy-flush.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 4457[2mms[22m[39m
+     [33m[2m✓[22m[39m the host is told about an edit made just before destroy, not left to lose it [33m 1631[2mms[22m[39m
+     [33m[2m✓[22m[39m a teardown with nothing pending stays quiet [33m 549[2mms[22m[39m
+     [33m[2m✓[22m[39m opening a workspace and leaving without touching it reports no edit [33m 436[2mms[22m[39m
+     [33m[2m✓[22m[39m the state a host reads while tearing down still describes what was on screen [33m 335[2mms[22m[39m
+     [33m[2m✓[22m[39m a host that tears down from its own save handler does not recurse [33m 406[2mms[22m[39m
+     [33m[2m✓[22m[39m what gets stored is what the host was told, even if a handler keeps editing [33m 387[2mms[22m[39m
+     [33m[2m✓[22m[39m a page unload saves the pending edit once, and a teardown after it adds nothing [33m 322[2mms[22m[39m
+     [33m[2m✓[22m[39m a host-managed workspace flushes its last edit on unload without its own storage adapter [33m 378[2mms[22m[39m
+ [32m✓[39m test/native-ticks.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 59[2mms[22m[39m
+ [32m✓[39m test/widget-mobile-bar.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 200[2mms[22m[39m
+ [32m✓[39m test/icons.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 64[2mms[22m[39m
+ [32m✓[39m test/workspace-core.test.ts [2m([22m[2m40 tests[22m[2m)[22m[32m 48[2mms[22m[39m
+ [32m✓[39m test/status-title.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 46[2mms[22m[39m
+ [32m✓[39m test/object-tree-model.test.ts [2m([22m[2m41 tests[22m[2m)[22m[32m 37[2mms[22m[39m
+ [32m✓[39m test/watermark-replay.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 148[2mms[22m[39m
+ [32m✓[39m test/sanitize-html.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 111[2mms[22m[39m
+ [32m✓[39m test/side-panel-dock.test.ts [2m([22m[2m22 tests[22m[2m)[22m[32m 39[2mms[22m[39m
+ [32m✓[39m test/drawings-model.test.ts [2m([22m[2m30 tests[22m[2m)[22m[32m 37[2mms[22m[39m
+ [32m✓[39m test/mark-lane-layout.test.ts [2m([22m[2m25 tests[22m[2m)[22m[32m 47[2mms[22m[39m
+[90mstderr[2m | test/orchestrator.test.ts[2m > [22m[2mVela.runIndicator — execute-and-inject with structured failure[2m > [22m[2mresolves ok:false with the error and removes the failed indicator again
+[22m[39m[vela] indicator "ind-2" failed: boom: bad script
+
+ [32m✓[39m test/input-touch.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 43[2mms[22m[39m
+ [32m✓[39m test/color-picker.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 36[2mms[22m[39m
+ [32m✓[39m test/native-animation-config.test.ts [2m([22m[2m19 tests[22m[2m)[22m[32m 39[2mms[22m[39m
+ [32m✓[39m test/coinbase-request-gate.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 55[2mms[22m[39m
+ [32m✓[39m test/settings-visibility.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 37[2mms[22m[39m
+ [32m✓[39m test/drawings-measure.test.ts [2m([22m[2m23 tests[22m[2m)[22m[32m 40[2mms[22m[39m
+ [32m✓[39m test/drawings-pitchfork-variants.test.ts [2m([22m[2m21 tests[22m[2m)[22m[32m 25[2mms[22m[39m
+ [32m✓[39m test/drawings-fib.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 28[2mms[22m[39m
+[90mstderr[2m | test/orchestrator.test.ts[2m > [22m[2mchart.runScript — execute and receive the run[2m > [22m[2ma failing script resolves ok:false and leaves no dead legend row
+[22m[39m[vela] indicator "ind-1" failed: compile blew up
+
+ [32m✓[39m test/trade-markers.test.ts [2m([22m[2m21 tests[22m[2m)[22m[32m 39[2mms[22m[39m
+ [32m✓[39m test/series-display.test.ts [2m([22m[2m19 tests[22m[2m)[22m[32m 40[2mms[22m[39m
+ [32m✓[39m test/chart-type-registry.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 26[2mms[22m[39m
+ [32m✓[39m test/drawings-lines.test.ts [2m([22m[2m24 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32m✓[39m test/cell-controls.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 30[2mms[22m[39m
+ [32m✓[39m test/data-window-readout.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 29[2mms[22m[39m
+ [32m✓[39m test/renderer-defaults.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 30[2mms[22m[39m
+ [32m✓[39m test/drawings-mach.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 27[2mms[22m[39m
+ [32m✓[39m test/drawing-series-service.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 26[2mms[22m[39m
+ [32m✓[39m test/native-live-bar-ease.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 26[2mms[22m[39m
+ [32m✓[39m test/marks-paint.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 27[2mms[22m[39m
+ [32m✓[39m test/bar-store-retention.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+ [32m✓[39m test/drawings-painter.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 30[2mms[22m[39m
+ [32m✓[39m test/drawings-frvp.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 29[2mms[22m[39m
+ [32m✓[39m test/floating-layer-host.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 35[2mms[22m[39m
+ [32m✓[39m test/marks-controller.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32m✓[39m test/renderer-layers.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 31[2mms[22m[39m
+ [32m✓[39m test/workspace-persist.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32m✓[39m test/native-volume-layers.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 26[2mms[22m[39m
+ [32m✓[39m test/drawings-shapes-geo.test.ts [2m([22m[2m22 tests[22m[2m)[22m[32m 29[2mms[22m[39m
+ [32m✓[39m test/drawings-shapes.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 25[2mms[22m[39m
+ [32m✓[39m test/native-coordinate-system.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 28[2mms[22m[39m
+ [32m✓[39m test/orchestrator.test.ts [2m([22m[2m100 tests[22m[2m)[22m[33m 13193[2mms[22m[39m
+     [33m[2m✓[22m[39m a hidden indicator does not re-run on viewport changes (resource suspension); the legend eye toggles it [33m 416[2mms[22m[39m
+     [33m[2m✓[22m[39m on viewport change, re-runs ONLY visible-range-dependent scripts (debounced), passing the new range [33m 364[2mms[22m[39m
+     [33m[2m✓[22m[39m coalesces a burst of viewport events into a single re-run [33m 351[2mms[22m[39m
+     [33m[2m✓[22m[39m very deep charts: a first chunk on screen, then flat 10k steps, remainder-bounded [33m 988[2mms[22m[39m
+     [33m[2m✓[22m[39m strategy trade executions ride the model into mounts, value patches and inspect() [33m 341[2mms[22m[39m
+     [33m[2m✓[22m[39m a data-engine type starts on entry, pushes through its channels, suspends/resumes, stops at destroy [33m 472[2mms[22m[39m
+     [33m[2m✓[22m[39m a new bar is "bar" and is never throttled away; forming-bar ticks collapse [33m 319[2mms[22m[39m
+     [33m[2m✓[22m[39m stops the previous live session and streams the new script under the same id [33m 338[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps input values the new script still declares, drops the rest, seeds new ones with their defaults [33m 329[2mms[22m[39m
+     [33m[2m✓[22m[39m is a no-op for the same source and for a native indicator [33m 323[2mms[22m[39m
+ [32m✓[39m test/native-candle-override.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 25[2mms[22m[39m
+ [32m✓[39m test/drawing-geometry.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32m✓[39m test/native-wheel-anchor.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32m✓[39m test/ui-form-primitives.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 22[2mms[22m[39m
+ [32m✓[39m test/countdown-clock.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 28[2mms[22m[39m
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+ [32m✓[39m test/crosshair-override.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 62[2mms[22m[39m
+ [32m✓[39m test/tokens.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 21[2mms[22m[39m
+ [32m✓[39m test/drawings-vwap.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 25[2mms[22m[39m
+ [32m✓[39m test/drawings-annotations.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32m✓[39m test/ui-keymap.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 23[2mms[22m[39m
+ [32m✓[39m test/topbar-composition.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32m✓[39m test/rate-gate.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 26[2mms[22m[39m
+ [32m✓[39m test/drawing-scene-labels.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 27[2mms[22m[39m
+ [32m✓[39m test/native-pane-scale-modes.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m test/native-pane-resize.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 25[2mms[22m[39m
+ [32m✓[39m test/drawings-regression.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+ [32m✓[39m test/level-palette.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+ [32m✓[39m test/drawings-fib-10a.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 21[2mms[22m[39m
+ [32m✓[39m test/drawings-channels.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 21[2mms[22m[39m
+ [32m✓[39m test/statusline-model.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+ [32m✓[39m test/input-right-cancel.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+ [32m✓[39m test/drawings-magnifier.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 21[2mms[22m[39m
+ [32m✓[39m test/drawings-callout.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m test/native-manual-scale.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32m✓[39m test/native-depth-change.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 26[2mms[22m[39m
+ [32m✓[39m test/marks-state.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m test/input-dblclick-drawing.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+ [32m✓[39m test/drawings-fib-10b.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 22[2mms[22m[39m
+ [32m✓[39m test/anchor-offset.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m test/vpvr-profile.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m test/native-barcolor-candles.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32m✓[39m test/legend-callouts.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+ [32m✓[39m test/drawer-gestures.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32m✓[39m test/drawings-patterns.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m test/native-anim-settle.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+ [32m✓[39m test/drawings-dedekind.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m test/drawing-extend-autoscale.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32m✓[39m test/drawings-gann.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m test/layer-stacking.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m test/native-canvas-device-grid.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m test/table-overlay-plan.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m test/native-reframe-zoom.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32m✓[39m test/inputs-ui-tabs.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m test/drawings-harmonics.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m test/native-gl-batch.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m test/heikin-ashi.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m test/htf.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m test/native-zorder.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m test/drawings-stamps.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m test/native-screenshot.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m test/scene-graph-scales.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m test/color-literals.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 56[2mms[22m[39m
+ [32m✓[39m test/symbol-groups.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m test/label-nofill.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m test/watermark-price-pane.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m test/workspace-screenshot.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m test/drawings-gann-square.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m test/attribution-mark.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m test/ui-field.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m test/date-picker.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m test/native-scheduler.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m test/widget-glider.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m test/native-animator.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m test/drawings-keys.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m test/drawings-popup-multi.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m test/tool-shortcuts.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m test/force-overlay-scale.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m test/state-persistence.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m test/inputs-ui-time.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m test/symbol-base.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m test/candle-snap-y.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m test/drawings-history.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m test/drawings-measure-overlay.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m test/autoscale-margins.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m test/drawings-effective-color.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m test/visible-range-preset.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m test/native-baseline-level.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m test/inputs-when.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m test/indicator-drawing-slices.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m test/chrome-separators.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m test/layout-mode.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m test/inputs-ui-name.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m test/native-hold-view.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m test/native-price-style.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m test/native-prepend-anchor.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m test/multi-chart-subscription.test.ts[2m > [22mMulti-chart subscription independence[2m > [22mtwo charts subscribe to same symbol/timeframe, both receive updates
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m test/multi-chart-subscription.test.ts:[2m61:51[22m[39m
+    [90m 59|[39m
+    [90m 60|[39m         [90m// Verify feed sees two independent subscriptions[39m
+    [90m 61|[39m         [34mexpect[39m(mockFeed[33m.[39mactiveSubscriptions[33m.[39msize)[33m.[39m[34mtoBe[39m([34m2[39m)[33m;[39m
+    [90m   |[39m                                                   [31m^[39m
+    [90m 62|[39m
+    [90m 63|[39m         [90m// Each has its own subscription entry[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m test/multi-chart-subscription.test.ts[2m > [22mMulti-chart subscription independence[2m > [22mdestroying chart A does not interrupt chart B
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m test/multi-chart-subscription.test.ts:[2m76:51[22m[39m
+    [90m 74|[39m         [35mconst[39m unsubB [33m=[39m mockFeed[33m.[39m[34msubscribe[39m([32m'ETHUSDT'[39m[33m,[39m [32m'300'[39m[33m,[39m () [33m=>[39m {})[33m;[39m
+    [90m 75|[39m
+    [90m 76|[39m         [34mexpect[39m(mockFeed[33m.[39mactiveSubscriptions[33m.[39msize)[33m.[39m[34mtoBe[39m([34m2[39m)[33m;[39m
+    [90m   |[39m                                                   [31m^[39m
+    [90m 77|[39m
+    [90m 78|[39m         [90m// Destroy A (call its unsubscribe)[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m156 passed[39m[22m[90m (157)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m1914 passed[39m[22m[90m (1916)[39m
+[2m   Start at [22m 00:15:20
+[2m   Duration [22m 30.87s[2m (transform 65.35s, setup 0ms, import 139.70s, tests 38.53s, environment 66.28s)[22m
+

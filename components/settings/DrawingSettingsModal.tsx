@@ -373,7 +373,10 @@ export function DrawingSettingsModal() {
 
   if (!target || !drawing || !draft || !pane) return null;
 
-  const title = DRAW_LABEL[drawing.tool] ?? drawing.tool;
+  const title =
+    drawing.tool === "position"
+      ? "Long/Short Position"
+      : DRAW_LABEL[drawing.tool] ?? drawing.tool;
   const positionSide: "long" | "short" | null = isPositionTool(drawing.tool)
     ? drawing.tool
     : null;

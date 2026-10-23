@@ -1,14 +1,13 @@
 /**
  * Vela's LAYOUT PICKER, mounted on a MAWS shell trigger.
  *
- * The panel itself is Vela's (`lib/charting/widget/layout-picker`) — the 4×4 grid
- * canvas with hover preview, the registered presets the canvas cannot express, and the
- * SYNC switches. MAWS supplies the trigger and the live state:
+ * The panel itself is Vela's (`lib/charting/widget/layout-picker`), but MAWS trims its
+ * canvas to a 2×2 ZONE grid: exactly four squares — 1 chart, 2 side by side, 2 stacked,
+ * 4 charts — and no preset rows. Nothing above four panes is offered.
  *
  *  - layout picks route through the STORE (`applyLayout`) so `layoutCount`/`orientation`
  *    stay the single source of truth and the workspace bridge applies one `setLayout`.
- *    Canvas rectangles map onto the closest registered MAWS template (see
- *    `mawsLayoutTargetForGrid`); catalog presets map by id.
+ *    Canvas rectangles map onto the closest registered MAWS template.
  *  - the SYNC switches read/write the store's `layoutSync` (persisted), with MAWS's
  *    `time` + `dateRange` exposed as one Vela `viewport` link — they move together.
  *
@@ -17,7 +16,8 @@
  */
 
 import { LayoutPicker } from "@/lib/charting";
-import { layouts, layoutShape, type VelaWorkspace } from "@/lib/charting/workspace";
+import { MAX_LAYOUT_PANES } from "@/lib/layouts";
+import { layoutShape, type VelaWorkspace } from "@/lib/charting/workspace";
 import {
   mawsLayoutTargetForGrid,
   mawsLayoutTargetForId,
@@ -62,6 +62,9 @@ export function velaLayoutSyncToggle(layoutSync: LayoutSync, id: string): Partia
   return {};
 }
 
+/** Square canvas whose area is the pane budget: 4 panes → 2×2 zones. */
+const ZONE_GRID = Math.ceil(Math.sqrt(MAX_LAYOUT_PANES));
+
 /** Mount the picker on `trigger`; returns the disposer that tears it down. */
 export function mountVelaLayoutPicker(opts: VelaLayoutPickerOptions): () => void {
   const { ws, trigger } = opts;
@@ -69,10 +72,11 @@ export function mountVelaLayoutPicker(opts: VelaLayoutPickerOptions): () => void
     trigger,
     host: ws.root,
     shape: () => layoutShape(ws.layout),
-    presets: () =>
-      layouts()
-        .filter((l) => layoutShape(l) === null)
-        .map((l) => ({ id: l.id, label: l.label, checked: l.id === ws.layout.id })),
+    // Four zones only: a 2×2 canvas and no preset rows, so there is no fifth
+    // (or ninth, sixteenth) option to pick.
+    gridSize: ZONE_GRID,
+    maxCells: MAX_LAYOUT_PANES,
+    presets: () => [],
     onSelectGrid: (rows, cols) => opts.applyLayout(mawsLayoutTargetForGrid(rows, cols)),
     onSelectPreset: (id) => {
       const target = mawsLayoutTargetForId(id);

@@ -254,10 +254,10 @@ const CSS = `
     opacity: 1;
 }
 .vela-sp-star[data-on="1"] {
-    color: #e5a00d;
+    color: #50d2c1;
 }
 .vela-sp-star:hover {
-    color: #ffd166;
+    color: #80e8db;
 }
 
 .vela-sp-row[data-member] { padding-left: 34px; }
@@ -399,7 +399,7 @@ export class SymbolPicker {
                     fav.toggleFavorite(s.ticker, s);
                     const btn = target.closest<HTMLElement>('.vela-sp-star')!;
                     const nowFav = fav.isFavorite(s.ticker);
-                    btn.replaceChildren(iconEl(nowFav ? 'star-filled' : 'star', this.list.ownerDocument));
+                    btn.replaceChildren(iconEl(nowFav ? 'diamond-filled' : 'diamond', this.list.ownerDocument));
                     if (nowFav) btn.dataset.on = '1';
                     else delete btn.dataset.on;
                 }
@@ -621,7 +621,7 @@ export class SymbolPicker {
             const star = doc.createElement('button');
             star.className = 'vela-sp-star';
             const isFav = fav.isFavorite(s.ticker);
-            star.appendChild(iconEl(isFav ? 'star-filled' : 'star', doc));
+            star.appendChild(iconEl(isFav ? 'diamond-filled' : 'diamond', doc));
             if (isFav) star.dataset.on = '1';
             star.title = isFav ? 'Remove from Wishlist' : 'Add to Wishlist';
             row.appendChild(star);

@@ -9,21 +9,19 @@ import {
   mawsWorkspaceLayoutId,
   mawsWorkspaceLayouts,
 } from "../vela-workspace-layouts";
-import { layoutTemplate } from "@/lib/layouts";
+import { layoutTemplate, MAX_LAYOUT_PANES } from "@/lib/layouts";
 // Deep import (not the workspace barrel): the layouts registry is pure, while the
 // barrel pulls the full workspace shell the jest suite stubs out.
 import { layoutDefinition, registerBuiltinLayouts, registerLayout } from "@/lib/charting/workspace/layouts";
 import type { LayoutDefinition } from "@/lib/charting/workspace";
 
 describe("mawsWorkspaceLayoutId", () => {
-  it('maps every count to its "-h" id; only 2 and 6 get "-v" variants', () => {
+  it('maps every count to its "-h" id; only 2 gets a "-v" variant', () => {
     expect(mawsWorkspaceLayoutId(1, "h")).toBe("1-h");
-    expect(mawsWorkspaceLayoutId(12, "h")).toBe("12-h");
+    expect(mawsWorkspaceLayoutId(4, "h")).toBe("4-h");
     expect(mawsWorkspaceLayoutId(2, "v")).toBe("2-v");
-    expect(mawsWorkspaceLayoutId(6, "v")).toBe("6-v");
     // Counts without an orientation branch pin to -h (geometry is identical).
     expect(mawsWorkspaceLayoutId(3, "v")).toBe("3-h");
-    expect(mawsWorkspaceLayoutId(8, "v")).toBe("8-h");
   });
 });
 
@@ -54,8 +52,16 @@ describe("areasForTemplate", () => {
 });
 
 describe("buildMawsWorkspaceLayout", () => {
+  it("registers nothing above the pane cap", () => {
+    const ids = mawsWorkspaceLayouts().map((d) => d.id);
+    expect(ids).toEqual(["1-h", "2-h", "2-v", "3-h", "4-h"]);
+    for (const def of mawsWorkspaceLayouts()) {
+      expect(def.cells.length).toBeLessThanOrEqual(MAX_LAYOUT_PANES);
+    }
+  });
+
   it("produces a valid LayoutDefinition per template (cells match the template)", () => {
-    const asymmetric = ["3-h", "5-h", "7-h", "11-h"];
+    const asymmetric = ["3-h"];
     for (const def of mawsWorkspaceLayouts()) {
       const d = def as LayoutDefinition;
       const count = Number(d.id.split("-")[0]) as Parameters<typeof layoutTemplate>[0];
@@ -85,25 +91,32 @@ describe("mawsLayoutTargetForGrid (Vela picker canvas → MAWS layout)", () => {
     expect(mawsLayoutTargetForGrid(1, 2)).toEqual({ count: 2, orientation: "h" });
     expect(mawsLayoutTargetForGrid(2, 1)).toEqual({ count: 2, orientation: "v" });
     expect(mawsLayoutTargetForGrid(2, 2)).toEqual({ count: 4, orientation: "h" });
-    expect(mawsLayoutTargetForGrid(2, 3)).toEqual({ count: 6, orientation: "h" });
-    expect(mawsLayoutTargetForGrid(3, 2)).toEqual({ count: 6, orientation: "v" });
-    expect(mawsLayoutTargetForGrid(2, 4)).toEqual({ count: 8, orientation: "h" });
-    expect(mawsLayoutTargetForGrid(3, 3)).toEqual({ count: 9, orientation: "h" });
-    expect(mawsLayoutTargetForGrid(3, 4)).toEqual({ count: 12, orientation: "h" });
   });
 
-  it("snaps unmapped rectangles to the densest representable count", () => {
+  it("snaps unmapped rectangles to the densest count inside the cap", () => {
     expect(mawsLayoutTargetForGrid(1, 3)).toEqual({ count: 3, orientation: "h" });
     expect(mawsLayoutTargetForGrid(3, 1)).toEqual({ count: 3, orientation: "h" });
     expect(mawsLayoutTargetForGrid(1, 4)).toEqual({ count: 4, orientation: "h" });
-    expect(mawsLayoutTargetForGrid(4, 2)).toEqual({ count: 8, orientation: "h" });
-    expect(mawsLayoutTargetForGrid(4, 4)).toEqual({ count: 12, orientation: "h" });
+  });
+
+  it("never exceeds the pane cap, however large the rectangle", () => {
+    expect(mawsLayoutTargetForGrid(2, 3)).toEqual({ count: 4, orientation: "h" });
+    expect(mawsLayoutTargetForGrid(3, 2)).toEqual({ count: 4, orientation: "h" });
+    expect(mawsLayoutTargetForGrid(2, 4)).toEqual({ count: 4, orientation: "h" });
+    expect(mawsLayoutTargetForGrid(3, 3)).toEqual({ count: 4, orientation: "h" });
+    expect(mawsLayoutTargetForGrid(3, 4)).toEqual({ count: 4, orientation: "h" });
+    expect(mawsLayoutTargetForGrid(4, 4)).toEqual({ count: 4, orientation: "h" });
+    for (let r = 1; r <= 4; r += 1) {
+      for (let c = 1; c <= 4; c += 1) {
+        expect(mawsLayoutTargetForGrid(r, c).count).toBeLessThanOrEqual(MAX_LAYOUT_PANES);
+      }
+    }
   });
 
   it("clamps out-of-canvas input to the 1–4 bounds", () => {
-    // (0, 0) → 1×1; (9, 9) → 4×4 → the densest template; 2.4 rounds to 2×2.
+    // (0, 0) → 1×1; (9, 9) → 4×4 → the cap; 2.4 rounds to 2×2.
     expect(mawsLayoutTargetForGrid(0, 0)).toEqual({ count: 1, orientation: "h" });
-    expect(mawsLayoutTargetForGrid(9, 9)).toEqual({ count: 12, orientation: "h" });
+    expect(mawsLayoutTargetForGrid(9, 9)).toEqual({ count: 4, orientation: "h" });
     expect(mawsLayoutTargetForGrid(2.4, 2.4)).toEqual({ count: 4, orientation: "h" });
   });
 
@@ -122,15 +135,18 @@ describe("mawsLayoutTargetForGrid (Vela picker canvas → MAWS layout)", () => {
 
 describe("mawsLayoutTargetForId (preset rows)", () => {
   it("parses registered MAWS ids", () => {
-    expect(mawsLayoutTargetForId("5-h")).toEqual({ count: 5, orientation: "h" });
-    expect(mawsLayoutTargetForId("6-v")).toEqual({ count: 6, orientation: "v" });
-    expect(mawsLayoutTargetForId("12-h")).toEqual({ count: 12, orientation: "h" });
+    expect(mawsLayoutTargetForId("1-h")).toEqual({ count: 1, orientation: "h" });
+    expect(mawsLayoutTargetForId("2-v")).toEqual({ count: 2, orientation: "v" });
+    expect(mawsLayoutTargetForId("4-h")).toEqual({ count: 4, orientation: "h" });
   });
 
-  it("rejects Vela builtins, dynamic grid ids, and out-of-range counts", () => {
+  it("rejects Vela builtins, dynamic grid ids, and counts above the cap", () => {
     expect(mawsLayoutTargetForId("4")).toBeNull();
     expect(mawsLayoutTargetForId("2h")).toBeNull();
     expect(mawsLayoutTargetForId("g3x2")).toBeNull();
+    expect(mawsLayoutTargetForId("5-h")).toBeNull();
+    expect(mawsLayoutTargetForId("6-v")).toBeNull();
+    expect(mawsLayoutTargetForId("12-h")).toBeNull();
     expect(mawsLayoutTargetForId("13-h")).toBeNull();
   });
 });

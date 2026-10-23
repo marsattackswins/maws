@@ -115,7 +115,10 @@ export function ObjectTree() {
                       }}
                     >
                       <span className="flex-1 truncate">
-                        {d.text ?? DRAW_LABEL[d.tool] ?? d.tool}
+                        {d.text ??
+                          (d.tool === "position"
+                            ? "Long/Short Position"
+                            : DRAW_LABEL[d.tool] ?? d.tool)}
                       </span>
                       <button
                         type="button"

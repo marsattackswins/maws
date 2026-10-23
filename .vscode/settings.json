@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^npm exec vitest run --root lib/charting test/native-chart-config\\.test\\.ts test/workspace-destroy-flush\\.test\\.ts$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

@@ -30,6 +30,7 @@ import { setLastCrosshair } from "@/lib/chart-registry";
 import { wireTimelineMarks } from "@/lib/vela-marks-wiring";
 import type { Vela } from "@/lib/charting";
 import { fromVelaTicker } from "@/lib/vela-feed-adapter";
+import { clearDrawingMapping, syncPaneDrawingsFromVela } from "@/lib/vela-drawings";
 
 /** Theme-select callback used by the native renderer's optional `onThemeSelect` seam.
  * Pushes the resolved app theme into the zustand store (with advanced-colors
@@ -224,6 +225,21 @@ export function wireCell(ws: VelaWorkspace, cellId: string): () => void {
   // Crosshair store + viewport mirroring.
   offs.push(wireCrosshairAndViewport(chart, cellId));
 
+  // Drawing settle: the unified undo timeline (Ctrl+Z / Ctrl+Y, and the drawing
+  // bar's arrows) restores a snapshot INSIDE the controller, which emits no
+  // drawing events — the store would keep an undone drawing and re-create it on
+  // the next mount. Every timeline change re-settles the slice onto Vela's live
+  // set (`syncPaneDrawingsFromVela` is a no-op when nothing moved).
+  offs.push(
+    cell.history.onChange(() => {
+      try {
+        syncPaneDrawingsFromVela(cellId);
+      } catch {
+        /* cell mid-teardown */
+      }
+    }),
+  );
+
   // Timeline marks: economic releases + headlines on the lane above the time axis.
   // The replay cursor is a cutoff — a mark dated after it belongs to the future the
   // replay has not reached, so it must not paint.
@@ -274,6 +290,7 @@ export function wireCell(ws: VelaWorkspace, cellId: string): () => void {
 
   return () => {
     for (const off of offs) off();
+    clearDrawingMapping(cellId);
   };
 }
 

@@ -12,19 +12,16 @@ import { formatPrice } from "@/lib/maws/feed";
 import { getChart, setLastCrosshair } from "@/lib/chart-registry";
 import { useAppStore } from "@/lib/store";
 import { newClientOrderId, submitOrderFromUi } from "@/lib/trading/ui-orders";
-import { resolveOrderQty } from "@/lib/trading/symbol-settings";
-import type {
-  ChartHover,
-  ChartPaneState,
-} from "@/types";
-import { AlarmClock, ChevronsDown, ChevronsUp, Minus, Plus } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { resolveOrderQty, resolveSymbolTrading } from "@/lib/trading/symbol-settings";
+import type { ChartPaneState } from "@/types";
+import { AlarmClock, ChevronsDown, ChevronsUp, Plus } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 const AXIS_W = 56;
-/** Estimated rendered height of the open menu (5 rows + padding) — used to keep
+/** Estimated rendered height of the open menu (4 rows + padding) — used to keep
  *  the menu on screen: it flips above the button near the bottom edge. */
-const MENU_H = 216;
+const MENU_H = 176;
 /** True when `el` is the plus button or inside the open menu (both carry the
  *  marker attribute; the nearest match covers child nodes too). */
 function isPlusPart(el: EventTarget | null): boolean {
@@ -40,25 +37,37 @@ function OrderIcon() {
   );
 }
 
+/** One committed hover frame: price + the fixed-position anchor for the button. */
+type PlusAnchor = {
+  price: number;
+  time: number | null;
+  left: number;
+  top: number;
+};
+
 /**
  * Owns its own hover tracking so ChartPane (and heavy siblings) do not
  * re-render on every mouse move.
+ *
+ * Pointer moves and Vela crosshair events both feed REFS and request one rAF
+ * commit, so a fast sweep costs a single render + a single layout read per
+ * frame. The earlier version committed `pointerY`, then `hover`, then measured
+ * the cell in a layout effect and committed `anchor` — 3 renders and 2–3 forced
+ * layouts per move, which is what made the cursor feel sticky.
  */
 export function CrosshairPlus({ pane, suppress }: { pane: ChartPaneState; suppress?: boolean }) {
   const setBuySellMenu = useAppStore((s) => s.setBuySellMenu);
-  const setTradingSettingsSymbol = useAppStore((s) => s.setTradingSettingsSymbol);
   const addAlert = useAppStore((s) => s.addAlert);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const [hover, setHover] = useState<ChartHover>(null);
+  const [plus, setPlus] = useState<PlusAnchor | null>(null);
   const [open, setOpen] = useState(false);
-  const [anchor, setAnchor] = useState<{ left: number; top: number } | null>(null);
   const openRef = useRef(false);
   const overPlusRef = useRef(false);
-  // Live cursor Y (client coords) over the chart element — the crosshair event
-  // carries no pixel position, so the plus button tracks this instead of
-  // parking at the pane's vertical center.
+  // Latest crosshair reading + live cursor Y (client coords) over the chart
+  // element — the crosshair event carries no pixel position, so the plus button
+  // tracks this instead of parking at the pane's vertical center.
+  const hoverRef = useRef<{ price: number; time: number | null } | null>(null);
   const pointerYRef = useRef<number | null>(null);
-  const [pointerY, setPointerY] = useState<number | null>(null);
   openRef.current = open;
 
   // Vela crosshair → hover state (rAF-throttled by Vela itself).
@@ -68,6 +77,41 @@ export function CrosshairPlus({ pane, suppress }: { pane: ChartPaneState; suppre
     let cancelled = false;
     let off: (() => void) | null = null;
     let offPointer: (() => void) | null = null;
+    let frame = 0;
+
+    const flush = () => {
+      frame = 0;
+      if (cancelled || openRef.current) return;
+      const h = hoverRef.current;
+      if (!h) {
+        setPlus(null);
+        return;
+      }
+      const handle = getChart(pane.id);
+      if (!handle) return;
+      const rect = handle.el.getBoundingClientRect();
+      const next: PlusAnchor = {
+        price: h.price,
+        time: h.time,
+        left: rect.right - AXIS_W - 28,
+        // Ride the cursor: center the 24px button on the pointer's Y (client
+        // coords — the button is position:fixed). Fall back to the pane's
+        // vertical center when the crosshair moved without a pointer (keyboard).
+        top: pointerYRef.current ?? rect.top + rect.height / 2 - 12,
+      };
+      setPlus((prev) =>
+        prev &&
+        prev.price === next.price &&
+        prev.time === next.time &&
+        prev.left === next.left &&
+        prev.top === next.top
+          ? prev
+          : next,
+      );
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(flush);
+    };
 
     const attach = () => {
       if (cancelled) return;
@@ -93,7 +137,7 @@ export function CrosshairPlus({ pane, suppress }: { pane: ChartPaneState; suppre
         if (openRef.current) return;
         if (pointerYRef.current === ev.clientY) return;
         pointerYRef.current = ev.clientY;
-        setPointerY(ev.clientY);
+        schedule();
       };
       const onPointerLeave = (ev: PointerEvent) => {
         // Moving onto the plus button/menu itself leaves the chart element
@@ -104,29 +148,24 @@ export function CrosshairPlus({ pane, suppress }: { pane: ChartPaneState; suppre
         // entering plus chrome so the button (and open menu) does not jump.
         if (ev.relatedTarget && isPlusPart(ev.relatedTarget)) return;
         pointerYRef.current = null;
-        setPointerY(null);
+        schedule();
       };
       el.addEventListener("pointermove", onPointerMove);
       el.addEventListener("pointerleave", onPointerLeave);
       off = handle.vela.renderer.onCrosshairMove((e) => {
         if (openRef.current) return;
         if (e.price == null) {
-          if (!overPlusRef.current) setHover(null);
+          if (!overPlusRef.current) {
+            hoverRef.current = null;
+            schedule();
+          }
           return;
         }
-        const next: ChartHover = {
+        hoverRef.current = {
           price: e.price,
           time: e.time != null ? Math.floor(e.time / 1000) : null,
-          y: 0,
-          axisWidth: AXIS_W,
         };
-        setHover((prev) =>
-          prev &&
-          Math.abs(prev.price - next.price) < 1e-12 &&
-          prev.time === next.time
-            ? prev
-            : next,
-        );
+        schedule();
         // Crosshair SYNC across cells is the workspace's own link (toggled in the
         // layout picker) — no per-cell mirror here.
         setLastCrosshair({ paneId: pane.id, price: e.price, time: e.time ?? null });
@@ -142,30 +181,12 @@ export function CrosshairPlus({ pane, suppress }: { pane: ChartPaneState; suppre
     return () => {
       cancelled = true;
       if (timer) window.clearTimeout(timer);
+      if (frame) cancelAnimationFrame(frame);
+      hoverRef.current = null;
       off?.();
       offPointer?.();
     };
   }, [pane.id]);
-
-  useLayoutEffect(() => {
-    // Menu open: freeze — the button (and its open menu) must not re-anchor
-    // while the user moves across the menu rows.
-    if (openRef.current) return;
-    if (!hover) {
-      setAnchor(null);
-      return;
-    }
-    const handle = getChart(pane.id);
-    if (!handle) return;
-    const rect = handle.el.getBoundingClientRect();
-    setAnchor({
-      left: rect.right - hover.axisWidth - 28,
-      // Ride the cursor: center the 24px button on the pointer's Y (client
-      // coords — the button is position:fixed). Fall back to the pane's
-      // vertical center when the crosshair moved without a pointer (keyboard).
-      top: pointerYRef.current ?? rect.top + rect.height / 2 - 12,
-    });
-  }, [hover, pointerY, pane.id]);
 
   useEffect(() => {
     if (!open) return;
@@ -180,16 +201,19 @@ export function CrosshairPlus({ pane, suppress }: { pane: ChartPaneState; suppre
     return () => window.removeEventListener("mousedown", onDown);
   }, [open]);
 
-  if (!hover || !anchor || suppress) return null;
+  if (!plus || suppress) return null;
 
-  const price = formatPrice(pane.symbol, hover.price);
+  const price = formatPrice(pane.symbol, plus.price);
   const side: "above" | "below" = "above";
+  // Order type follows the ONE trading-settings home (Settings → Trading →
+  // Defaults → Order type); a saved per-symbol override still wins.
+  const orderType = resolveSymbolTrading(pane.symbol).defaultOrderType;
   // Menu opens 28px below the button, flipping ABOVE it when that would
   // overflow the window's bottom edge (the old fixed offset parked the menu
   // past the chart whenever the button was pressed near the bottom).
-  const menuLeft = Math.max(8, anchor.left - 200);
-  const menuBelow = anchor.top + 28 + MENU_H <= window.innerHeight - 8;
-  const menuTop = menuBelow ? anchor.top + 28 : Math.max(8, anchor.top - MENU_H - 8);
+  const menuLeft = Math.max(8, plus.left - 200);
+  const menuBelow = plus.top + 28 + MENU_H <= window.innerHeight - 8;
+  const menuTop = menuBelow ? plus.top + 28 : Math.max(8, plus.top - MENU_H - 8);
 
   return createPortal(
     <>
@@ -197,7 +221,7 @@ export function CrosshairPlus({ pane, suppress }: { pane: ChartPaneState; suppre
         type="button"
         data-crosshair-plus
         className="fixed z-[35] flex h-6 w-6 items-center justify-center rounded-[4px] border border-(--app-border) bg-(--app-elevated) text-(--app-text) shadow-[0_2px_8px_rgba(0,0,0,0.45)] hover:bg-(--app-hover)"
-        style={{ left: anchor.left, top: anchor.top }}
+        style={{ left: plus.left, top: plus.top }}
         onMouseEnter={() => {
           overPlusRef.current = true;
         }}
@@ -229,14 +253,14 @@ export function CrosshairPlus({ pane, suppress }: { pane: ChartPaneState; suppre
             type="button"
             className="plus-row"
             onClick={() => {
-              const qty = resolveOrderQty(pane.symbol, hover.price);
+              const qty = resolveOrderQty(pane.symbol, plus.price);
               if (qty > 0) {
                 submitOrderFromUi({
                   symbol: pane.symbol,
                   side: "buy",
-                  type: "market",
+                  type: orderType,
                   qty,
-                  price: hover.price,
+                  price: plus.price,
                   clientOrderId: newClientOrderId(),
                 });
               }
@@ -250,14 +274,14 @@ export function CrosshairPlus({ pane, suppress }: { pane: ChartPaneState; suppre
             type="button"
             className="plus-row"
             onClick={() => {
-              const qty = resolveOrderQty(pane.symbol, hover.price);
+              const qty = resolveOrderQty(pane.symbol, plus.price);
               if (qty > 0) {
                 submitOrderFromUi({
                   symbol: pane.symbol,
                   side: "sell",
-                  type: "market",
+                  type: orderType,
                   qty,
-                  price: hover.price,
+                  price: plus.price,
                   clientOrderId: newClientOrderId(),
                 });
               }
@@ -271,7 +295,7 @@ export function CrosshairPlus({ pane, suppress }: { pane: ChartPaneState; suppre
             type="button"
             className="plus-row"
             onClick={() => {
-              setBuySellMenu({ x: anchor.left, y: anchor.top, symbol: pane.symbol });
+              setBuySellMenu({ x: plus.left, y: plus.top, symbol: pane.symbol });
               setOpen(false);
             }}
           >
@@ -282,23 +306,12 @@ export function CrosshairPlus({ pane, suppress }: { pane: ChartPaneState; suppre
             type="button"
             className="plus-row"
             onClick={() => {
-              addAlert({ symbol: pane.symbol, price: hover.price, side, enabled: true });
+              addAlert({ symbol: pane.symbol, price: plus.price, side, enabled: true });
               setOpen(false);
             }}
           >
             <AlarmClock size={14} />
             <span className="plus-row-label">Add alert at {price}</span>
-          </button>
-          <button
-            type="button"
-            className="plus-row"
-            onClick={() => {
-              setTradingSettingsSymbol(pane.symbol);
-              setOpen(false);
-            }}
-          >
-            <Minus size={14} />
-            <span className="plus-row-label">Trading settings…</span>
           </button>
         </div>
       )}

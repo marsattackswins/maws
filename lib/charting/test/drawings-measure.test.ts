@@ -72,6 +72,44 @@ describe('drawings/position tools', () => {
         expect(d.hitTest(5, 45, proj, 4)).toBe(true); // inside the position box
     });
 
+    it('positions are drag-placed and their entry handle translates the complete tool', () => {
+        const d = createDrawing('position', {
+            paneId: 'price',
+            anchors: [{ time: 0, price: 50 }, { time: 5 * HR, price: 40 }, { time: 10 * HR, price: 70 }],
+        })! as PositionTool;
+        expect(d.placementMode()).toBe('drag');
+        d.moveHandle(0, { time: 2 * HR, price: 60 }, 'both', proj);
+        expect(d.anchors).toEqual([
+            { time: 2 * HR, price: 60 },
+            { time: 12 * HR, price: 50 },
+            { time: 12 * HR, price: 80 },
+        ]);
+    });
+
+    it('stop and target handles keep a shared right edge while resizing', () => {
+        const d = createDrawing('position', {
+            paneId: 'price',
+            anchors: [{ time: 0, price: 50 }, { time: 30 * HR, price: 40 }, { time: 60 * HR, price: 70 }],
+        })! as PositionTool;
+        d.moveHandle(1, { time: 70 * HR, price: 45 }, 'both', proj);
+        expect(d.anchors[1]).toEqual({ time: 70 * HR, price: 45 });
+        expect(d.anchors[2]).toEqual({ time: 70 * HR, price: 70 });
+
+        d.moveHandle(2, { time: 90 * HR, price: 75 }, 'both', proj);
+        expect(d.anchors[1]!.time).toBe(90 * HR);
+        expect(d.anchors[2]).toEqual({ time: 90 * HR, price: 75 });
+    });
+
+    it('keeps a usable minimum width when a right-edge handle is dragged toward the entry', () => {
+        const d = createDrawing('position', {
+            paneId: 'price',
+            anchors: [{ time: 0, price: 50 }, { time: 5 * HR, price: 40 }, { time: 10 * HR, price: 70 }],
+        })! as PositionTool;
+        d.moveHandle(2, { time: 2 * HR, price: 70 }, 'both', proj);
+        expect(proj.xOf(d.anchors[2]!.time) - proj.xOf(d.anchors[0]!.time)).toBe(48);
+        expect(d.anchors[1]!.time).toBe(d.anchors[2]!.time);
+    });
+
     it('short scenario labels SHORT and computes R:R', () => {
         const d = createDrawing('position', { paneId: 'price', anchors: [{ time: 0, price: 50 }, { time: 5 * HR, price: 60 }, { time: 10 * HR, price: 30 }] })!;
         expect((d as PositionTool).directionLabel()).toBe('SHORT');

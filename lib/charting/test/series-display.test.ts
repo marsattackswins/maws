@@ -168,7 +168,7 @@ describe('native renderer — legend and data-window readouts follow their own s
     }
 
     /** Unmounted but sized, with one study indicator mounted straight into the scene. */
-    function withIndicator(series: IndicatorModel['series']): { r: NativeRenderer; anyR: any; legend: () => Array<{ value: string; color: string }> | undefined } {
+    function withIndicator(series: IndicatorModel['series'], patch: Partial<IndicatorModel> = {}): { r: NativeRenderer; anyR: any; legend: () => Array<{ value: string; color: string }> | undefined } {
         const r = new NativeRenderer();
         const anyR = r as any;
         anyR.coords.setSize(800, 200, 1);
@@ -176,7 +176,7 @@ describe('native renderer — legend and data-window readouts follow their own s
         if (!anyR.animator) anyR.animator = { active: false, start: () => {}, stop: () => {} };
         anyR.introPlayed = true;
         r.setBars(bars([100, 101, 105]));
-        const m = model(series, 'price');
+        const m = { ...model(series, 'price'), ...patch };
         anyR.scene.indicators.set(m.id, m);
         let captured: ReadonlyMap<string, Array<{ value: string; color: string }>> | null = null;
         anyR.inputsUI = { setPlotValues: (v: ReadonlyMap<string, Array<{ value: string; color: string }>>) => { captured = v; } };
@@ -210,6 +210,28 @@ describe('native renderer — legend and data-window readouts follow their own s
         const { r, legend } = withIndicator([line('Pane', [1, 2, 3], { display: ONLY('pane') }), line('Hidden', [4, 5, 6], { visible: false })]);
         expect(rows(r)).toEqual([]);
         expect(legend()).toEqual([]);
+    });
+
+    it('the per-indicator legend-value switch hides live values independently of its name', () => {
+        const inputs = [{ key: 'length', title: 'Length', type: 'int' as const, defval: 14, legend: true }];
+        const settingsName = withIndicator([line('P', [1, 2, 3])], {
+            inputs,
+            inputValues: { length: 14, legendSettings: true },
+        });
+        expect(settingsName.legend()).toHaveLength(1);
+
+        const hidden = withIndicator([line('P', [1, 2, 3])], {
+            inputs,
+            inputValues: { length: 14, legendSettings: true, legendValues: false },
+        });
+        expect(rows(hidden.r)).toEqual(['P']);
+        expect(hidden.legend()).toEqual([]);
+
+        const shown = withIndicator([line('P', [1, 2, 3])], {
+            inputs,
+            inputValues: { length: 14, legendSettings: false, legendValues: true },
+        });
+        expect(shown.legend()).toHaveLength(1);
     });
 
     it('applies to plotcandle series too', () => {

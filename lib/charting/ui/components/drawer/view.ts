@@ -247,6 +247,7 @@ export class Drawer {
     }
 
     destroy(): void {
+        if (this.open) this.hide();
         this.handle.stop();
         this.backdrop.remove();
         this.positioner.remove();

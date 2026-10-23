@@ -164,12 +164,13 @@ const CSS = `
 /* Active-cell highlight: an overlay ring ABOVE the chart's own canvas stack (a plain
    outline on the cell is painted under them) — inert to the pointer. Scoped to
    multi-cell grids ([data-multi]): a single-cell layout always has an active cell,
-   and ringing the only chart would just be noise. */
+   and ringing the only chart would just be noise. Hairline + muted grey: the old 2px
+   white frame overpowered the chart it was meant to mark. */
 .vela-ws-grid[data-multi='1'] .vela-cell[data-active='1']::after {
     content: '';
     position: absolute;
     inset: 0;
-    border: 2px solid var(--vela-fg-bright);
+    border: 1px solid var(--vela-cell-active-border);
     pointer-events: none;
     z-index: 10;
 }
@@ -430,8 +431,10 @@ export class VelaWorkspace {
                     if (!this.destroyed && r) this.applyState(decodeState(r));
                 });
             }
-            if (typeof window !== 'undefined') window.addEventListener('beforeunload', this.onUnload);
         }
+        // Hosts that persist through `state:changed` still need the final debounced
+        // edit synchronously, even when this workspace's own adapter is disabled.
+        if (typeof window !== 'undefined') window.addEventListener('beforeunload', this.onUnload);
         this.timezone = boot?.timezone ?? opts.timezone ?? 'Etc/UTC';
         if (boot?.favorites) this.favs = [...boot.favorites];
         if (boot?.timeframeFavorites) this.tfFavs = [...boot.timeframeFavorites];
@@ -1286,7 +1289,7 @@ export class VelaWorkspace {
         this.flushPendingState(); // the user's last edit, before anything is torn down
         this.destroyed = true;
         this.replay.destroy();
-        if (this.persistKey !== null && typeof window !== 'undefined') window.removeEventListener('beforeunload', this.onUnload);
+        if (typeof window !== 'undefined') window.removeEventListener('beforeunload', this.onUnload);
         this.resizeObserver?.disconnect();
         this.splitters.destroy();
         for (const [id, cell] of [...this.cellsById]) {

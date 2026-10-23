@@ -403,8 +403,9 @@ describe('EngineOrchestrator', () => {
         expect(renderer.themes.map((t) => t.background)).toEqual(['#ffffff']);
         expect(seen).toEqual(['#ffffff']);
         // Candle hues are shared across themes — a theme swap never recolors the series.
-        expect(renderer.themes[0]!.upColor).toBe(BULLISH);
-        expect(renderer.themes[0]!.downColor).toBe(BEARISH);
+        // (They come from DARK_THEME which is used as the base for all theme derivation.)
+        expect(renderer.themes[0]!.upColor).toBe(BULLISH);  // '#a7be94'
+        expect(renderer.themes[0]!.downColor).toBe(BEARISH); // '#af6870'
         chart.setTheme('light'); // already active → no re-skin, no event (breaks host echo loops)
         expect(renderer.themes).toHaveLength(1);
         expect(seen).toHaveLength(1);
@@ -540,6 +541,34 @@ describe('EngineOrchestrator', () => {
             expect(h1.source).toBeUndefined();
         } finally {
             unregisterNativeIndicator('test-native');
+        }
+    });
+
+    it('addNativeIndicator: an inputs-aware title names each instance and follows the edits', async () => {
+        // `titleFor` is what keeps stacked studies apart on the legend (`Stoch 14`, `Stoch 40`).
+        const titled: NativeIndicatorDescriptor = {
+            ...testNativeDescriptor,
+            type: 'test-titled',
+            title: 'Titled Native',
+            multiInstance: true,
+            titleFor: (inputs) => `Titled ${String(inputs.len)}`,
+        };
+        registerNativeIndicator(titled);
+        try {
+            const renderer = new FakeRenderer();
+            const chart = new Vela({} as unknown as HTMLElement, { live: false, volume: false }, { renderer, engines: [], dataFeed: new MockDataFeed() });
+            const h = chart.addNativeIndicator('test-titled', { inputs: { len: 5 } });
+            await chart.ready();
+            await flush();
+            const latest = () => renderer.mountedModels.filter((m) => m.id === h.id).pop();
+            expect(latest()?.shorttitle).toBe('Titled 5');
+
+            // An edit to the setting the name carries re-mounts the row with the new title.
+            h.setInputs({ len: 40 });
+            await flush();
+            expect(latest()?.shorttitle).toBe('Titled 40');
+        } finally {
+            unregisterNativeIndicator('test-titled');
         }
     });
 
@@ -1716,6 +1745,66 @@ describe('EngineOrchestrator — a no-output first model never finalizes routing
         expect(chart.inspect().totals.series).toBe(1);
         expect(chart.panes.list().map((p) => p.id)).toEqual(['price']);
     });
+
+    it('a Pine-shaped engine never runs over ZERO loaded bars — the first run waits for the first real bar', async () => {
+        // The boot crash: the initial load resolved EMPTY, so the engine was handed an
+        // index with no bars. PineTS reads `bars[0].openTime` unguarded, throws inside
+        // `onError`, and the session is dead for good (legend row stranded on 'loading').
+        // The orchestrator must hold the first run until a bar exists, then release it.
+        class PineShapedEngine extends HandDrivenEngine {
+            runs = 0;
+            override execute(req: ExecutionRequest, handlers: ExecutionHandlers): ExecutionSession {
+                const id = (req.prepared.token as { instanceId: string }).instanceId;
+                let deferred = req.historyState === 'backfill'; // pine's own policy
+                let stopped = false;
+                const run = (): void => {
+                    if (stopped || deferred) return;
+                    try {
+                        const bars = req.getBars?.() ?? req.bars;
+                        if (bars.length === 0) throw new Error("Cannot read properties of undefined (reading 'openTime')");
+                        this.runs += 1;
+                        handlers.onModel(realOverlayModel(id, true));
+                        handlers.onDone?.();
+                    } catch (err) {
+                        handlers.onError?.(err instanceof Error ? err : new Error(String(err)));
+                    }
+                };
+                if (!deferred) run();
+                return {
+                    stop: () => { stopped = true; },
+                    update: run,
+                    setVisibleRange: run,
+                    notifyBars: (reason) => {
+                        if (reason === 'complete') deferred = false;
+                        run();
+                    },
+                };
+            }
+        }
+        const renderer = new FakeRenderer();
+        const engine = new PineShapedEngine();
+        const feed = new EmptyThenLiveFeed();
+        const chart = new Vela({} as unknown as HTMLElement, { live: true, volume: false }, { renderer, engines: [engine], dataFeed: feed });
+        const errors: Error[] = [];
+        chart.on('indicator:error', (e) => errors.push(e.error));
+
+        const ind = chart.addIndicator('//@version=5\nindicator("My Overlay", overlay=true)\nplot(close)');
+        await chart.ready();
+        await flush();
+
+        // Held: the 'complete' of an empty load is withheld, so nothing ran (and nothing threw).
+        expect(errors).toEqual([]);
+        expect(engine.runs).toBe(0);
+        expect(renderer.statuses[renderer.statuses.length - 1]).toEqual({ id: ind.id, status: 'loading' });
+
+        // The first real bar releases the held session as 'complete' — the run sees a bar.
+        feed.push!(makeBars(1)[0]!);
+        await flush();
+        expect(errors).toEqual([]);
+        expect(engine.runs).toBe(1);
+        expect(renderer.mountedModels.filter((m) => m.id === ind.id && m.series.length > 0)).toHaveLength(1);
+        expect(renderer.statuses[renderer.statuses.length - 1]).toEqual({ id: ind.id, status: 'idle' });
+    });
 });
 
 /** MockEngine that additionally captures every ExecutionRequest (market metadata / fetchSeries). */
@@ -1845,7 +1934,7 @@ describe('EngineOrchestrator — built-in volume native indicators', () => {
         expect(renderer.volumePushes).toEqual([{ upColor: BULLISH, downColor: BEARISH, heightFrac: 0.2 }]);
         const summary = chart.inspect().indicators.find((s) => s.nativeType === 'volume');
         expect(summary?.native).toBe(true);
-        expect(summary?.inputs).toBe(3); // colors + height% drive the settings dialog
+        expect(summary?.inputs).toBe(5); // colors + height% + both legend switches drive the settings dialog
     });
 
     it('volume: false opts out; a manual add still works and stays single-instance', async () => {
@@ -1879,7 +1968,8 @@ describe('EngineOrchestrator — built-in volume native indicators', () => {
         const model = renderer.mountedModels.find((m) => m.native?.type === 'vpvr');
         expect(model).toBeDefined();
         expect(model!.title).toBe('Visible Range Volume Profile');
-        expect(model!.shorttitle).toBe('VRVP');
+        // The chip names the instance after its settings (see the legend-settings switch).
+        expect(model!.shorttitle).toBe('VRVP 24 70');
         expect(model!.series).toHaveLength(0);
         expect(model!.paneId).toBe('price');
         expect(renderer.vpvrPushes).toEqual([

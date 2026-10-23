@@ -1,7 +1,7 @@
 import { BULLISH, BEARISH, NEUTRAL } from '../../palette';
 import type { ClassicIndicatorSpec } from './define';
-import { num, str } from './define';
-import { colorInput, floatInput, lengthInput, transp } from './shared';
+import { num, str, bool } from './define';
+import { boolInput, colorInput, floatInput, lengthInput, transp } from './shared';
 import { highs, lows, barsSinceHighest, barsSinceLowest, trueRange, rma, sum, map, zip } from './math';
 
 /** Directional/trend-strength studies. */
@@ -37,9 +37,8 @@ const adx: ClassicIndicatorSpec = {
         lengthInput(14, 'diLength', 'DI Length', 5000, 'Wilder RMA smoothing length applied to directional movement and true range when computing +DI and −DI.'),
         lengthInput(14, 'adxLength', 'ADX Smoothing', 5000, 'Wilder RMA smoothing length applied to DX to obtain the ADX line.'),
         floatInput('keyLevel', 'Key Level', 25, 0, 100, 1, 'Trend strength reference level; ADX above it is commonly read as a trending market.'),
-        colorInput(BULLISH, '+DI Color', 'plusDiColor', 'Color of the plus directional indicator, and of the ADX line above the key level while +DI leads.'),
-        colorInput(BEARISH, '-DI Color', 'minusDiColor', 'Color of the minus directional indicator, and of the ADX line above the key level while −DI leads.'),
-        colorInput(NEUTRAL, 'ADX Color', 'adxColor', 'Color of the ADX line while it sits below the key level — no trend strong enough to trade.'),
+        colorInput(NEUTRAL, 'ADX Line', 'color', 'Color of the ADX line.'),
+        boolInput('showMidline', 'Show midline', true, 'Style', 'Show or hide the key level reference line.'),
     ],
     compute: (bars, inputs) => {
         const diLen = num(inputs, 'diLength', 14);
@@ -57,23 +56,16 @@ const adx: ClassicIndicatorSpec = {
         const minusDi = zip(rma(minusDm, diLen), atrLine, (d, a) => (a === 0 ? 0 : (100 * d) / a));
         const dx = zip(plusDi, minusDi, (p, m) => (p + m === 0 ? 0 : (100 * Math.abs(p - m)) / (p + m)));
         const adxLine = rma(dx, num(inputs, 'adxLength', 14));
-        const plusInk = str(inputs, 'plusDiColor', BULLISH);
-        const minusInk = str(inputs, 'minusDiColor', BEARISH);
-        const neutralInk = str(inputs, 'adxColor', NEUTRAL);
+        const adxInk = str(inputs, 'color', str(inputs, 'adxColor', NEUTRAL));
+        const width = num(inputs, 'lineWidth', 2);
         const keyLevel = num(inputs, 'keyLevel', 25);
-        // The ADX borrows the dominant DI's color once it clears the key level.
-        const adxColors = adxLine.map((x, i) => {
-            if (!Number.isFinite(x)) return null;
-            if (x <= keyLevel) return neutralInk;
-            return (plusDi[i] ?? 0) > (minusDi[i] ?? 0) ? plusInk : minusInk;
-        });
+        const levelInk = str(inputs, 'levelColor', NEUTRAL);
+        const showMidline = bool(inputs, 'showMidline', true);
         return {
             plots: [
-                { key: 'plusDi', title: '+DI', values: plusDi, color: transp(plusInk, 30) },
-                { key: 'minusDi', title: '-DI', values: minusDi, color: transp(minusInk, 30) },
-                { key: 'adx', title: 'ADX', values: adxLine, color: neutralInk, width: 2, colors: adxColors },
+                { key: 'adx', title: 'ADX', values: adxLine, color: adxInk, width },
             ],
-            levels: [{ key: 'keyLevel', price: keyLevel, color: NEUTRAL, lineStyle: 'dashed', title: 'Key Level' }],
+            levels: showMidline ? [{ key: 'keyLevel', price: keyLevel, color: levelInk, lineStyle: 'dashed', title: 'Key Level' }] : [],
         };
     },
 };

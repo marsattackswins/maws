@@ -2,11 +2,17 @@ import { describe, it, expect } from "@jest/globals";
 import { useAppStore } from "@/lib/store";
 import type { Store } from "@/lib/store";
 import {
+  RIGHT_DOCK_IDS,
   createUiSlice,
+  moveDockId,
+  normalizeDockOrder,
   normalizeUiRehydrate,
+  sameDockOrder,
+  shiftDockId,
   type BottomTab,
   type UiSlice,
 } from "@/lib/slices/ui-slice";
+import type { DockId } from "@/types";
 
 /**
  * Phase A regression tests for the ui-slice:
@@ -136,6 +142,58 @@ describe("ui-slice (real root store)", () => {
     resetUi();
   });
 
+  describe("right rail order (drag to rearrange)", () => {
+    it("defaults to the canonical order", () => {
+      expect(useAppStore.getState().rightDockOrder).toEqual(RIGHT_DOCK_IDS);
+    });
+
+    it("stores a rearranged order and drops unknown / duplicate ids", () => {
+      const s = useAppStore.getState();
+      s.setRightDockOrder([
+        "alerts",
+        "alerts",
+        "bogus" as never,
+        "scripts",
+        "strategy",
+        "objects",
+      ]);
+      // Unknown + duplicate entries are dropped; every known id survives, with the
+      // ones the caller omitted appended in canonical order.
+      expect(useAppStore.getState().rightDockOrder).toEqual([
+        "alerts",
+        "scripts",
+        "strategy",
+        "objects",
+        "calendar",
+      ]);
+      s.setRightDockOrder(RIGHT_DOCK_IDS);
+    });
+
+    it("normalizeDockOrder never loses a button", () => {
+      expect(normalizeDockOrder(undefined)).toEqual(RIGHT_DOCK_IDS);
+      expect(normalizeDockOrder([])).toEqual(RIGHT_DOCK_IDS);
+      expect(normalizeDockOrder(["scripts", "scripts"])).toEqual([
+        "scripts",
+        "strategy",
+        "calendar",
+        "objects",
+        "alerts",
+      ]);
+    });
+
+    it("rehydration repairs a corrupt persisted order", () => {
+      const st = { rightDockOrder: ["nope", "alerts"] } as unknown as Store;
+      normalizeUiRehydrate(st);
+      expect(st.rightDockOrder).toEqual([
+        "alerts",
+        "strategy",
+        "calendar",
+        "objects",
+        "scripts",
+      ]);
+    });
+  });
+
   describe("normalizeUiRehydrate bottomTab validation (exclusive owner)", () => {
     const fakeState = (patch: Record<string, unknown>): Store =>
       ({ ...patch }) as unknown as Store;
@@ -155,6 +213,69 @@ describe("ui-slice (real root store)", () => {
         expect(st.bottomTab).toBe(tab);
       }
     });
+  });
+});
+
+describe("right-rail live reorder helpers", () => {
+  const base: DockId[] = ["strategy", "calendar", "objects", "scripts", "alerts"];
+
+  it("moves an icon into the gap above (before) and below (after) a target", () => {
+    // Drag "alerts" up onto "strategy"'s top half.
+    expect(moveDockId(base, "alerts", "strategy", false)).toEqual([
+      "alerts",
+      "strategy",
+      "calendar",
+      "objects",
+      "scripts",
+    ]);
+    // Drag "strategy" down onto "scripts"' bottom half.
+    expect(moveDockId(base, "strategy", "scripts", true)).toEqual([
+      "calendar",
+      "objects",
+      "scripts",
+      "strategy",
+      "alerts",
+    ]);
+  });
+
+  it("index math survives both directions without dropping or duplicating an icon", () => {
+    for (const dragId of base) {
+      for (const targetId of base) {
+        for (const after of [false, true]) {
+          const next = moveDockId(base, dragId, targetId, after);
+          expect([...next].sort()).toEqual([...base].sort());
+        }
+      }
+    }
+  });
+
+  it("is a no-op for a self-target or an unknown target", () => {
+    const next = moveDockId(base, "objects", "objects", true);
+    expect(next).toEqual(base);
+    expect(next).not.toBe(base); // new array, never mutates the input
+    expect(moveDockId(base, "objects", "nope" as DockId, false)).toEqual(base);
+  });
+
+  it("shiftDockId moves one slot and clamps at the ends", () => {
+    expect(shiftDockId(base, "calendar", -1)).toEqual([
+      "calendar",
+      "strategy",
+      "objects",
+      "scripts",
+      "alerts",
+    ]);
+    expect(shiftDockId(base, "strategy", -1)).toEqual(base);
+    expect(shiftDockId(base, "alerts", 1)).toEqual(base);
+    expect(shiftDockId(base, "missing" as DockId, 1)).toEqual(base);
+  });
+
+  it("sameDockOrder distinguishes equal arrangements from a real change", () => {
+    expect(sameDockOrder(base, [...base])).toBe(true);
+    expect(sameDockOrder(base, normalizeDockOrder(base))).toBe(true);
+    expect(sameDockOrder(base, ["calendar", "strategy", "objects", "scripts", "alerts"])).toBe(
+      false,
+    );
+    expect(sameDockOrder(base, base.slice(0, 4))).toBe(false);
   });
 });
 

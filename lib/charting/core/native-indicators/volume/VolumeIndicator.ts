@@ -2,10 +2,11 @@ import type { InputSchema, InputValue } from '../../model/inputs';
 import type { VolumeLayerData } from '../../model/volume-layers';
 import type { NativeIndicator, NativeIndicatorContext, NativeIndicatorDescriptor } from '../NativeIndicator';
 import { registerNativeIndicator } from '../NativeIndicator';
+import { legendSettingsInput, legendTitle, legendValuesInput } from '../legend-settings';
 import { BEARISH, BULLISH } from '../../palette';
 
-const DEFAULT_UP = '#3a403c';    // volume-up: quiet muted surface
-const DEFAULT_DOWN = '#3d2f34';  // volume-down: quiet muted surface
+const DEFAULT_UP = BULLISH;     // volume-up: Vela Muted palette
+const DEFAULT_DOWN = BEARISH;   // volume-down: Vela Muted palette
 const DEFAULT_HEIGHT_PCT = 20;
 
 function num(v: InputValue | undefined, fallback: number): number {
@@ -70,18 +71,29 @@ class VolumeIndicator implements NativeIndicator {
     stop(): void {}
 }
 
-/** Descriptor for the built-in volume indicator. Bar volume needs no capability probe. */
+/**
+ * Descriptor for the built-in volume indicator. Bar volume needs no capability probe.
+ *
+ * The chip offers the same "Show settings in legend" switch as every other indicator: ON
+ * (the default) it reads `Volume 20` — the bar-height look it was set to — instead of the
+ * hovered bar's volume, which the data window already reports. OFF restores that readout.
+ */
+const VOLUME_INPUTS: InputSchema[] = [
+    { key: 'upColor', title: 'Up color', type: 'color', defval: DEFAULT_UP },
+    { key: 'downColor', title: 'Down color', type: 'color', defval: DEFAULT_DOWN },
+    { key: 'heightPct', title: 'Height %', type: 'int', defval: DEFAULT_HEIGHT_PCT, min: 5, max: 50, step: 1, legend: true, tooltip: 'Pane height the tallest visible bar occupies' },
+    legendSettingsInput(),
+    legendValuesInput(),
+];
+
 export const volumeDescriptor: NativeIndicatorDescriptor = {
     type: 'volume',
     title: 'Volume',
     paneHint: 'price',
     overlay: true,
-    inputsSchema: (): InputSchema[] => [
-        { key: 'upColor', title: 'Up color', type: 'color', defval: DEFAULT_UP },
-        { key: 'downColor', title: 'Down color', type: 'color', defval: DEFAULT_DOWN },
-        { key: 'heightPct', title: 'Height %', type: 'int', defval: DEFAULT_HEIGHT_PCT, min: 5, max: 50, step: 1, tooltip: 'Pane height the tallest visible bar occupies' },
-    ],
-    defaultInputs: (): Record<string, InputValue> => ({ upColor: DEFAULT_UP, downColor: DEFAULT_DOWN, heightPct: DEFAULT_HEIGHT_PCT }),
+    inputsSchema: (): InputSchema[] => [...VOLUME_INPUTS],
+    defaultInputs: (): Record<string, InputValue> => Object.fromEntries(VOLUME_INPUTS.map((i) => [i.key, i.defval])),
+    titleFor: (inputs) => legendTitle('Volume', VOLUME_INPUTS, inputs),
     create: () => new VolumeIndicator(),
 };
 

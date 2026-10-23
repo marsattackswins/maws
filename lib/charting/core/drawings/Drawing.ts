@@ -191,6 +191,14 @@ export abstract class Drawing {
         /* base anchors move independently */
     }
 
+    /** Move one handle using its allowed axes. Drawings with coupled handles may override this. */
+    moveHandle(index: number, point: DrawingPoint, free: FreeAxis, _proj: Projector): void {
+        const anchor = this.anchors[index];
+        if (!anchor) return;
+        if (free === 'both' || free === 'x') anchor.time = point.time;
+        if (free === 'both' || free === 'y') anchor.price = point.price;
+    }
+
     /**
      * Apply a whole-body drag — translate the original anchors by (dt, dp) in data space.
      * Default moves every anchor together; a type can pin some (e.g. a callout keeps its

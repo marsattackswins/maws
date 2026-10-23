@@ -2,6 +2,7 @@ import { describe, test, expect } from "@jest/globals";
 import {
   computeOrderBlocks,
   computeOrderBlocksLive,
+  computeVolumePivotOrderBlocks,
   type ObConfig,
   type ObHistoryCache,
 } from "@/lib/order-blocks";
@@ -51,6 +52,52 @@ describe("order blocks detection", () => {
     expect(ob.loc).toBe(9000); // bar 8 time
     expect(ob.breaker).toBe(false);
     expect(r.displayed).toEqual([ob]);
+  });
+
+  test("volume-pivot detector mode uses the pivot candle's half-range zone", () => {
+    const cfg: ObConfig = { ...base, requireVolumePivot: true, volumePivotLength: 2 };
+    const candles = [
+      c(12, 10, 11, 11, 0),
+      c(11, 9, 10, 10, 1),
+      c(10, 8, 9, 9, 2),
+      c(11, 7, 9, 8, 3),
+      c(12, 9, 10, 10, 4),
+      c(12, 9, 10, 10, 5),
+    ].map((bar, i) => ({ ...bar, volume: i === 3 ? 10 : 1 }));
+
+    const result = computeVolumePivotOrderBlocks(candles, cfg);
+    expect(result.bull).toHaveLength(1);
+    expect(result.bull[0]).toMatchObject({ top: 9, btm: 7, loc: 4000, breaker: false });
+    expect(result.bear).toHaveLength(0);
+    expect(computeOrderBlocks(candles, cfg)).toEqual(result);
+    expect(computeOrderBlocksLive(candles, cfg, null)).toEqual({ result, cache: null });
+
+    const bearishCandles = candles.map((bar) => ({
+      ...bar,
+      high: 20 - bar.low,
+      low: 20 - bar.high,
+      open: 20 - bar.open,
+      close: 20 - bar.close,
+    }));
+    const bearish = computeVolumePivotOrderBlocks(bearishCandles, cfg);
+    expect(bearish.bear).toHaveLength(1);
+    expect(bearish.bear[0]).toMatchObject({ top: 13, btm: 11, loc: 4000 });
+  });
+
+  test("volume-pivot detector mode matches wick and close mitigation", () => {
+    const cfg: ObConfig = { ...base, requireVolumePivot: true, volumePivotLength: 2 };
+    const candles = [
+      c(12, 10, 11, 11, 0),
+      c(11, 9, 10, 10, 1),
+      c(10, 8, 9, 9, 2),
+      c(11, 7, 9, 8, 3),
+      c(12, 9, 10, 10, 4),
+      c(12, 9, 10, 10, 5),
+      c(10, 6, 8, 8, 6),
+    ].map((bar, i) => ({ ...bar, volume: i === 3 ? 10 : 1 }));
+
+    expect(computeVolumePivotOrderBlocks(candles, cfg).bull).toHaveLength(0);
+    expect(computeVolumePivotOrderBlocks(candles, { ...cfg, mitigationMethod: "Close" }).bull).toHaveLength(1);
   });
 
   test("a pure uptrend yields no bullish OB (swings alternate; no low recorded yet)", () => {

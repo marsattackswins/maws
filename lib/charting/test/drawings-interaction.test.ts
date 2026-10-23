@@ -388,7 +388,7 @@ describe('DrawingInteraction: marquee (Ctrl/Cmd-drag on the empty plot)', () => 
     });
 });
 
-describe('DrawingInteraction: click-move-click placement (measurement / position)', () => {
+describe('DrawingInteraction: click-move-click placement (measurement)', () => {
     it('a measurement box is placed click → move → click (2 anchors)', () => {
         const h = harness('datepricerange');
         h.it.down(10, 90); // click the first corner
@@ -401,11 +401,11 @@ describe('DrawingInteraction: click-move-click placement (measurement / position
         expect(create?.kind === 'create' && create.doc.anchors).toHaveLength(2);
     });
 
-    it('a long position click-move-click → 3 anchors, target above the entry (drag higher = profit)', () => {
+    it('a long position press-drag-release → target above the entry (drag higher = profit)', () => {
         const h = harness('position');
         h.it.down(20, 60); // entry (price 40)
         h.it.move(40, 40);
-        h.it.down(40, 40); // target above the entry (price 60) → long (profit up)
+        h.it.up(40, 40); // target above the entry (price 60) → long (profit up)
         const create = h.intents.find((i) => i.kind === 'create');
         expect(create?.kind === 'create' && create.doc.anchors).toHaveLength(3);
         if (create?.kind === 'create') {
@@ -419,7 +419,7 @@ describe('DrawingInteraction: click-move-click placement (measurement / position
         const h = harness('position');
         h.it.down(20, 60); // entry (price 40)
         h.it.move(40, 80);
-        h.it.down(40, 80); // target below the entry (price 20) → short (profit down)
+        h.it.up(40, 80); // target below the entry (price 20) → short (profit down)
         const create = h.intents.find((i) => i.kind === 'create');
         if (create?.kind === 'create') {
             const [entry, stop, target] = create.doc.anchors;
@@ -428,12 +428,32 @@ describe('DrawingInteraction: click-move-click placement (measurement / position
         }
     });
 
-    it('a degenerate second click (≈ the entry) drops a default position box (3 anchors)', () => {
+    it('a bare click does not create a zero-size position', () => {
         const h = harness('position');
         h.it.down(30, 50); // entry
-        h.it.down(30, 50); // second click ≈ the entry → default R:R box
+        h.it.up(30, 50);
         const create = h.intents.find((i) => i.kind === 'create');
-        expect(create?.kind === 'create' && create.doc.anchors).toHaveLength(3);
+        expect(create).toBeUndefined();
+    });
+
+    it('dragging a position handle resizes both sides of its right edge together', () => {
+        const drawing = createDrawing('position', {
+            id: 'position-1',
+            paneId: 'price',
+            anchors: [
+                { time: 0, price: 50 },
+                { time: 5, price: 40 },
+                { time: 10, price: 70 },
+            ],
+        })!;
+        const h = harness(null, [drawing]);
+        h.it.down(10, 30); // target handle
+        h.it.move(25, 55); // wider and lower target
+        h.it.up(25, 55);
+        expect(drawing.anchors[1]!.time).toBe(48); // minimum usable width
+        expect(drawing.anchors[2]!.time).toBe(48);
+        expect(drawing.anchors[2]!.price).toBe(45);
+        expect(h.intents.some((intent) => intent.kind === 'edit')).toBe(true);
     });
 
     it('a single click leaves a range placing (waiting for the second click)', () => {

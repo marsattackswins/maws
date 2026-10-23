@@ -23,8 +23,11 @@ import {
   topbarSeedMargin,
 } from "@/lib/trading/symbol-settings";
 import { useQuote } from "@/lib/use-quotes";
-import { groupedVelaCatalog, velaIndicatorCategory } from "@/lib/vela-indicator-catalog";
-import type { NativeIndicatorInfo } from "@/lib/charting";
+import {
+  applyVelaThemeEverywhere,
+  velaThemeNameFromAppSettings,
+} from "@/lib/app-theme";
+import { applyThemeToCharts } from "@/lib/vela-chart-settings";
 import type { Timeframe } from "@/types";
 import { VelaTemplateMenu } from "@/components/shell/VelaTemplateMenu";
 import { VelaLayoutButton } from "@/components/shell/VelaLayoutButton";
@@ -34,13 +37,39 @@ import {
   Diamond,
   Keyboard,
   Maximize,
+  Moon,
   Rewind,
   Settings,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 const BAR_TFS: Timeframe[] = ["1m", "5m", "15m", "30m", "1h", "4h", "1D", "1W", "1M"];
 const MORE_TFS: Timeframe[] = ["3m", "2h"];
+const TOPBAR_ICON_ORDER_KEY = "maws.topbarIconOrder.v1";
+const TOPBAR_ICON_IDS = [
+  "layout",
+  "settings",
+  "shortcuts",
+  "fullscreen",
+  "screenshot",
+  "theme",
+] as const;
+type TopbarIconId = (typeof TOPBAR_ICON_IDS)[number];
+
+function isTopbarIconId(value: unknown): value is TopbarIconId {
+  return typeof value === "string" && TOPBAR_ICON_IDS.some((id) => id === value);
+}
+
+function loadTopbarIconOrder(): TopbarIconId[] {
+  try {
+    const raw = localStorage.getItem(TOPBAR_ICON_ORDER_KEY);
+    const saved: unknown = raw ? JSON.parse(raw) : null;
+    const order = Array.isArray(saved) ? saved.filter(isTopbarIconId) : [];
+    return [...new Set(order), ...TOPBAR_ICON_IDS.filter((id) => !order.includes(id))];
+  } catch {
+    return [...TOPBAR_ICON_IDS];
+  }
+}
 
 /**
  * Feature flag mirror of AppShell's constant — the workspace's composite
@@ -314,7 +343,6 @@ function BuySellStrip({
 
 export function TopBar() {
   const pane = useActivePane();
-  const setSearchOpen = useAppStore((s) => s.setSearchOpen);
   const setTimeframe = useAppStore((s) => s.setTimeframe);
   const indicatorMenuOpen = useAppStore((s) => s.indicatorMenuOpen);
   const setIndicatorMenuOpen = useAppStore((s) => s.setIndicatorMenuOpen);
@@ -328,7 +356,9 @@ export function TopBar() {
   const setBottomTab = useAppStore((s) => s.setBottomTab);
   const setBuySellMenu = useAppStore((s) => s.setBuySellMenu);
   const showBuySell = useAppStore((s) => s.chartSettings.showBuySell);
-
+  // The topbar theme switch reads the resolved app theme (string selector — no
+  // re-render on unrelated color tweaks).
+  const themeName = useAppStore((s) => velaThemeNameFromAppSettings(s.appSettings));
   const watchlist = useAppStore((s) => s.watchlist);
   const addToWatchlist = useAppStore((s) => s.addToWatchlist);
   const removeFromWatchlist = useAppStore((s) => s.removeFromWatchlist);
@@ -340,17 +370,16 @@ export function TopBar() {
   const stopReplay = useAppStore((s) => s.stopReplay);
   const setReplaySeeking = useAppStore((s) => s.setReplaySeeking);
   const settingsOpen = useAppStore((s) => s.settingsOpen);
-  const searchOpen = useAppStore((s) => s.searchOpen);
   const indicatorSettingsId = useAppStore((s) => s.indicatorSettingsId);
   const drawingSettingsTarget = useAppStore((s) => s.drawingSettingsTarget);
   const brokerDialogOpen = useAppStore((s) => s.brokerDialogOpen);
   const tfRef = useRef<HTMLDivElement>(null);
   const styleRef = useRef<HTMLDivElement>(null);
-  const indicatorRef = useRef<HTMLDivElement>(null);
+  const draggedIconRef = useRef<TopbarIconId | null>(null);
+  const [iconOrder, setIconOrder] = useState<TopbarIconId[]>(() => [...TOPBAR_ICON_IDS]);
+  const [draggingIcon, setDraggingIcon] = useState<TopbarIconId | null>(null);
   const [tfMore, setTfMore] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
-  /** Live state of Vela's native-indicator catalog on this pane's chart (supported/present flags). */
-  const [velaCatalog, setVelaCatalog] = useState<NativeIndicatorInfo[] | null>(null);
   const starred = watchlist.includes(pane.symbol);
   const tfLabel = TIMEFRAMES.find((t) => t.id === pane.timeframe)?.label ?? pane.timeframe;
 
@@ -359,32 +388,6 @@ export function TopBar() {
     setStyleOpen(false);
     setIndicatorMenuOpen(false);
     closeMenus();
-  };
-
-  /** Fetch Vela's native catalog (supported/present flags) for the active pane's chart. */
-  const refreshVelaCatalog = () => {
-    const chart = getChart(pane.id)?.vela;
-    if (!chart?.availableNativeIndicators) {
-      setVelaCatalog(null);
-      return;
-    }
-    void chart
-      .availableNativeIndicators()
-      .then((list) => setVelaCatalog(list))
-      .catch(() => setVelaCatalog(null));
-  };
-
-  useEffect(() => {
-    if (!indicatorMenuOpen) return;
-    refreshVelaCatalog();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [indicatorMenuOpen, pane.id]);
-
-  /** Add a Vela-native indicator straight onto the active pane's chart (Vela owns legend/settings). */
-  const addVelaNative = (type: string) => {
-    getChart(pane.id)?.vela.addNativeIndicator(type);
-    setIndicatorMenuOpen(false);
-    refreshVelaCatalog();
   };
 
   const toggleTfMore = () => {
@@ -408,11 +411,16 @@ export function TopBar() {
     if (next) setIndicatorMenuOpen(true);
   };
 
-  const toggleSearch = () => {
-    const next = !searchOpen;
+  /**
+   * VELA's symbol search dialog, hosted by the workspace (the shell used to draw its own
+   * popover here). It targets the ACTIVE cell, which the shell keeps aligned with the
+   * store, and its rows are the futures-only provider index — same dialog a bare
+   * keystroke over the grid opens, so there is one search UI to learn and maintain.
+   */
+  const openSymbolSearch = () => {
     closeAllMenus();
     if (settingsOpen) setSettingsOpen(false);
-    if (next) setSearchOpen(true);
+    getWorkspace()?.openSymbolSearch();
   };
 
   const toggleSettings = () => {
@@ -462,6 +470,113 @@ export function TopBar() {
   ]);
 
   useEffect(() => {
+    setIconOrder(loadTopbarIconOrder());
+  }, []);
+
+  const toolbarIcons: Record<TopbarIconId, ReactNode> = {
+    layout: (
+      <div className="mr-1 flex items-center">
+        <VelaLayoutButton />
+      </div>
+    ),
+    settings: (
+      <ToolbarBtn label="Settings" className="rounded-full" onClick={toggleSettings}>
+        <Settings size={15} />
+      </ToolbarBtn>
+    ),
+    shortcuts: (
+      <ToolbarBtn
+        label="Keyboard shortcuts"
+        className="rounded-full"
+        active={settingsOpen}
+        data-settings-trigger
+        onClick={() => {
+          closeAllMenus();
+          setSettingsOpen(!settingsOpen);
+        }}
+      >
+        <Keyboard size={15} />
+      </ToolbarBtn>
+    ),
+    fullscreen: (
+      <ToolbarBtn
+        label="Fullscreen"
+        className="rounded-full"
+        onClick={() => {
+          closeAllMenus();
+          if (document.fullscreenElement) void document.exitFullscreen();
+          else void document.documentElement.requestFullscreen();
+        }}
+      >
+        <Maximize size={15} />
+      </ToolbarBtn>
+    ),
+    screenshot: (
+      <ToolbarBtn
+        label="Screenshot"
+        className="rounded-full"
+        onClick={() => {
+          closeAllMenus();
+          if (USE_VELA_WORKSPACE) {
+            getWorkspace()?.downloadScreenshot();
+            return;
+          }
+          const handle = getChart(pane.id);
+          if (!handle) return;
+          const dataUrl = handle.vela.renderer.screenshot();
+          if (!dataUrl) return;
+          const a = document.createElement("a");
+          a.href = dataUrl;
+          a.download = `${pane.symbol}-${pane.timeframe}.png`;
+          a.click();
+        }}
+      >
+        <Camera size={15} />
+      </ToolbarBtn>
+    ),
+    theme: (
+      <ToolbarBtn
+        label={themeName === "classic" ? "Theme · Vela Classic" : "Theme · Vela Muted"}
+        className="rounded-full"
+        onClick={() => {
+          closeAllMenus();
+          const next = themeName === "classic" ? "dark" : "classic";
+          const nextSettings = applyVelaThemeEverywhere(next);
+          useAppStore
+            .getState()
+            .setAppSettings({
+              ...nextSettings,
+              advancedColors: useAppStore.getState().appSettings.advancedColors,
+            });
+          applyThemeToCharts(next);
+        }}
+      >
+        <Moon size={15} />
+      </ToolbarBtn>
+    ),
+  };
+
+  const dropIcon = (target: TopbarIconId, clientX: number, targetRect: DOMRect) => {
+    const dragged = draggedIconRef.current;
+    if (!dragged || dragged === target) return;
+    const fromIndex = iconOrder.indexOf(dragged);
+    const targetIndex = iconOrder.indexOf(target);
+    if (fromIndex < 0 || targetIndex < 0) return;
+
+    const nextOrder = [...iconOrder];
+    nextOrder.splice(fromIndex, 1);
+    let insertIndex = targetIndex + (clientX >= targetRect.left + targetRect.width / 2 ? 1 : 0);
+    if (insertIndex > fromIndex) insertIndex--;
+    nextOrder.splice(insertIndex, 0, dragged);
+    setIconOrder(nextOrder);
+    try {
+      localStorage.setItem(TOPBAR_ICON_ORDER_KEY, JSON.stringify(nextOrder));
+    } catch {
+      /* The current session order still applies when storage is unavailable. */
+    }
+  };
+
+  useEffect(() => {
     const onDown = (e: MouseEvent) => {
       const t = e.target as HTMLElement | null;
       if (!t) return;
@@ -472,12 +587,6 @@ export function TopBar() {
       if (styleOpen && !styleRef.current?.contains(t)) {
         setStyleOpen(false);
       }
-      if (indicatorMenuOpen && !indicatorRef.current?.contains(t)) {
-        setIndicatorMenuOpen(false);
-      }
-      if (searchOpen && !t.closest("[data-symbol-search-trigger], [data-symbol-search]")) {
-        setSearchOpen(false);
-      }
     };
     window.addEventListener("mousedown", onDown);
     return () => window.removeEventListener("mousedown", onDown);
@@ -485,9 +594,7 @@ export function TopBar() {
     tfMore,
     styleOpen,
     indicatorMenuOpen,
-    searchOpen,
     setIndicatorMenuOpen,
-    setSearchOpen,
   ]);
 
   return (
@@ -508,7 +615,7 @@ export function TopBar() {
       <button
         type="button"
         data-symbol-search-trigger
-        onClick={toggleSearch}
+        onClick={openSymbolSearch}
         className="relative z-[2] flex h-[28px] w-[140px] shrink-0 items-center justify-between gap-1.5 rounded-full bg-[var(--app-elevated)] px-3 hover:bg-[var(--app-border)]"
       >
         {/* Asset icon left of the ticker — mirrors the status line/search rows. */}
@@ -654,60 +761,16 @@ export function TopBar() {
 
         <span className="top-sep" />
 
-        <div className="relative" ref={indicatorRef}>
-          <ToolbarBtn
-            label="Indicators"
-            active={indicatorMenuOpen}
-            onClick={toggleIndicatorMenu}
-            className="gap-1 px-2 text-[13px] text-(--app-text)"
-          >
-            <IndicatorsIcon />
-            Indicators
-            <ChevronDown size={11} className="text-(--app-muted)" />
-          </ToolbarBtn>
-          {indicatorMenuOpen && (
-            <div className="menu max-h-[70vh] overflow-y-auto" data-dropdown-open>
-              {/* The full Vela native catalog (incl. MAWS-registered order-blocks and
-                  pmo) — every entry mounts through chart.addNativeIndicator; Vela
-                  owns the legend row, settings dialog, hide/show and removal. */}
-              {groupedVelaCatalog().map(({ category, entries }) => {
-                const live = new Map(velaCatalog?.map((n) => [n.type, n]) ?? []);
-                return (
-                  <div key={category}>
-                    <div className="menu-section-title">Vela · {category}</div>
-                    {entries.map((entry) => {
-                      const info = live.get(entry.type);
-                      const supported = info ? info.supported : true;
-                      const present = info?.present ?? false;
-                      return (
-                        <button
-                          key={entry.type}
-                          type="button"
-                          disabled={!supported}
-                          className={`menu-row w-full text-left ${supported ? "" : "opacity-40"}`}
-                          title={
-                            !supported
-                              ? "Not available for this symbol"
-                              : velaIndicatorCategory(entry.type)
-                          }
-                          onClick={() => addVelaNative(entry.type)}
-                        >
-                          <span className="flex-1 truncate">
-                            {info?.title ?? entry.title}
-                          </span>
-                          {info?.beta ? (
-                            <span className="text-[10px] uppercase text-(--app-muted)">beta</span>
-                          ) : null}
-                          {present ? <span className="text-[12px] text-(--app-text)">✓</span> : null}
-                        </button>
-                      );
-                    })}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        <ToolbarBtn
+          label="Indicators"
+          active={indicatorMenuOpen}
+          onClick={toggleIndicatorMenu}
+          className="gap-1 px-2 text-[13px] text-(--app-text)"
+        >
+          <IndicatorsIcon />
+          Indicators
+          <ChevronDown size={11} className="text-(--app-muted)" />
+        </ToolbarBtn>
 
         <span className="top-sep" />
 
@@ -753,59 +816,33 @@ export function TopBar() {
       <div className="relative z-[2] flex shrink-0 items-center gap-0.5">
         <VelaTemplateMenu />
 
-        <div className="mr-1 flex items-center">
-          <VelaLayoutButton />
-        </div>
-        <ToolbarBtn
-          label="Settings"
-          className="rounded-full"
-          onClick={toggleSettings}
-        >
-          <Settings size={15} />
-        </ToolbarBtn>
-        <ToolbarBtn
-          label="Keyboard shortcuts"
-          className="rounded-full"
-          active={settingsOpen}
-          data-settings-trigger
-          onClick={() => { closeAllMenus(); setSettingsOpen(!settingsOpen); }}
-        >
-          <Keyboard size={15} />
-        </ToolbarBtn>
-        <ToolbarBtn
-          label="Fullscreen"
-          className="rounded-full"
-          onClick={() => {
-            closeAllMenus();
-            if (document.fullscreenElement) void document.exitFullscreen();
-            else void document.documentElement.requestFullscreen();
-          }}
-        >
-          <Maximize size={15} />
-        </ToolbarBtn>
-        <ToolbarBtn
-          label="Screenshot"
-          className="rounded-full"
-          onClick={() => {
-            closeAllMenus();
-            if (USE_VELA_WORKSPACE) {
-              // Workspace engine: the composite screenshot covers every cell.
-              getWorkspace()?.downloadScreenshot();
-              return;
-            }
-            const handle = getChart(pane.id);
-            if (!handle) return;
-            // Vela public seam: renderer.screenshot() returns a PNG data URL.
-            const dataUrl = handle.vela.renderer.screenshot();
-            if (!dataUrl) return;
-            const a = document.createElement("a");
-            a.href = dataUrl;
-            a.download = `${pane.symbol}-${pane.timeframe}.png`;
-            a.click();
-          }}
-        >
-          <Camera size={15} />
-        </ToolbarBtn>
+        {iconOrder.map((id) => (
+          <div
+            key={id}
+            data-toolbar-icon={id}
+            draggable
+            className={`flex shrink-0 cursor-grab items-center active:cursor-grabbing ${
+              draggingIcon === id ? "opacity-40" : ""
+            }`}
+            onDragStart={(event) => {
+              draggedIconRef.current = id;
+              setDraggingIcon(id);
+              event.dataTransfer.effectAllowed = "move";
+              event.dataTransfer.setData("text/plain", id);
+            }}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => {
+              event.preventDefault();
+              dropIcon(id, event.clientX, event.currentTarget.getBoundingClientRect());
+            }}
+            onDragEnd={() => {
+              draggedIconRef.current = null;
+              setDraggingIcon(null);
+            }}
+          >
+            {toolbarIcons[id]}
+          </div>
+        ))}
         {showBuySell ? (
           <BuySellStrip
             symbol={pane.symbol}

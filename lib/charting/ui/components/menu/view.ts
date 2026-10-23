@@ -135,6 +135,9 @@ class Surface {
     destroy(): void {
         for (const sub of this.subs.values()) sub.destroy();
         this.subs.clear();
+        if (this.api.open) {
+            try { this.api.setOpen(false); } catch { /* ignore */ }
+        }
         this.handle.stop();
         this.positioner.remove();
     }
@@ -307,6 +310,9 @@ export class Menu {
     }
 
     destroy(): void {
+        if (this.api.open) {
+            try { this.api.setOpen(false); } catch { /* ignore */ }
+        }
         this.root.destroy();
     }
 }

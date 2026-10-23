@@ -35,6 +35,32 @@ export { lowerTimeframeTicks, barsToTicks } from './core/replayTicks';
 // Native indicators (core-computed, no scripting engine) — register a type, then chart.addNativeIndicator(type)
 export { registerNativeIndicator, unregisterNativeIndicator, getNativeIndicator, nativeIndicatorTypes, nativeIndicatorDescriptors } from './core/native-indicators';
 export type { NativeIndicator, NativeIndicatorContext, NativeIndicatorDescriptor, NativeIndicatorInfo, NativeIndicatorOutput } from './core/native-indicators';
+// The one "Labels on price scale" toggle every indicator declares (OFF by default).
+export {
+    SCALE_LABELS_KEY,
+    SCALE_LABELS_TITLE,
+    SCALE_LABELS_DEFAULT,
+    SCALE_LABELS_GROUP,
+    scaleLabelsInput,
+    scaleLabelsOn,
+    withScaleLabels,
+} from './core/native-indicators';
+// The one "Show settings in legend" toggle every indicator declares (ON by default).
+export {
+    LEGEND_SETTINGS_KEY,
+    LEGEND_SETTINGS_TITLE,
+    LEGEND_SETTINGS_DEFAULT,
+    LEGEND_SETTINGS_GROUP,
+    legendSettingsInput,
+    legendSettingsOn,
+    legendSettingsText,
+    legendTitle,
+    LEGEND_VALUES_KEY,
+    LEGEND_VALUES_TITLE,
+    LEGEND_VALUES_DEFAULT,
+    legendValuesInput,
+    legendValuesOn,
+} from './core/native-indicators';
 export { DARK_THEME, LIGHT_THEME, resolveTheme } from './core/theme';
 export { TypedEventBus } from './core/events/EventBus';
 

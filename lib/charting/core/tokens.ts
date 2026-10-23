@@ -93,6 +93,10 @@ export function themeTokens(t: VelaTheme): Record<string, string> {
         '--vela-hover-strong': bgChipHover,
         '--vela-focus': withAlpha(textSecondary, 0.5),
         '--vela-focus-soft': withAlpha(textSecondary, 0.12),
+        // Active-cell ring in a multi-cell grid: a thin, muted grey wash over the
+        // chart surface (never the primary white text color, which read as a loud
+        // 2px frame around the selected chart).
+        '--vela-cell-active-border': dark ? 'rgba(255,255,255,0.26)' : withAlpha(t.textColor, 0.3),
         '--vela-separator-hover-band': dark ? 'rgba(255,255,255,0.06)' : withAlpha(t.textColor, 0.1),
         '--vela-separator-hover-line': textSecondary,
         '--vela-scroll': bgChipHover,

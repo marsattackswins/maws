@@ -74,6 +74,7 @@ export const workspacePartialize = (state: Store) => ({
   bottomOpen: state.bottomOpen,
   bottomTab: state.bottomTab,
   rightDock: state.rightDock,
+  rightDockOrder: state.rightDockOrder,
   rightWidth: state.rightWidth,
   calendarNewsSplit: state.calendarNewsSplit,
   bottomHeight: state.bottomHeight,
@@ -110,8 +111,8 @@ export const workspacePartialize = (state: Store) => ({
   symbolTrading: state.symbolTrading,
 });
 
-export const useAppStore = create<Store>()(
-  persist(
+function createAppStore() {
+  return create<Store>()(persist(
     (set, get) => ({
       ...createUiSlice(set, get),
       ...createWatchlistSlice(set, get),
@@ -169,8 +170,53 @@ export const useAppStore = create<Store>()(
         normalizePaperTradingRehydrate(state);
       },
     },
-  ),
-);
+  ));
+}
+
+type AppStore = ReturnType<typeof createAppStore>;
+
+/**
+ * One store per PAGE, not per module evaluation.
+ *
+ * `next dev` re-evaluates a module when it (or something it imports) changes. A fresh
+ * `create()` then handed the new module copy an EMPTY store, while already-mounted
+ * consumers kept the instance they captured — the Vela workspace host, which
+ * subscribes once in a `[]` effect and pushes pane symbol/timeframe edits into the
+ * cells, went on watching the OLD store. The shell (watchlist selection, timeframe
+ * buttons) moved; the candles did not. Reusing the instance across evaluations keeps
+ * one source of truth; in production the module is evaluated once, so this is a no-op.
+ */
+const storeHost = globalThis as typeof globalThis & { __mawsAppStore?: AppStore };
+// `development` only: a production build evaluates modules once, and tests rely on
+// `jest.isolateModules` handing them a FRESH store per case.
+const shareAcrossEvaluations = process.env.NODE_ENV === "development";
+const previousStore = shareAcrossEvaluations ? storeHost.__mawsAppStore : undefined;
+
+export const useAppStore: AppStore =
+  previousStore ?? createAppStore();
+if (shareAcrossEvaluations) {
+  if (previousStore) {
+    const refreshedWatchlistActions = createWatchlistSlice(
+      (partial) => useAppStore.setState(partial),
+      () => useAppStore.getState(),
+    );
+    useAppStore.setState({
+      toggleWatchlistCollapsed: refreshedWatchlistActions.toggleWatchlistCollapsed,
+      toggleWatchlistGroup: refreshedWatchlistActions.toggleWatchlistGroup,
+      renameWatchlist: refreshedWatchlistActions.renameWatchlist,
+      createWatchlist: refreshedWatchlistActions.createWatchlist,
+      activateWatchlist: refreshedWatchlistActions.activateWatchlist,
+      deleteWatchlist: refreshedWatchlistActions.deleteWatchlist,
+      addToWatchlist: refreshedWatchlistActions.addToWatchlist,
+      removeFromWatchlist: refreshedWatchlistActions.removeFromWatchlist,
+      moveWatchlistSymbol: refreshedWatchlistActions.moveWatchlistSymbol,
+      reorderWatchlist: refreshedWatchlistActions.reorderWatchlist,
+      setWatchlistOrder: refreshedWatchlistActions.setWatchlistOrder,
+      setWatchlistHeight: refreshedWatchlistActions.setWatchlistHeight,
+    });
+  }
+  storeHost.__mawsAppStore = useAppStore;
+}
 
 export function useActivePane(): ChartPaneState {
   return useAppStore((s) => {

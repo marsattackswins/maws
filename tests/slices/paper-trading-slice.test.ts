@@ -304,12 +304,12 @@ describe("paper account actions", () => {
   });
 });
 
-describe("persistence boundary (51-key schema)", () => {
-  it("keeps the nine paper fields at positions #33-37 and #46-49", () => {
+describe("persistence boundary (52-key schema)", () => {
+  it("keeps the nine paper fields at positions #34-38 and #47-50", () => {
     const keys = Object.keys(workspacePartialize(useAppStore.getState()));
-    expect(keys).toHaveLength(51);
-    expect(keys.slice(33, 38)).toEqual(["orders", "positions", "orderHistory", "balanceHistory", "journal"]);
-    expect(keys.slice(46, 50)).toEqual(["connectedBroker", "mockBalance", "mockRealized", "paperAccount"]);
+    expect(keys).toHaveLength(52);
+    expect(keys.slice(34, 39)).toEqual(["orders", "positions", "orderHistory", "balanceHistory", "journal"]);
+    expect(keys.slice(47, 51)).toEqual(["connectedBroker", "mockBalance", "mockRealized", "paperAccount"]);
   });
 });
 

@@ -35,10 +35,14 @@ import { PineEngine } from "@luxalgo/vela-pinets";
 import { mawsVelaProvider, toVelaTicker } from "@/lib/vela-feed-adapter";
 import { registerChart, unregisterChart, setWorkspaceHandle } from "@/lib/chart-registry";
 import { useAppStore } from "@/lib/store";
+import { collapseDrawingDuplicates, withoutDrawingsDoc } from "@/lib/vela-drawings";
 import { velaThemeNameFromAppSettings } from "@/lib/app-theme";
 import { wireCell } from "@/lib/vela-cell-wiring";
 import { startChartSettingsEcho } from "@/lib/vela-chart-settings";
 import { registerChartVisibilityActions } from "@/lib/vela-context-actions";
+import { registerMawsSymbolSearch } from "@/lib/vela-symbol-search";
+import { ensurePineStatePersistence, watchPineSources } from "@/lib/vela-pine-scripts";
+import { applyTemplate, getTemplates } from "@/lib/vela-templates";
 import { VelaWorkspaceOverlays } from "@/components/charts/VelaWorkspaceOverlays";
 import type { ChartPaneState } from "@/types";
 import "@/lib/vela-native-indicators";
@@ -80,6 +84,10 @@ export function VelaWorkspaceHost() {
     const s = useAppStore.getState();
 
     ensureMawsLayouts();
+    // Pine scripts are not manifest indicators: Vela keeps them out of the cell's
+    // ledger on purpose, so the `ext` handler is what brings them back after a
+    // refresh. Registered before construction — a cell restores as it is built.
+    ensurePineStatePersistence();
 
     const opts: VelaWorkspaceOptions = {
       // Headless inside MAWS — MAWS's own TopBar/BottomPanel own that chrome.
@@ -92,6 +100,12 @@ export function VelaWorkspaceHost() {
       drawings: { toolbar: false },
       drawingToolbar: false,
       theme: (velaThemeNameFromAppSettings(s.appSettings) ?? "dark") as never,
+      timezone: s.chartSettings.timezone,
+      // The workspace DEFAULTS to `live: false` (a host may be a static snapshot), so
+      // leaving it unset kept every cell on its REST history: the last bar was the
+      // partial candle as of page load and never moved again. MAWS charts are always
+      // live — the provider streams its own kline WebSocket — so opt in explicitly.
+      live: true,
       providers: { binance: () => mawsVelaProvider },
       engines: { pine: () => new PineEngine() },
       layout: mawsWorkspaceLayoutId(s.layoutCount, s.orientation),
@@ -114,15 +128,63 @@ export function VelaWorkspaceHost() {
     const ws = new VelaWorkspace(el, opts);
     wsRef.current = ws;
     setWsState(ws);
+
+    // ── one active cell, both sides ─────────────────────────────────────────
+    // The workspace boots on its FIRST cell, while `activePaneId` is restored from
+    // the last session — it can name a pane this layout no longer shows (2×2 → 1×1
+    // keeps the fourth pane active, then a reload rebuilds the order from pane 0).
+    // Every shell-side market edit (watchlist row, TopBar picker) targets the ACTIVE
+    // pane, so a stale id silently rewrote a hidden pane and the visible chart never
+    // moved. Adopt the restored pane when it is on screen; otherwise adopt the cell
+    // the workspace actually activated and heal the store.
+    const cells = ws.cells();
+    const shown = new Set(cells.slice(0, s.layoutCount).map((c) => c.id));
+    if (cells.length > 0) {
+      if (s.activePaneId && shown.has(s.activePaneId)) {
+        if (ws.active.id !== s.activePaneId) {
+          activeEchoRef.current = true;
+          ws.setActiveCell(s.activePaneId);
+          activeEchoRef.current = false;
+        }
+      } else if (cells[0]!.id !== s.activePaneId) {
+        useAppStore.getState().setActivePane(cells[0]!.id);
+      }
+    }
+
+    // Heal drawings written by the old double-owner bug: each store-originated
+    // drawing had been filed twice (Vela's id echo), so a delete could only clear
+    // one entry and the other re-created the drawing on the next mount.
+    for (const p of s.panes) {
+      const collapsed = collapseDrawingDuplicates(p.drawings);
+      if (collapsed) useAppStore.getState().setPaneDrawings(p.id, collapsed);
+    }
     // Shell surfaces (TopBar screenshot, AppShell) reach the workspace here.
     setWorkspaceHandle({
       replay: ws.replay,
       screenshot: () => ws.screenshot(),
       downloadScreenshot: () => ws.downloadScreenshot(),
       maximizeCell: (id) => ws.maximizeCell(id),
+      // The shell's symbol button opens Vela's own search dialog (the picker bare
+      // typing reaches) — one search UI, futures-only rows, watchlist stars.
+      openSymbolSearch: (query) => ws.context().openSymbolSearch(query),
       // Vela's own layout picker, mounted on the shell's Layouts button — picks route
       // through the store so the bridge below (store → ws.setLayout) stays the only
       // order-flow, and sync switches ride the persisted `layoutSync`.
+      // Pine editor: add a script through the shell (undo timeline + cell state).
+      addScript: (entry) => {
+        try {
+          ws.context().addIndicator(entry);
+        } catch {
+          /* no active cell yet — nothing to add to */
+        }
+      },
+      markStateDirty: () => {
+        try {
+          ws.context().stateChanged();
+        } catch {
+          /* no active cell yet */
+        }
+      },
       mountLayoutPicker: (trigger, onOpenChange) =>
         mountVelaLayoutPicker({
           ws,
@@ -147,18 +209,38 @@ export function VelaWorkspaceHost() {
     // indicators) — contributed into Vela's own chart context menu.
     offs.push(registerChartVisibilityActions());
 
+    // Vela's symbol search dialog: watchlist-first ranking + the watchlist as its
+    // star column (see lib/vela-symbol-search.ts).
+    offs.push(registerMawsSymbolSearch());
+
     // Vela cell-state bridge: cell dehydrations → persisted store (per pane).
     // The workspace is headless (`persist:false`), so this is the only place
     // chart-side edits survive a restart. Debounce: the workspace's own
     // state:changed already coalesces bursts (see markStateDirty).
     offs.push(
       ws.on("state:changed", () => {
+        const workspaceTimezone = ws.getState().timezone;
+        if (
+          workspaceTimezone &&
+          workspaceTimezone !== "exchange" &&
+          workspaceTimezone !== useAppStore.getState().chartSettings.timezone
+        ) {
+          useAppStore.getState().patchChartSettings({ timezone: workspaceTimezone });
+        }
         const panes = useAppStore.getState().panes;
         for (const p of panes) {
           const cell = ws.cell(p.id);
           if (!cell) continue;
           try {
-            useAppStore.getState().setPaneVelaState(p.id, cell.dehydrate() as Record<string, unknown>);
+            // The zustand slice OWNS drawings; the cell document must not carry a
+            // second copy (see lib/vela-drawings.ts) — a restored copy is invisible
+            // to the store, outlives a delete and re-appears on every refresh.
+            useAppStore
+              .getState()
+              .setPaneVelaState(
+                p.id,
+                withoutDrawingsDoc(cell.dehydrate() as Record<string, unknown>),
+              );
           } catch {
             /* cell mid-teardown — skip */
           }
@@ -173,9 +255,18 @@ export function VelaWorkspaceHost() {
     const registerCell = (id: string): void => {
       const cell = ws.cell(id);
       if (!cell) return;
+      // BEFORE the rehydrate below: restored Pine scripts must have their run/error
+      // events recorded, or a source that failed to run would be written back as if
+      // it were the document's script.
+      pineWiring.set(id, watchPineSources(cell.chart));
       // Rehydrate this cell from the persisted Vela cell-state doc (renderer
       // config, drawings doc, bars, session, display prefs) before wiring.
-      const saved = useAppStore.getState().panes.find((p) => p.id === id)?.velaState;
+      // Drawings come from the store (DrawingOverlay reconciles them on mount) — the
+      // cell document is asked for everything ELSE, so an older blob's drawing copy
+      // cannot resurrect a drawing the user deleted.
+      const saved = withoutDrawingsDoc(
+        useAppStore.getState().panes.find((p) => p.id === id)?.velaState,
+      );
       if (saved) {
         try {
           cell.rehydrate(saved as never);
@@ -187,12 +278,27 @@ export function VelaWorkspaceHost() {
         vela: cell.chart,
         renderer: cell.chart.renderer as never,
         el: cell.host,
+        getTemplatePrefs: () => cell.templatePrefs(),
+        applyTemplatePrefs: (prefs) => cell.applyTemplatePrefs(prefs),
       });
       // All per-cell MAWS wiring rides one disposer keyed by cell.
       cellWiring.set(id, wireCell(ws, id));
     };
     const cellWiring = new Map<string, () => void>();
-    for (const cell of ws.cells()) registerCell(cell.id);
+    const pineWiring = new Map<string, () => void>();
+    const startupCells = ws.cells();
+    for (const cell of startupCells) registerCell(cell.id);
+
+    const defaultTemplate = getTemplates().find(
+      (template) => template.name.trim().toLowerCase() === "maws",
+    );
+    if (defaultTemplate) {
+      for (const cell of startupCells) {
+        if (!applyTemplate(defaultTemplate.id, cell.id)) {
+          console.error(`[maws] Could not apply the default chart template to pane "${cell.id}".`);
+        }
+      }
+    }
 
     offs.push(
       ws.on("cell:created", ({ id }) => registerCell(id)),
@@ -202,6 +308,8 @@ export function VelaWorkspaceHost() {
       ws.on("cell:destroyed", ({ id }) => {
         cellWiring.get(id)?.();
         cellWiring.delete(id);
+        pineWiring.get(id)?.();
+        pineWiring.delete(id);
         unregisterChart(id);
       }),
     );
@@ -219,6 +327,13 @@ export function VelaWorkspaceHost() {
     const unsubStore = useAppStore.subscribe((state, prev) => {
       const ws2 = wsRef.current;
       if (!ws2) return;
+
+      if (
+        state.chartSettings.timezone !== prev.chartSettings.timezone &&
+        ws2.getState().timezone !== state.chartSettings.timezone
+      ) {
+        ws2.setTimezone(state.chartSettings.timezone);
+      }
 
       // Layout switch (count/orientation) → ws.setLayout on the registered id.
       if (state.layoutCount !== prev.layoutCount || state.orientation !== prev.orientation) {
@@ -254,7 +369,29 @@ export function VelaWorkspaceHost() {
       if (state.maximizedPaneId !== prev.maximizedPaneId) {
         ws2.maximizeCell(state.maximizedPaneId);
       }
+      for (const pane of state.panes) {
+        const before = prev.panes.find((candidate) => candidate.id === pane.id);
+        if (!before || before.velaState === pane.velaState) continue;
+        const cell = ws2.cell(pane.id);
+        if (!cell) continue;
+        const prefs = pane.velaState;
+        const previousPrefs = before.velaState;
+        const livePrefs = cell.templatePrefs();
+        if (typeof prefs?.watermark === "boolean" && prefs.watermark !== previousPrefs?.watermark && prefs.watermark !== livePrefs.watermark) {
+          cell.setWatermarkVisible(prefs.watermark);
+        }
+        if (typeof prefs?.replayWatermark === "boolean" && prefs.replayWatermark !== previousPrefs?.replayWatermark && prefs.replayWatermark !== livePrefs.replayWatermark) {
+          cell.setReplayWatermarkVisible(prefs.replayWatermark);
+        }
+        if (typeof prefs?.indicatorTitles === "boolean" && prefs.indicatorTitles !== previousPrefs?.indicatorTitles && prefs.indicatorTitles !== livePrefs.indicatorTitles) {
+          cell.setIndicatorTitlesVisible(prefs.indicatorTitles);
+        }
+        if (typeof prefs?.indicatorValues === "boolean" && prefs.indicatorValues !== previousPrefs?.indicatorValues && prefs.indicatorValues !== livePrefs.indicatorValues) {
+          cell.setIndicatorValuesVisible(prefs.indicatorValues);
+        }
+      }
       // Per-pane symbol/timeframe edits from MAWS UI → the cell's market.
+      // (The active pane is aligned with the workspace at mount, above.)
       // (After the maximize block above; the loop below is unchanged.)
       for (const pane of state.panes) {
         const before = prev.panes.find((p) => p.id === pane.id);

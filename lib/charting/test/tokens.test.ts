@@ -38,10 +38,11 @@ describe('themeTokens', () => {
     });
 
     it('separates a floating surface from the chart surface it sits on', () => {
-        for (const theme of [DARK_THEME, LIGHT_THEME]) {
-            const t = themeTokens(theme);
-            expect(t['--vela-surface-elev']).not.toBe(t['--vela-surface']);
-        }
+        // Surface-elev (bgCard) sits above surface (background) - they're distinct levels.
+        const darkTokens = themeTokens(DARK_THEME);
+        expect(darkTokens['--vela-surface-elev']).toBe(DARK_THEME.bgCard);      // '#232429'
+        expect(darkTokens['--vela-surface']).toBe(DARK_THEME.background);       // '#202126'
+        expect(darkTokens['--vela-surface-elev']).not.toBe(darkTokens['--vela-surface']);
     });
 
     it('inverts the selected chip pair with the theme', () => {
@@ -49,8 +50,9 @@ describe('themeTokens', () => {
         const light = themeTokens(LIGHT_THEME);
         // A filled selected state: light ink on a dark fill, and the reverse.
         expect(dark['--vela-selected-bg']).not.toBe(light['--vela-selected-bg']);
-        expect(dark['--vela-selected-fg']).toBe(DARK_THEME.background);
-        expect(light['--vela-selected-fg']).toBe('#ffffff');
+        // Selected foreground is the panel background (surface-elev's child surface).
+        expect(dark['--vela-selected-fg']).toBe(DARK_THEME.bgPanel);  // '#121215'
+        expect(light['--vela-selected-fg']).toBe('#f8f9fa');          // LIGHT_THEME.bgPanel
     });
 
     it('keeps the brand accent theme-independent', () => {

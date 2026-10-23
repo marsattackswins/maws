@@ -259,6 +259,8 @@ export interface ChartConfig {
     /** Stacked-pane chrome — the draggable line between an indicator's pane and the one above it. */
     panes: {
         separatorColor: string;
+        /** Relative heights keyed by stable pane id. */
+        heightWeights?: Record<string, number>;
     };
     /** Whitespace around the data (the Canvas tab's Margins group): top/bottom in percent
      *  of pane height, right in bars. See {@link ChartMargins}. */
@@ -621,9 +623,10 @@ export function factoryResetConfig(factory: ChartConfig, priceStyle: PriceStyle 
     return { ...factory, chartTypes: bag, series: { ...factory.series, style: priceStyle } };
 }
 
-const LEGACY_UP_DEFAULTS = new Set(['#089981', '#26a69a', '#22c55e']);
-const LEGACY_DOWN_DEFAULTS = new Set(['#f23645', '#ef5350', '#ef4444']);
-const LEGACY_BG_DEFAULTS = new Set(['#000000e9', '#131722', '#141414']);
+const LEGACY_UP_DEFAULTS = new Set(['#089981', '#26a69a', '#22c55e']); // palette-exempt: legacy TradingView colors for config migration
+const LEGACY_DOWN_DEFAULTS = new Set(['#f23645', '#ef5350', '#ef4444']); // palette-exempt: legacy TradingView colors for config migration
+const LEGACY_BG_DEFAULTS = new Set(['#000000e9', '#131722', '#141414']); // palette-exempt: legacy background hexes for config migration
+// palette-exempt: BULLISH/BEARISH/DARK_THEME.background are defined in theme.ts and palette.ts, used here for migration logic
 
 function sanitizeCandleColor(input: unknown, baseVal: string): string {
     if (!isColor(input)) return baseVal;
@@ -660,6 +663,10 @@ export function mergeConfig(base: ChartConfig, patch: unknown): ChartConfig {
     const ps = asObject(p.priceScale);
     const anim = asObject(p.animations);
     const panes = asObject(p.panes);
+    const heightWeights: Record<string, number> = { ...(base.panes.heightWeights ?? {}) };
+    for (const [id, weight] of Object.entries(asObject(panes.heightWeights))) {
+        if (isNum(weight) && weight > 0 && weight <= 1_000_000) heightWeights[id] = weight;
+    }
     const margins = asObject(p.margins);
     const trades = asObject(p.trades);
     const ts = asObject(p.timeScale);
@@ -720,6 +727,7 @@ export function mergeConfig(base: ChartConfig, patch: unknown): ChartConfig {
         },
         panes: {
             separatorColor: isColor(panes.separatorColor) ? panes.separatorColor : base.panes.separatorColor,
+            ...(Object.keys(heightWeights).length > 0 ? { heightWeights } : {}),
         },
         margins: {
             top: isNum(margins.top) ? clampMarginPct(margins.top) : base.margins.top,

@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useRef } from "react";
+import { fetchCalendarEvents } from "@/lib/calendar";
 import { getChart } from "@/lib/chart-registry";
 import { useAppStore } from "@/lib/store";
 import type { EventBreaksData } from "@/lib/vela-layers";
@@ -23,7 +24,6 @@ type CalEventLite = { at: number };
 
 async function fetchUpcomingEvents(): Promise<CalEventLite[]> {
   try {
-    const { fetchCalendarEvents } = await import("@/lib/calendar");
     const result = await fetchCalendarEvents();
     return result.events;
   } catch {

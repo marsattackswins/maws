@@ -97,7 +97,7 @@ function styleLabel(id: string): string {
 }
 
 const SD_STYLE_ID = 'vela-settings-controls';
-const SD_STYLE_REV = '6';
+const SD_STYLE_REV = '7';
 
 /**
  * The dialog's surface palette. It follows the STABLE chrome surface (the tokens written on
@@ -127,6 +127,8 @@ ${overlayScrollbarCss('.vela-sd-pane')}
 .vela-sd-tab.on{background:var(--vela-active);color:var(--vela-fg-bright);}
 .vela-sd-btn{height:30px;padding:0 14px;font-size:var(--vela-font-size-md);color:var(--vela-fg);background:var(--vela-surface-sunken);border:1px solid var(--vela-border);border-radius:var(--vela-radius-md);cursor:pointer;font-family:inherit;transition:background var(--vela-dur-fast) ease,border-color var(--vela-dur-fast) ease,color var(--vela-dur-fast) ease;}
 .vela-sd-btn:hover{background:var(--vela-hover);border-color:var(--vela-border-strong);color:var(--vela-fg-bright);}
+.vela-sd-btn--primary{background:var(--vela-accent);border-color:var(--vela-accent);color:var(--vela-fg-on-fill);font-weight:600;}
+.vela-sd-btn--primary:hover{background:var(--vela-accent);border-color:var(--vela-accent);color:var(--vela-fg-on-fill);filter:brightness(1.12);}
 .vela-sd-close{cursor:pointer;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:none;color:var(--vela-fg-muted);line-height:0;width:30px;height:30px;border-radius:var(--vela-radius-sm);transition:background var(--vela-dur-fast) ease,color var(--vela-dur-fast) ease;}
 .vela-sd-close:hover{background:var(--vela-hover);color:var(--vela-fg-bright);}
 /* Rows/blocks gated away by chart-type conditions, TOC filters, or the instance strip.
@@ -374,6 +376,15 @@ export class SettingsDialog {
                 resetBtn.className = 'vela-sd-btn';
                 resetBtn.addEventListener('click', () => this.onReset?.());
                 foot.appendChild(resetBtn);
+                // Explicit dismiss at the footer's trailing edge — the header ✕ is easy
+                // to miss after a long scroll, especially in a live-edit dialog.
+                const doneBtn = document.createElement('button');
+                doneBtn.type = 'button';
+                doneBtn.textContent = 'Done';
+                doneBtn.className = 'vela-sd-btn vela-sd-btn--primary';
+                doneBtn.style.marginLeft = 'auto';
+                doneBtn.addEventListener('click', () => this.close());
+                foot.appendChild(doneBtn);
             },
             // A close signal may only close ITS OWN dialog: the machine reports the exit
             // asynchronously, so a close-then-reopen in one tick would otherwise see the

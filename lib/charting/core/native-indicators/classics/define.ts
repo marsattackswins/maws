@@ -1,5 +1,7 @@
 import type { OHLCV } from '../../model/ohlcv';
 import type { InputSchema, InputValue } from '../../model/inputs';
+import { scaleLabelsInput, scaleLabelsOn, withScaleLabels } from '../scale-labels';
+import { legendSettingsInput, legendTitle, legendValuesInput } from '../legend-settings';
 import type { LineLikeKind, LineStyle, MarkerPoint, SeriesDisplay, SeriesPoint, SeriesSpec } from '../../model/series';
 import type { Fill, FillGradientStop, PriceLine } from '../../model/scene';
 import type { DrawingPolyline } from '../../model/drawings';
@@ -77,6 +79,10 @@ export interface ClassicIndicatorSpec {
     shortTitle?: string;
     /** true = draws over the price candles; false = its own pane below. */
     overlay: boolean;
+    /** Offers the "Labels on price scale" switch (default true). A study that draws only
+     *  markers or segments — no value line — sets this false: it has no latest value to
+     *  put on the scale, so the toggle would be a switch that does nothing. */
+    scaleLabels?: boolean;
     inputs: InputSchema[];
     compute(bars: readonly OHLCV[], inputs: Record<string, InputValue>): ClassicOutput;
 }
@@ -152,10 +158,14 @@ class ClassicIndicator implements NativeIndicator {
         const instanceId = this.spec.type;
         const series: SeriesSpec[] = [];
         const idsByKey = new Map<string, string>();
+        // The "Labels on price scale" toggle decides the price-scale surface for every
+        // drawn plot — OFF unless the user asks for the chip (lib/charting/README.md).
+        const labelsOn = scaleLabelsOn(this.inputs);
         out.plots.forEach((plot, ordinal) => {
             const kind = plot.kind ?? 'line';
             const id = stableSeriesId({ instanceId, kind, title: plot.title, ordinal });
             idsByKey.set(plot.key, id);
+            const display = withScaleLabels(plot.display, labelsOn);
             series.push({
                 id,
                 title: plot.title,
@@ -169,7 +179,7 @@ class ClassicIndicator implements NativeIndicator {
                     ...(plot.base != null ? { base: plot.base } : {}),
                 },
                 ...(plot.overlay ? { overlay: true } : {}),
-                ...(plot.display ? { display: plot.display } : {}),
+                ...(display ? { display } : {}),
             });
         });
         if (out.markers && out.markers.length > 0) {
@@ -219,18 +229,43 @@ class ClassicIndicator implements NativeIndicator {
     }
 }
 
+/**
+ * The schema a classic publishes: its own declarations plus the shared output-surface
+ * controls, appended so they land with the look rows of the tab the spec ends on (the
+ * Stochastic's Style tab).
+ *
+ * "Show settings in legend" and "Show values in legend" come first — every
+ * classic names its instances after their calculation inputs (`Stoch 14 1 3`), so every
+ * classic offers both switches. "Labels on price scale" follows, and stays absent on a
+ * draw-only study that has no value to put on the scale.
+ */
+function classicInputs(spec: ClassicIndicatorSpec): InputSchema[] {
+    const last = spec.inputs[spec.inputs.length - 1];
+    const legend = legendSettingsInput({ tab: last?.tab });
+    const values = legendValuesInput({ tab: last?.tab });
+    if (spec.scaleLabels === false) return [...spec.inputs, legend, values];
+    return [...spec.inputs, legend, values, scaleLabelsInput({ tab: last?.tab })];
+}
+
 /** Wrap a catalog entry into a registrable native-indicator descriptor. */
 export function classicDescriptor(spec: ClassicIndicatorSpec): NativeIndicatorDescriptor {
+    // One schema per descriptor: the dialog and the legend name read the same declarations.
+    const schema = classicInputs(spec);
+    const base = spec.shortTitle ?? spec.title;
     return {
         type: spec.type,
         title: spec.title,
         ...(spec.shortTitle != null ? { shortTitle: spec.shortTitle } : {}),
+        // The on-chart chip names the INSTANCE (`Stoch 14 1 3`, `EMA 20 Close`) instead of
+        // carrying the value at the crosshair. Recomputed per emit, so an edit follows
+        // live; the toggle in the settings dialog drops back to the plain name.
+        titleFor: (inputs) => legendTitle(base, schema, inputs),
         paneHint: spec.overlay ? 'price' : 'new',
         overlay: spec.overlay,
         // Studies stack (a 20 and a 200 moving average side by side) — unlike the layer-backed natives.
         multiInstance: true,
-        inputsSchema: () => spec.inputs,
-        defaultInputs: () => Object.fromEntries(spec.inputs.map((i) => [i.key, i.defval])),
+        inputsSchema: () => [...schema],
+        defaultInputs: () => Object.fromEntries(schema.map((i) => [i.key, i.defval])),
         create: () => new ClassicIndicator(spec),
     };
 }

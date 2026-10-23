@@ -499,6 +499,7 @@ export function mawsHostSections(): MawsHostSection[] {
         t("Liquidation", "showLiqLines"),
         col("Liquidation line color", "liqLineColor"),
         { kind: "heading", label: "Defaults" },
+        sel("Order type", "defaultOrderType", [["market", "Market"], ["limit", "Limit"]]),
         sel("Default order size", "defaultQty", [
           ["0.01", "0.01"], ["0.1", "0.1"], ["0.5", "0.5"],
           ["1", "1"], ["5", "5"], ["10", "10"], ["50", "50"], ["100", "100"],

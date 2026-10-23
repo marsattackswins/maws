@@ -1,5 +1,5 @@
 import { Drawing, type AnchorSlot, type DrawingTypeKey, type SerializedDrawing } from '../Drawing';
-import type { Projector } from '../geometry';
+import type { DrawingPoint, Projector } from '../geometry';
 import type { SettingsSchema } from '../schema';
 import { LINE_FIELDS, TEXT_SIZE_OPTIONS } from '../schema';
 import { pointInBox, handleAt } from '../hittest';
@@ -15,7 +15,7 @@ export const DIRECTION_OPTIONS: ReadonlyArray<{ value: string; label: string }> 
 ];
 
 /**
- * A long/short position tool. Two clicks place the entry (anchor[0]) + target (anchor[1]);
+ * A long/short position tool. A press-drag-release places the entry (anchor[0]) + target (anchor[1]);
  * onPlaced derives the stop (anchor[1] after finalize) and keeps the target as anchor[2]. The
  * second click is the *profit* direction — dragging higher from the entry paints the green
  * reward zone above (a long); dragging lower paints it below (a short). The shaded reward
@@ -64,6 +64,7 @@ export class PositionTool extends Drawing {
 
     constructor(init: Partial<SerializedDrawing> & { paneId: string }) {
         super(init);
+        if (this.anchors[1] && this.anchors[2]) this.anchors[1].time = this.anchors[2].time;
         if (this.riskPercent === undefined) this.riskPercent = PositionTool.DEFAULT_RISK_PERCENT;
         if (this.accountBalance === undefined) this.accountBalance = PositionTool.DEFAULT_ACCOUNT_BALANCE;
         if (this.showText === undefined) this.showText = true;
@@ -149,9 +150,8 @@ export class PositionTool extends Drawing {
     }
 
     anchorSchema(): { min: number; max: number; slots: AnchorSlot[] } {
-        // Click-move-click: click 1 = entry, click 2 = target (max 2 clicks finalize). onPlaced then
-        // derives the stop and rewrites anchors as [entry, stop, target]. The 3 slots give all three
-        // handles their free axes after placement.
+        // Placement uses entry + target; onPlaced derives stop and rewrites the anchors as
+        // [entry, stop, target]. The entry translates the tool; the other handles resize it.
         return {
             min: 2,
             max: 2,
@@ -163,7 +163,49 @@ export class PositionTool extends Drawing {
         };
     }
 
-    // Placed click-move-click (the inherited 'click' mode), consistent with the box/Gann/range tools.
+    /**
+     * The entry handle translates the complete position. Stop and target stay on one
+     * shared right edge, which can be resized without skewing the box.
+     */
+    override moveHandle(index: number, point: DrawingPoint, free: AnchorSlot['free'], proj: Projector): void {
+        const entry = this.anchors[0];
+        const stop = this.anchors[1];
+        const target = this.anchors[2];
+        if (!entry || !stop || !target) {
+            super.moveHandle(index, point, free, proj);
+            return;
+        }
+
+        if (index === 0) {
+            const dt = point.time - entry.time;
+            const dp = point.price - entry.price;
+            for (const anchor of this.anchors) {
+                anchor.time += dt;
+                anchor.price += dp;
+            }
+            return;
+        }
+
+        if (index !== 1 && index !== 2) {
+            super.moveHandle(index, point, free, proj);
+            return;
+        }
+
+        const moved = this.anchors[index]!;
+        if (free === 'both' || free === 'x') {
+            const entryX = proj.xOf(entry.time);
+            const endX = Math.max(entryX + PositionTool.MIN_WIDTH_PX, proj.xOf(point.time));
+            const y = proj.yOf(point.price, this.paneId);
+            if (y != null) moved.time = proj.pxToPoint(endX, y, this.paneId).time;
+            stop.time = moved.time;
+            target.time = moved.time;
+        }
+        if (free === 'both' || free === 'y') moved.price = point.price;
+    }
+
+    override placementMode(): 'click' | 'drag' | 'freehand' {
+        return 'drag';
+    }
 
     /**
      * Resolve the two placed anchors (entry + target) into the final entry/stop/target box,

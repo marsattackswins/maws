@@ -2,6 +2,7 @@ import type { VelaTheme } from '../../../core/options';
 import type { IndicatorModel } from '../../../core/model/indicator';
 import type { OHLCV } from '../../../core/model/ohlcv';
 import type { LineStyle } from '../../../core/model/series';
+import { isLineLikeSeries, seriesShownOn } from '../../../core/model/series';
 import type { CoordinateSystem } from '../core/CoordinateSystem';
 import type { SceneGraph, PaneNode } from '../core/SceneGraph';
 import { percentScaleFor } from '../core/SceneGraph';
@@ -159,6 +160,7 @@ export class ChromeRenderer {
         this.drawPriceAxes(ctx, scene, coords, theme, dataW, panes);
         this.drawMergedScaleColumns(ctx, scene, coords, dataW);
         this.drawPaneSeparators(ctx, scene, theme, fullW, panes);
+        this.drawIndicatorValueChips(ctx, scene, coords, theme, dataW); // indicator value chips BEFORE the last-price chip (last price wins overlaps)
         this.drawPriceLineAndCountdown(ctx, scene, coords, theme, dataW, pricePane);
         this.drawTimeAxis(ctx, scene, coords, theme, dataW, dataH, fullH);
         this.drawMarkLane(ctx, scene, coords, theme, dataW, dataH);
@@ -279,6 +281,52 @@ export class ChromeRenderer {
                     const y = pane.bounds.top + b.frac * pane.bounds.height;
                     if (y < pane.bounds.top + 6 || y > pane.bounds.top + pane.bounds.height - 4) continue;
                     ctx.fillText(b.label, dataW + 6, y);
+                }
+            }
+        }
+        ctx.textAlign = 'start';
+    }
+
+    /**
+     * Value chips for indicator plots on the price scale — the per-indicator
+     * "Labels on price scale" toggle (a plot's `display.priceScale`). One chip per
+     * line-like plot at its LATEST value, filled with the plot's own ink, in the
+     * scale column its indicator reads on (the pane master scale, or the merged
+     * indicator's own column). Plots not painted on the pane (fill anchors,
+     * data-window-only rows, a hidden %K) get none, and the last-price chip draws
+     * after these so the current price wins an overlap.
+     */
+    private drawIndicatorValueChips(ctx: CanvasRenderingContext2D, scene: SceneGraph, coords: CoordinateSystem, theme: VelaTheme, dataW: number): void {
+        if (!scene.showAxisLabels) return;
+        const PAD = 8;
+        for (const pane of scene.orderedPanes()) {
+            if (pane.collapsed || pane.bounds.height <= 0) continue;
+            const columnOf = new Map<string, number>();
+            scene.ownScaleIndicatorsForPane(pane.id).forEach((m, k) => columnOf.set(m.id, k + 1));
+            for (const model of scene.indicators.values()) {
+                if (model.paneId !== pane.id || model.series.length === 0) continue;
+                const col = columnOf.get(model.id) ?? 0;
+                const scale = col > 0 ? scene.indicatorScales.get(model.id)?.scale : pane.scale;
+                if (!scale) continue;
+                const pct = col > 0 ? undefined : percentScaleFor(scene, pane);
+                const x = axisColumnX(dataW, col) + 1;
+                for (const s of model.series) {
+                    if (s.kind === 'candle' || s.kind === 'bar' || !isLineLikeSeries(s)) continue;
+                    if (!seriesShownOn(s, 'pane')) continue; // fill anchor / hidden plot — nothing on the chart
+                    if (!seriesShownOn(s, 'priceScale')) continue; // the toggle itself
+                    const p = s.points[s.points.length - 1];
+                    if (!p || p.value == null || !Number.isFinite(p.value)) continue;
+                    const y = coords.priceToY(p.value, scale, pane.bounds);
+                    if (y < pane.bounds.top + 8 || y > pane.bounds.top + pane.bounds.height - 8) continue;
+                    const text = formatAxisValue(scale, pane.bounds.height, p.value, pct, col > 0 ? undefined : scene.priceMintick);
+                    if (!text) continue;
+                    const color = p.color ?? s.style.color;
+                    const w = ctx.measureText(text).width + PAD;
+                    ctx.fillStyle = color;
+                    ctx.fillRect(x, y - 8, w, 16);
+                    ctx.fillStyle = tagTextColor(color, theme.background);
+                    ctx.textAlign = 'left';
+                    ctx.fillText(text, x + PAD / 2, y);
                 }
             }
         }

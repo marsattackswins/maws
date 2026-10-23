@@ -2,6 +2,7 @@ import type { InputSchema, InputValue } from '../../model/inputs';
 import type { VpvrLayerData } from '../../model/volume-layers';
 import type { NativeIndicator, NativeIndicatorContext, NativeIndicatorDescriptor } from '../NativeIndicator';
 import { registerNativeIndicator } from '../NativeIndicator';
+import { legendSettingsInput, legendTitle, legendValuesInput } from '../legend-settings';
 import { ACCENT, BEARISH } from '../../palette';
 
 const DEFAULT_ROWS = 24;
@@ -77,6 +78,20 @@ class VpvrIndicator implements NativeIndicator {
     stop(): void {}
 }
 
+/** The profile's declarations — one schema shared by the dialog and the legend name. */
+// The two calculation inputs ride in the legend name (`VRVP 24 70`); the width is how the
+// profile is DRAWN, so it stays out of it.
+const VPVR_INPUTS: InputSchema[] = [
+    { key: 'rows', title: 'Rows', type: 'int', defval: DEFAULT_ROWS, min: 2, max: 400, step: 1, legend: true },
+    { key: 'widthPct', title: 'Width %', type: 'int', defval: DEFAULT_WIDTH_PCT, min: 5, max: 90, step: 1, tooltip: 'Pane width the largest row occupies' },
+    { key: 'upColor', title: 'Up color', type: 'color', defval: DEFAULT_UP },
+    { key: 'downColor', title: 'Down color', type: 'color', defval: DEFAULT_DOWN },
+    { key: 'showPoc', title: 'Point of control', type: 'bool', defval: true },
+    { key: 'valueAreaPct', title: 'Value area %', type: 'int', defval: DEFAULT_VALUE_AREA_PCT, min: 0, max: 100, step: 1, legend: true },
+    legendSettingsInput(),
+    legendValuesInput(),
+];
+
 /** Descriptor for the built-in visible-range volume profile. Bar volume needs no capability probe. */
 export const vpvrDescriptor: NativeIndicatorDescriptor = {
     type: 'vpvr',
@@ -84,22 +99,10 @@ export const vpvrDescriptor: NativeIndicatorDescriptor = {
     shortTitle: 'VRVP',
     paneHint: 'price',
     overlay: true,
-    inputsSchema: (): InputSchema[] => [
-        { key: 'rows', title: 'Rows', type: 'int', defval: DEFAULT_ROWS, min: 2, max: 400, step: 1 },
-        { key: 'widthPct', title: 'Width %', type: 'int', defval: DEFAULT_WIDTH_PCT, min: 5, max: 90, step: 1, tooltip: 'Pane width the largest row occupies' },
-        { key: 'upColor', title: 'Up color', type: 'color', defval: DEFAULT_UP },
-        { key: 'downColor', title: 'Down color', type: 'color', defval: DEFAULT_DOWN },
-        { key: 'showPoc', title: 'Point of control', type: 'bool', defval: true },
-        { key: 'valueAreaPct', title: 'Value area %', type: 'int', defval: DEFAULT_VALUE_AREA_PCT, min: 0, max: 100, step: 1 },
-    ],
-    defaultInputs: (): Record<string, InputValue> => ({
-        rows: DEFAULT_ROWS,
-        widthPct: DEFAULT_WIDTH_PCT,
-        upColor: DEFAULT_UP,
-        downColor: DEFAULT_DOWN,
-        showPoc: true,
-        valueAreaPct: DEFAULT_VALUE_AREA_PCT,
-    }),
+    inputsSchema: (): InputSchema[] => [...VPVR_INPUTS],
+    defaultInputs: (): Record<string, InputValue> => Object.fromEntries(VPVR_INPUTS.map((i) => [i.key, i.defval])),
+    // `VRVP 24 70` — what the profile was set to, not the value under the crosshair.
+    titleFor: (inputs) => legendTitle('VRVP', VPVR_INPUTS, inputs),
     create: () => new VpvrIndicator(),
 };
 

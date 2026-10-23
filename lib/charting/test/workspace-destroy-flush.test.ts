@@ -142,4 +142,16 @@ describe('tearing down a workspace with an unsaved edit', () => {
         expect(onStateChanged).toHaveBeenCalledTimes(1);
         expect(writes.length).toBe(writesAfterUnload);
     });
+
+    it('a host-managed workspace flushes its last edit on unload without its own storage adapter', () => {
+        const ws = mountWorkspace();
+        const onStateChanged = vi.fn();
+        ws.on('state:changed', onStateChanged);
+
+        ws.setTimezone('Europe/Paris');
+        window.dispatchEvent(new Event('beforeunload'));
+        ws.destroy();
+
+        expect(onStateChanged).toHaveBeenCalledOnce();
+    });
 });

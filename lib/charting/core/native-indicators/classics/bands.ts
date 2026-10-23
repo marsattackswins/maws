@@ -3,7 +3,7 @@ import type { InputSchema, InputValue } from '../../model/inputs';
 import { INFO, BULLISH, BEARISH, NEUTRAL, WARNING } from '../../palette';
 import type { ClassicIndicatorSpec, ClassicPlot } from './define';
 import { bool, num, str } from './define';
-import { STYLE, boolInput, channelStyleInputs, colorInput, directionalChannel, floatInput, intInput, lengthInput, optionInput, sourceInput, transp } from './shared';
+import { STYLE, boolInput, channelStyleInputs, colorInput, directionalChannel, floatInput, intInput, lengthInput, LINE_STYLES, lineStyleOf, optionInput, sourceInput, transp, widthInput } from './shared';
 import { sourceValues, highs, lows, sma, ema, rma, stdev, highest, lowest, atr, zip, map, sub, shift } from './math';
 
 /** Bands and channels — envelopes around price plus their derived oscillators. */
@@ -31,6 +31,19 @@ function bollingerInputs(multMin: number, multStep: number): InputSchema[] {
     ];
 }
 
+/**
+ * One Bollinger line's Style row: the colour swatch (its picker holds the opacity slider,
+ * so a line can be faded instead of recoloured), the thickness, and the line style.
+ * Declared inline so the three controls of a line share one row.
+ */
+function bandLineStyle(defval: string, prefix: string, title: string, ink: string, tooltip: string): InputSchema[] {
+    return [
+        { ...colorInput(ink, title, `${prefix}Color`, tooltip), inline: `bb-${prefix}` },
+        { ...widthInput(1, `${prefix}Width`, 'Thickness'), inline: `bb-${prefix}` },
+        { key: `${prefix}Style`, title: 'Style', type: 'string', defval, options: LINE_STYLES, group: STYLE, inline: `bb-${prefix}` },
+    ];
+}
+
 const bollingerBands: ClassicIndicatorSpec = {
     type: 'bollinger-bands',
     title: 'Bollinger Bands',
@@ -40,18 +53,27 @@ const bollingerBands: ClassicIndicatorSpec = {
         lengthInput(20, 'length', 'Length', 5000, 'Number of bars used to calculate the basis SMA and the standard deviation.'),
         sourceInput('Close', 'source', 'Source', 'Price series the bands are calculated on.'),
         floatInput('mult', 'Multiplier', 2, 0, 50, 0.1, 'Number of standard deviations added above and below the basis to form the bands.'),
-        colorInput(WARNING, 'Basis', 'basisColor', 'Color of the basis (middle band) moving average.'),
-        colorInput(INFO, 'Bands', 'color', 'Color of the upper and lower bands.'),
-        colorInput(transp(INFO, 92), 'Fill', 'fillColor', 'Fill color of the area between the upper and lower bands.'),
+        // Style — each line on its own row, then the background wash behind them.
+        ...bandLineStyle('Solid', 'basis', 'Basis', WARNING, 'Color of the basis (middle band) moving average. The picker’s opacity slider fades it.'),
+        ...bandLineStyle('Solid', 'upper', 'Upper', INFO, 'Color of the upper band. The picker’s opacity slider fades it.'),
+        ...bandLineStyle('Solid', 'lower', 'Lower', INFO, 'Color of the lower band. The picker’s opacity slider fades it.'),
+        colorInput(transp(INFO, 92), 'Background', 'fillColor', 'Wash between the upper and lower band; its opacity is the picker’s slider, so a faint backdrop keeps the candles readable.'),
     ],
     compute: (bars, inputs) => {
         const { basis, upper, lower } = bollinger(bars, inputs);
-        const ink = str(inputs, 'color', INFO);
+        const line = (key: string, title: string, values: number[], ink: string): ClassicPlot => ({
+            key,
+            title,
+            values,
+            color: str(inputs, `${key}Color`, ink),
+            width: num(inputs, `${key}Width`, 1),
+            lineStyle: lineStyleOf(inputs, `${key}Style`, 'solid'),
+        });
         return {
             plots: [
-                { key: 'basis', title: 'Basis', values: basis, color: str(inputs, 'basisColor', WARNING) },
-                { key: 'upper', title: 'Upper', values: upper, color: ink },
-                { key: 'lower', title: 'Lower', values: lower, color: ink },
+                line('basis', 'Basis', basis, WARNING),
+                line('upper', 'Upper', upper, INFO),
+                line('lower', 'Lower', lower, INFO),
             ],
             bands: [{ key: 'bb', from: 'upper', to: 'lower', color: str(inputs, 'fillColor', transp(INFO, 92)) }],
         };

@@ -1,7 +1,9 @@
 import type { InputSchema, InputValue } from '../../model/inputs';
+import type { LineStyle } from '../../model/series';
 import { INFO, BULLISH, BEARISH, NEUTRAL, WARNING } from '../../palette';
 import type { ClassicBand, ClassicIndicatorSpec, ClassicLevel, ClassicOutput, ClassicPlot } from './define';
 import { bool, num, str } from './define';
+import { higherTimeframe } from './htf';
 import {
     STYLE,
     anchorPlot,
@@ -12,6 +14,8 @@ import {
     colorInput,
     floatInput,
     lengthInput,
+    LINE_STYLES,
+    lineStyleOf,
     momentumColumnColors,
     optionInput,
     sourceInput,
@@ -51,9 +55,11 @@ import {
 
 /** Overbought / oversold thresholds, as every bounded oscillator declares them. */
 function thresholdInputs(obDefault: number, osDefault: number, min = 0, max = 100, obTitle = 'Overbought Level', osTitle = 'Oversold Level'): InputSchema[] {
+    // Thresholds are settings, but not the instance's NAME (`RSI 14 Close`, never
+    // `RSI 14 Close 70 30`) — they opt out of the legend readout explicitly.
     return [
-        floatInput('overbought', obTitle, obDefault, min, max, 1, 'Level above which the oscillator is considered overbought.'),
-        floatInput('oversold', osTitle, osDefault, min, max, 1, 'Level below which the oscillator is considered oversold.'),
+        { ...floatInput('overbought', obTitle, obDefault, min, max, 1, 'Level above which the oscillator is considered overbought.'), legend: false },
+        { ...floatInput('oversold', osTitle, osDefault, min, max, 1, 'Level below which the oscillator is considered oversold.'), legend: false },
     ];
 }
 
@@ -107,23 +113,153 @@ function stochasticOutput(k: number[], d: number[], inputs: Record<string, Input
     };
 }
 
+// ── Stochastic — the reference dialog's Inputs / Style split ────────────────
+// LOCAL (MAWS): the reference catalog spread this study over one Inputs tab under
+// Settings / Style group headers. Here the appearance rows live on their own Style
+// tab, one compact `inline=` row each (show · colour · line style [· band level]),
+// the band levels are editable there, and the calculation block gains a working
+// higher-timeframe mode. See lib/charting/README.md.
+
+const STYLE_TAB = 'Style';
+const CALCULATION = 'CALCULATION';
+
+/**
+ * One Style-tab row: the show toggle carries the row's label, followed by its colour,
+ * line style and (bands only) its level — all on one `inline=` row, as the reference
+ * settings dialog draws them.
+ */
+function styleRow(opts: {
+    row: string;
+    label: string;
+    show: string;
+    color: string;
+    colorDefval: string;
+    style?: string;
+    styleDefval?: string;
+    level?: { key: string; defval: number; tooltip: string };
+}): InputSchema[] {
+    const inline = opts.row;
+    const decls: InputSchema[] = [
+        { key: opts.show, title: opts.label, type: 'bool', defval: true, tab: STYLE_TAB, inline },
+        { key: opts.color, title: '', type: 'color', defval: opts.colorDefval, tab: STYLE_TAB, inline },
+    ];
+    if (opts.style) {
+        decls.push({ key: opts.style, title: '', type: 'string', defval: opts.styleDefval ?? 'Solid', options: LINE_STYLES, tab: STYLE_TAB, inline });
+    }
+    if (opts.level) {
+        decls.push({ key: opts.level.key, title: '', type: 'float', defval: opts.level.defval, min: 0, max: 100, step: 1, tab: STYLE_TAB, inline, tooltip: opts.level.tooltip });
+    }
+    return decls;
+}
+
+/** The band rows the Stochastic declares: level key, Style-row keys and default look. */
+const STOCH_BANDS = [
+    { level: 'overbought', title: 'Upper Band', show: 'obVisible', color: 'overboughtColor', style: 'overboughtStyle', defval: 80, lineStyle: 'Dashed' },
+    { level: 'middle', title: 'Middle Band', show: 'midVisible', color: 'middleColor', style: 'middleStyle', defval: 50, lineStyle: 'Dotted' },
+    { level: 'oversold', title: 'Lower Band', show: 'osVisible', color: 'oversoldColor', style: 'oversoldStyle', defval: 20, lineStyle: 'Dashed' },
+] as const;
+
+/** The band levels the Style tab currently shows, at the levels it sets. */
+function stochBandLevels(inputs: Record<string, InputValue>): ClassicLevel[] {
+    const levels: ClassicLevel[] = [];
+    for (const band of STOCH_BANDS) {
+        if (!bool(inputs, band.show, true)) continue;
+        levels.push({
+            key: band.level,
+            price: num(inputs, band.level, band.defval),
+            color: str(inputs, band.color, NEUTRAL),
+            lineStyle: lineStyleOf(inputs, band.style, band.lineStyle.toLowerCase() as LineStyle),
+            title: band.title,
+        });
+    }
+    return levels;
+}
+
+/** %K / %D over the band, every Style-tab row honoured. */
+function stochasticPlots(k: number[], d: number[], inputs: Record<string, InputValue>): ClassicOutput {
+    const upper = num(inputs, 'overbought', 80);
+    const lower = num(inputs, 'oversold', 20);
+    // The legend chip can name the INSTANCE (`Stoch 14 1 3`, see `legendSettingsInput`)
+    // independently of live-value visibility. The price-scale side is the catalog-wide
+    // `scaleLabelsInput` toggle the adapter applies to every plot.
+    return {
+        plots: [
+            {
+                key: 'k',
+                title: '%K',
+                values: k,
+                color: str(inputs, 'kColor', INFO),
+                lineStyle: lineStyleOf(inputs, 'kStyle', 'solid'),
+                display: { pane: bool(inputs, 'kVisible', true) },
+            },
+            {
+                key: 'd',
+                title: '%D',
+                values: d,
+                color: str(inputs, 'dColor', WARNING),
+                lineStyle: lineStyleOf(inputs, 'dStyle', 'solid'),
+                display: { pane: bool(inputs, 'dVisible', true) },
+            },
+            anchorPlot('obAnchor', 'Upper Band Anchor', k.length, upper),
+            anchorPlot('osAnchor', 'Lower Band Anchor', k.length, lower),
+        ],
+        bands: bool(inputs, 'backgroundVisible', true)
+            ? [{ key: 'background', from: 'obAnchor', to: 'osAnchor', color: str(inputs, 'fillColor', transp(INFO, 90)) }]
+            : [],
+        levels: stochBandLevels(inputs),
+    };
+}
+
 const stochastic: ClassicIndicatorSpec = {
     type: 'stochastic',
     title: 'Stochastic',
     shortTitle: 'Stoch',
     overlay: false,
     inputs: [
+        // Inputs tab — input values, then the calculation block.
         lengthInput(14, 'kLength', '%K Length', 5000, 'Number of bars used for the highest high / lowest low range of the raw %K.'),
-        lengthInput(3, 'kSmoothing', '%K Smoothing', 500, 'Simple moving average length applied to the raw %K. 1 gives the fast stochastic, 3 the classic slow stochastic.'),
+        lengthInput(1, 'kSmoothing', '%K Smoothing', 500, 'Simple moving average length applied to the raw %K. 1 gives the fast stochastic, 3 the classic slow stochastic.'),
         lengthInput(3, 'dLength', '%D Smoothing', 500, 'Simple moving average length of the %D signal line, applied to the smoothed %K.'),
-        ...thresholdInputs(80, 20),
-        colorInput(INFO, '%K', 'kColor', 'Color of the %K line.'),
-        colorInput(WARNING, '%D', 'dColor', 'Color of the %D signal line.'),
-        colorInput(transp(INFO, 90), 'Band Fill', 'fillColor', 'Fill color of the area between the overbought and oversold levels.'),
+        {
+            key: 'timeframe',
+            title: 'Timeframe',
+            type: 'timeframe',
+            defval: '',
+            group: CALCULATION,
+            tooltip: 'Candle interval the study calculates on; Chart keeps the chart\u2019s own timeframe.',
+        },
+        {
+            key: 'waitForTimeframeCloses',
+            title: 'Wait for timeframe closes',
+            type: 'bool',
+            defval: false,
+            group: CALCULATION,
+            tooltip: 'On a higher timeframe, hold the previous value until that interval\u2019s candle closes instead of following the forming one.',
+        },
+        // Style tab — one row per drawn element, then the output surfaces.
+        ...styleRow({ row: 'k', label: '%K', show: 'kVisible', color: 'kColor', colorDefval: INFO, style: 'kStyle' }),
+        ...styleRow({ row: 'd', label: '%D', show: 'dVisible', color: 'dColor', colorDefval: WARNING, style: 'dStyle' }),
+        ...STOCH_BANDS.flatMap((band) =>
+            styleRow({
+                row: band.show,
+                label: band.title,
+                show: band.show,
+                color: band.color,
+                colorDefval: NEUTRAL,
+                style: band.style,
+                styleDefval: band.lineStyle,
+                level: { key: band.level, defval: band.defval, tooltip: 'Level of the ' + band.title.toLowerCase() + '.' },
+            }),
+        ),
+        ...styleRow({ row: 'bg', label: 'Background', show: 'backgroundVisible', color: 'fillColor', colorDefval: transp(INFO, 90) }),
     ],
     compute: (bars, inputs) => {
-        const k = sma(stoch(closes(bars), highs(bars), lows(bars), num(inputs, 'kLength', 14)), num(inputs, 'kSmoothing', 3));
-        return stochasticOutput(k, sma(k, num(inputs, 'dLength', 3)), inputs);
+        const htf = higherTimeframe(bars, str(inputs, 'timeframe', ''), bool(inputs, 'waitForTimeframeCloses', false));
+        const source = htf ? htf.bars : bars;
+        const k = sma(stoch(closes(source), highs(source), lows(source), num(inputs, 'kLength', 14)), num(inputs, 'kSmoothing', 1));
+        const d = sma(k, num(inputs, 'dLength', 3));
+        const project = htf ? htf.project : (values: readonly number[]) => [...values];
+        return stochasticPlots(project(k), project(d), inputs);
     },
 };
 

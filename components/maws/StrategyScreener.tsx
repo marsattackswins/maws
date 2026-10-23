@@ -8,6 +8,7 @@ import { formatTicker } from "@/lib/maws/universe";
 import { StrategySymbolPanel } from "@/components/maws/StrategySymbolPanel";
 import { useAppStore } from "@/lib/store";
 import type { Quote } from "@/types";
+import { ChevronDown, MoreVertical } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
 
 const MIN_LAST_WIDTH = 45;
@@ -81,42 +82,173 @@ function useScreenerQuotes(): Map<string, Quote> {
 
 // ─── icons ────────────────────────────────────────────────────────────────
 
-function IconChevronDown({ size = 10 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 10 10" fill="none" aria-hidden="true">
-      <path d="M2 3.5 5 6.5 8 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  );
-}
-function IconChevronRight({ size = 10 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 10 10" fill="none" aria-hidden="true">
-      <path d="M3.5 2 6.5 5 3.5 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  );
-}
-
 // ─── title bar ─────────────────────────────────────────────────────────────
 
 function TitleBar() {
-  const setSearchOpen = useAppStore((s) => s.setSearchOpen);
   const setRightOpen  = useAppStore((s) => s.setRightOpen);
+  const watchlists = useAppStore((s) => s.watchlistGroups);
+  const activeWatchlist = watchlists[0];
+  const watchlistName = activeWatchlist?.name ?? "Watchlist";
+  const renameWatchlist = useAppStore((s) => s.renameWatchlist);
+  const createWatchlist = useAppStore((s) => s.createWatchlist);
+  const activateWatchlist = useAppStore((s) => s.activateWatchlist);
+  const deleteWatchlistFromStore = useAppStore((s) => s.deleteWatchlist);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen && !switcherOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && !menuRef.current?.contains(event.target)) {
+        setMenuOpen(false);
+        setSwitcherOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+        setSwitcherOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [menuOpen, switcherOpen]);
+
+  const rename = () => {
+    setMenuOpen(false);
+    const name = window.prompt("Rename watchlist", watchlistName);
+    if (name != null) renameWatchlist(name);
+  };
+
+  const addNewWatchlist = () => {
+    setMenuOpen(false);
+    const name = window.prompt("Name this watchlist", "New watchlist");
+    if (name != null) createWatchlist(name);
+  };
+
+  const deleteWatchlist = () => {
+    setMenuOpen(false);
+    if (activeWatchlist && window.confirm(`Delete "${watchlistName}"?`)) {
+      deleteWatchlistFromStore(activeWatchlist.id);
+    }
+  };
 
   return (
     <div
       className="flex h-[42px] shrink-0 items-center border-b px-3"
       style={{ borderColor: "var(--app-border)" }}
     >
-      <span className="flex-1 text-[13px] font-semibold" style={{ color: "var(--app-text)" }}>
-        Watchlist
+      <span className="flex-1 truncate text-[13px] font-semibold" style={{ color: "var(--app-text)" }}>
+        {watchlistName}
       </span>
+      <div ref={menuRef} className="flex items-center">
+        {watchlists.length > 1 && (
+          <div className="relative">
+            <button
+              type="button"
+              title="Switch watchlist"
+              aria-label="Switch watchlist"
+              aria-haspopup="menu"
+              aria-expanded={switcherOpen}
+              onClick={() => {
+                setMenuOpen(false);
+                setSwitcherOpen((open) => !open);
+              }}
+              className="wl-icon-btn"
+            >
+              <ChevronDown size={14} aria-hidden="true" />
+            </button>
+            {switcherOpen && (
+              <div
+                role="menu"
+                aria-label="Switch watchlist"
+                className="absolute right-0 top-full z-30 mt-1 min-w-40 rounded border py-1 shadow-xl"
+                style={{
+                  background: "var(--app-panel)",
+                  borderColor: "var(--app-border)",
+                }}
+              >
+                {watchlists.map((watchlist) => (
+                  <button
+                    key={watchlist.id}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={watchlist.id === activeWatchlist?.id}
+                    onClick={() => {
+                      activateWatchlist(watchlist.id);
+                      setSwitcherOpen(false);
+                    }}
+                    className="block w-full truncate px-3 py-1.5 text-left text-[12px] hover:bg-(--app-hover)"
+                    style={{ color: "var(--app-text)" }}
+                  >
+                    {watchlist.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
-      {/* + opens the symbol search so the user can find and add a symbol */}
-      <button type="button" title="Add symbol" onClick={() => setSearchOpen(true)} className="wl-icon-btn">
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-          <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-        </svg>
-      </button>
+        <div className="relative">
+          <button
+            type="button"
+            title="Watchlist options"
+            aria-label="Watchlist options"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            onClick={() => {
+              setSwitcherOpen(false);
+              setMenuOpen((open) => !open);
+            }}
+            className="wl-icon-btn"
+          >
+            <MoreVertical size={15} aria-hidden="true" />
+          </button>
+          {menuOpen && (
+            <div
+              role="menu"
+              aria-label="Watchlist options"
+              className="absolute right-0 top-full z-30 mt-1 min-w-36 rounded border py-1 shadow-xl"
+              style={{
+                background: "var(--app-panel)",
+                borderColor: "var(--app-border)",
+              }}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                onClick={rename}
+                className="block w-full px-3 py-1.5 text-left text-[12px] hover:bg-(--app-hover)"
+                style={{ color: "var(--app-text)" }}
+              >
+                Rename
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={addNewWatchlist}
+                className="block w-full px-3 py-1.5 text-left text-[12px] hover:bg-(--app-hover)"
+                style={{ color: "var(--app-text)" }}
+              >
+                Add new
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={deleteWatchlist}
+                className="block w-full px-3 py-1.5 text-left text-[12px] text-red-500 hover:bg-(--app-hover)"
+              >
+                Delete
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* ✕ closes the sidebar panel */}
       <button type="button" title="Close" onClick={() => setRightOpen(false)} className="wl-icon-btn">
@@ -166,44 +298,6 @@ function ColumnHeader({
         <span className="truncate">Day %</span>
       </div>
     </div>
-  );
-}
-
-// ─── group header ──────────────────────────────────────────────────────────
-
-function GroupHeader({
-  name,
-  count,
-  collapsed,
-  onToggle,
-}: {
-  name: string;
-  count: number;
-  collapsed: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className="wl-group-header flex h-[28px] w-full items-center gap-1.5 px-3"
-    >
-      <span style={{ color: "var(--app-muted)" }}>
-        {collapsed ? <IconChevronRight size={10} /> : <IconChevronDown size={10} />}
-      </span>
-      <span
-        className="flex-1 truncate text-left text-[11px] font-semibold uppercase tracking-[0.05em]"
-        style={{ color: "var(--app-muted)" }}
-      >
-        {name}
-      </span>
-      <span
-        className="text-[11px] tabular-nums"
-        style={{ color: "var(--app-muted)" }}
-      >
-        {count}
-      </span>
-    </button>
   );
 }
 
@@ -378,8 +472,6 @@ function bareSymbol(symbol: string) {
 
 export function StrategyScreener() {
   const watchlist          = useAppStore((s) => s.watchlist);
-  const watchlistGroups    = useAppStore((s) => s.watchlistGroups);
-  const toggleWatchlistGroup = useAppStore((s) => s.toggleWatchlistGroup);
   const setWatchlistOrder  = useAppStore((s) => s.setWatchlistOrder);
   const setSymbol          = useAppStore((s) => s.setSymbol);
   const active             = useAppStore((s) => s.panes.find((p) => p.id === s.activePaneId)?.symbol);
@@ -569,57 +661,37 @@ export function StrategyScreener() {
             </div>
           ) : (
             <div ref={listRef}>
-              {watchlistGroups.map((group) => {
-                if (group.symbols.length === 0) return null;
+              {displayOrder.map((sym) => {
+                const q = quotes.get(bareSymbol(sym));
+                const quoteReady = q != null;
 
-                // Respect drag preview ordering within each group
-                const groupSymbols = (previewOrder
-                  ? previewOrder.filter((s) => group.symbols.includes(s))
-                  : group.symbols);
+                if (!quoteReady) {
+                  return (
+                    <PendingRow
+                      key={sym}
+                      symbol={sym}
+                      selected={activeKey === bareSymbol(sym)}
+                      quote={q}
+                      lastWidth={lastWidth}
+                      changeWidth={changeWidth}
+                      onOpen={setSymbol}
+                    />
+                  );
+                }
 
                 return (
-                  <div key={group.id}>
-                    <GroupHeader
-                      name={group.name}
-                      count={group.symbols.length}
-                      collapsed={group.collapsed}
-                      onToggle={() => toggleWatchlistGroup(group.id)}
-                    />
-
-                    {!group.collapsed && groupSymbols.map((sym) => {
-                      const q = quotes.get(bareSymbol(sym));
-                      const quoteReady = q != null;
-
-                      if (!quoteReady) {
-                        return (
-                          <PendingRow
-                            key={sym}
-                            symbol={sym}
-                            selected={activeKey === bareSymbol(sym)}
-                            quote={q}
-                            lastWidth={lastWidth}
-                            changeWidth={changeWidth}
-                            onOpen={setSymbol}
-                          />
-                        );
-                      }
-
-                      return (
-                        <WatchlistRow
-                          key={sym}
-                          symbol={sym}
-                          selected={activeKey === bareSymbol(sym)}
-                          dragging={dragSymbol === sym}
-                          last={q.last}
-                          changePct={q.changePct}
-                          lastWidth={lastWidth}
-                          changeWidth={changeWidth}
-                          onOpen={setSymbol}
-                          onPointerDragStart={onPointerDragStart}
-                        />
-                      );
-                    })}
-                  </div>
+                  <WatchlistRow
+                    key={sym}
+                    symbol={sym}
+                    selected={activeKey === bareSymbol(sym)}
+                    dragging={dragSymbol === sym}
+                    last={q.last}
+                    changePct={q.changePct}
+                    lastWidth={lastWidth}
+                    changeWidth={changeWidth}
+                    onOpen={setSymbol}
+                    onPointerDragStart={onPointerDragStart}
+                  />
                 );
               })}
             </div>
@@ -629,7 +701,7 @@ export function StrategyScreener() {
         {/* resize handle between list and symbol panel */}
         {active && (
           <div
-            className="absolute bottom-0 left-0 z-20 h-1.5 w-full cursor-row-resize bg-transparent hover:bg-[#2962ff]"
+            className="absolute bottom-0 left-0 z-20 h-1.5 w-full cursor-row-resize bg-transparent"
             title="Drag to resize"
             onDoubleClick={() => setCardsHeight(320)}
             onMouseDown={(e) => {

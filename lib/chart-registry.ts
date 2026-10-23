@@ -1,4 +1,4 @@
-import type { Vela, NativeRenderer } from "@/lib/charting";
+import type { Vela, NativeRenderer, ExternalIndicatorEntry } from "@/lib/charting";
 import type { WorkspaceReplay } from "@/lib/charting/workspace";
 
 /**
@@ -13,9 +13,48 @@ export type ChartHandle = {
   renderer: NativeRenderer;
   /** The DOM element the chart mounted on. */
   el: HTMLElement;
+  /** Live host-owned display preferences captured by chart templates. */
+  getTemplatePrefs?: () => ChartTemplatePrefs;
+  /** Apply host-owned display preferences captured by chart templates. */
+  applyTemplatePrefs?: (prefs: ChartTemplatePrefs) => void;
 };
 
-const handles = new Map<string, ChartHandle>();
+export type ChartTemplatePrefs = {
+  watermark: boolean;
+  replayWatermark: boolean;
+  indicatorTitles: boolean;
+  indicatorValues: boolean;
+};
+
+/**
+ * Registry state, pinned to the page.
+ *
+ * `next dev` re-evaluates a module when it (or something it imports) changes. Rebuilt
+ * module state meant a NEW empty map beside charts that were still mounted: every
+ * `getChart()` consumer went blind while the grid kept running. One object per page
+ * keeps the handles (and the workspace handle) reachable across evaluations; in
+ * production the module is evaluated once, so this is a no-op.
+ */
+const registryHost = globalThis as typeof globalThis & {
+  __mawsChartState?: {
+    handles: Map<string, ChartHandle>;
+    workspace: WorkspaceHandle | null;
+    listeners: Set<() => void>;
+    lastCrosshair: LastCrosshair | null;
+  };
+};
+// `development` only: a production build evaluates modules once, and tests reset the
+// module registry on purpose (a fresh registry per case).
+const chartState =
+  (process.env.NODE_ENV === "development" ? registryHost.__mawsChartState : undefined) ??
+  (registryHost.__mawsChartState = {
+    handles: new Map<string, ChartHandle>(),
+    workspace: null,
+    listeners: new Set<() => void>(),
+    lastCrosshair: null,
+  });
+
+const handles = chartState.handles;
 
 // Dev-only debugging aid: `__mawsCharts.get('<paneId>').vela` in the console.
 if (process.env.NODE_ENV !== "production" && typeof window !== "undefined") {
@@ -42,32 +81,47 @@ type WorkspaceHandle = {
   /** Maximize one cell over the grid (null restores). */
   maximizeCell(id: string | null): void;
   /**
+   * Open VELA's symbol search dialog for the ACTIVE cell — the same picker a bare
+   * keystroke over the grid reaches (the shell's symbol button calls this instead of
+   * drawing a picker of its own). An optional query seeds the field.
+   */
+  openSymbolSearch(query?: string): void;
+  /**
    * Mount VELA's layout picker on a shell trigger (the workspace root is the panel's
    * token/positioning host, so the picker itself lives with the workspace). Returns
    * the disposer.
    */
   mountLayoutPicker(trigger: HTMLElement, onOpenChange?: (open: boolean) => void): () => void;
+  /**
+   * Add a SCRIPT indicator (Pine) to the ACTIVE cell through the shell — undo/redo,
+   * the shell's bookkeeping and the cell's persistence all run; the raw
+   * `chart.addIndicator` would bypass them. What the Pine editor's Run button calls.
+   */
+  addScript(entry: ExternalIndicatorEntry): void;
+  /**
+   * Mark third-party persistable state dirty (a shell `state:changed`, debounced) —
+   * what a script edit needs after an in-place `updateCode`, which emits no shell
+   * event of its own and would otherwise persist the previous source.
+   */
+  markStateDirty(): void;
 };
 
-let workspaceHandle: WorkspaceHandle | null = null;
-const workspaceListeners = new Set<() => void>();
-
 export function setWorkspaceHandle(handle: WorkspaceHandle | null): void {
-  workspaceHandle = handle;
+  chartState.workspace = handle;
   // Shell surfaces (TopBar's layout button) mount before the workspace host does —
   // the handle appearing/disappearing is what they actually bind against.
-  for (const listener of workspaceListeners) listener();
+  for (const listener of chartState.listeners) listener();
 }
 
 export function getWorkspace(): WorkspaceHandle | null {
-  return workspaceHandle;
+  return chartState.workspace;
 }
 
 /** Notified whenever the workspace handle is registered or cleared. */
 export function subscribeWorkspace(listener: () => void): () => void {
-  workspaceListeners.add(listener);
+  chartState.listeners.add(listener);
   return () => {
-    workspaceListeners.delete(listener);
+    chartState.listeners.delete(listener);
   };
 }
 
@@ -107,12 +161,10 @@ export type LastCrosshair = {
   time: number | null;
 };
 
-let lastCrosshair: LastCrosshair | null = null;
-
 export function setLastCrosshair(value: LastCrosshair | null) {
-  lastCrosshair = value;
+  chartState.lastCrosshair = value;
 }
 
 export function getLastCrosshair(): LastCrosshair | null {
-  return lastCrosshair;
+  return chartState.lastCrosshair;
 }

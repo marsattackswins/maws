@@ -23,12 +23,81 @@ export type BottomTab =
   | "balanceHistory"
   | "journal";
 
+/** The right-rail entries, in their default order (drag to rearrange). */
+export const RIGHT_DOCK_IDS: DockId[] = [
+  "strategy",
+  "calendar",
+  "objects",
+  "scripts",
+  "alerts",
+];
+
+/**
+ * Sanitize a persisted/contributed dock order: unknown ids are dropped, duplicates
+ * collapse, and any entry missing from the list is appended in its canonical place.
+ * A rail must never lose a button because a document was written by another build.
+ */
+export function normalizeDockOrder(raw: unknown): DockId[] {
+  const candidates = Array.isArray(raw) ? raw : [];
+  const seen = new Set<DockId>();
+  const order: DockId[] = [];
+  for (const value of candidates) {
+    const id = RIGHT_DOCK_IDS.find((known) => known === value);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    order.push(id);
+  }
+  for (const id of RIGHT_DOCK_IDS) {
+    if (!seen.has(id)) order.push(id);
+  }
+  return order;
+}
+
+/**
+ * Live drag-reorder step for the rail — the array twin of the drawing toolbar's
+ * `insertBefore(dragged, target)` / `insertBefore(dragged, target.nextSibling)`:
+ * drop `dragId` immediately before or after `targetId`. Unknown ids return the
+ * input untouched, so a stale/idless target can never scramble the rail.
+ */
+export function moveDockId(
+  ids: readonly DockId[],
+  dragId: DockId,
+  targetId: DockId,
+  after: boolean,
+): DockId[] {
+  if (dragId === targetId) return [...ids];
+  const next = ids.filter((id) => id !== dragId);
+  const at = next.indexOf(targetId);
+  if (at < 0) return [...ids];
+  next.splice(after ? at + 1 : at, 0, dragId);
+  return next;
+}
+
+/** One-slot move for the keyboard path (Alt+Up/Down); out-of-range is a no-op. */
+export function shiftDockId(ids: readonly DockId[], id: DockId, delta: number): DockId[] {
+  const next = [...ids];
+  const from = next.indexOf(id);
+  const to = from + delta;
+  if (from < 0 || to < 0 || to >= next.length) return next;
+  const [moved] = next.splice(from, 1);
+  if (moved === undefined) return next;
+  next.splice(to, 0, moved);
+  return next;
+}
+
+/** Do two rail orders describe the same arrangement? */
+export function sameDockOrder(a: readonly DockId[], b: readonly DockId[]): boolean {
+  return a.length === b.length && a.every((id, i) => id === b[i]);
+}
+
 export type UiSliceState = {
   shortcuts: ShortcutMap;
   rightOpen: boolean;
   bottomOpen: boolean;
   bottomTab: BottomTab;
   rightDock: DockId;
+  /** Drag-rearranged order of the right rail (persisted). */
+  rightDockOrder: DockId[];
   rightWidth: number;
   bottomHeight: number;
   searchOpen: boolean;
@@ -38,7 +107,6 @@ export type UiSliceState = {
   brokerDialogOpen: boolean;
   accountSettingsOpen: boolean;
   buySellMenu: BuySellMenuState;
-  tradingSettingsSymbol: string | null;
   contextMenu: ContextMenuState;
   appSettings: AppSettings;
   columnWidths: Record<string, number[]>;
@@ -54,6 +122,7 @@ export type UiSliceActions = {
   setBottomTabCollapsed: (tab: BottomTab) => void;
   toggleBottomTab: (tab: BottomTab) => void;
   setRightDock: (dock: DockId) => void;
+  setRightDockOrder: (order: DockId[]) => void;
   setRightWidth: (width: number) => void;
   setBottomHeight: (height: number) => void;
   setSearchOpen: (value: boolean) => void;
@@ -63,7 +132,6 @@ export type UiSliceActions = {
   setBrokerDialogOpen: (value: boolean) => void;
   setAccountSettingsOpen: (value: boolean) => void;
   setBuySellMenu: (menu: BuySellMenuState) => void;
-  setTradingSettingsSymbol: (symbol: string | null) => void;
   setContextMenu: (menu: ContextMenuState) => void;
   closeMenus: () => void;
   setColumnWidths: (tableId: string, widths: number[]) => void;
@@ -86,6 +154,7 @@ export function createUiSlice(set: RootSet, get: RootGet): UiSlice {
     bottomOpen: false,
     bottomTab: "positions",
     rightDock: "strategy",
+    rightDockOrder: [...RIGHT_DOCK_IDS],
     rightWidth: 360,
     bottomHeight: 220,
     searchOpen: false,
@@ -95,7 +164,6 @@ export function createUiSlice(set: RootSet, get: RootGet): UiSlice {
     brokerDialogOpen: false,
     accountSettingsOpen: false,
     buySellMenu: null,
-    tradingSettingsSymbol: null,
     contextMenu: null,
     appSettings: { ...DEFAULT_APP_SETTINGS },
     columnWidths: {},
@@ -118,6 +186,7 @@ export function createUiSlice(set: RootSet, get: RootGet): UiSlice {
         rightDock: dock,
         rightOpen: true,
       }),
+    setRightDockOrder: (order) => set({ rightDockOrder: normalizeDockOrder(order) }),
     setRightWidth: (width) => set({ rightWidth: width }),
     setBottomHeight: (height) => set({ bottomHeight: height }),
     setSearchOpen: (value) =>
@@ -159,8 +228,6 @@ export function createUiSlice(set: RootSet, get: RootGet): UiSlice {
       set({ accountSettingsOpen: value, contextMenu: null }),
     setBuySellMenu: (menu) =>
       set({ buySellMenu: menu, contextMenu: menu ? null : get().contextMenu }),
-    setTradingSettingsSymbol: (symbol) =>
-      set({ tradingSettingsSymbol: symbol, buySellMenu: null, contextMenu: null }),
     setContextMenu: (menu) =>
       set({ contextMenu: menu, buySellMenu: menu ? null : get().buySellMenu }),
     closeMenus: () =>
@@ -209,8 +276,8 @@ export function normalizeUiRehydrate(state: Store): void {
   if ((state.rightDock as string) === "news") {
     state.rightDock = "calendar";
   }
+  state.rightDockOrder = normalizeDockOrder(state.rightDockOrder);
   state.buySellMenu = null;
-  state.tradingSettingsSymbol = null;
   state.accountSettingsOpen = false;
   state.brokerDialogOpen = false;
   if (

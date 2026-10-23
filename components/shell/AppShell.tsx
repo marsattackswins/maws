@@ -2,14 +2,13 @@
 
 import { ChartContextMenu } from "@/components/charts/ChartContextMenu";
 import { VelaWorkspaceHost } from "@/components/charts/VelaWorkspaceHost";
-import { SymbolSearch } from "@/components/charts/SymbolSearch";
+import { IndicatorsDialog } from "@/components/indicators/IndicatorsDialog";
 import { SettingsModal } from "@/components/settings/SettingsModal";
 import { IndicatorSettingsModal } from "@/components/settings/IndicatorSettingsModal";
 import { DrawingSettingsModal } from "@/components/settings/DrawingSettingsModal";
 import { BrokerDialog } from "@/components/trading/BrokerDialog";
 import { AccountSettingsModal } from "@/components/trading/AccountSettingsModal";
 import { BuySellContextMenu } from "@/components/trading/BuySellContextMenu";
-import { TradingSettingsModal } from "@/components/trading/TradingSettingsModal";
 import { MockBrokerLoop } from "@/components/trading/MockBrokerLoop";
 import { ReplayBar } from "@/components/replay/ReplayBar";
 import { BottomPanel } from "@/components/shell/BottomPanel";
@@ -131,7 +130,6 @@ export function AppShell() {
   const appSettings = useAppStore((s) => s.appSettings);
   const setDrawingTool = useAppStore((s) => s.setDrawingTool);
   const closeMenus = useAppStore((s) => s.closeMenus);
-  const setSearchOpen = useAppStore((s) => s.setSearchOpen);
   const setSettingsOpen = useAppStore((s) => s.setSettingsOpen);
   const setIndicatorSettingsOpen = useAppStore((s) => s.setIndicatorSettingsOpen);
   const setDrawingSettingsTarget = useAppStore((s) => s.setDrawingSettingsTarget);
@@ -174,7 +172,9 @@ export function AppShell() {
 
       switch (id) {
         case "openSearch":
-          setSearchOpen(true);
+          // Vela's own dialog (the same one the symbol button and bare typing open);
+          // the shell popover it used to raise no longer exists.
+          getWorkspace()?.openSymbolSearch();
           break;
         case "fitChart": {
           if (!pane) return;
@@ -283,7 +283,7 @@ export function AppShell() {
           setAccountSettingsOpen(false);
           return;
         }
-        if (s.searchOpen || s.contextMenu || s.indicatorMenuOpen || s.layoutMenuOpen) {
+        if (s.contextMenu || s.indicatorMenuOpen || s.layoutMenuOpen) {
           closeMenus();
           return;
         }
@@ -323,7 +323,6 @@ export function AppShell() {
   }, [
     closeMenus,
     setDrawingTool,
-    setSearchOpen,
     setSettingsOpen,
     setIndicatorSettingsOpen,
     setBrokerDialogOpen,
@@ -342,7 +341,7 @@ export function AppShell() {
       className="flex h-screen w-screen flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--app-text)]"
     >
       <TopBar />
-      <SymbolSearch />
+      <IndicatorsDialog />
       <div className="flex min-h-0 flex-1">
         <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="min-h-0 flex-1">
@@ -361,7 +360,6 @@ export function AppShell() {
       <DrawingSettingsModal />
       <BrokerDialog />
       <AccountSettingsModal />
-      <TradingSettingsModal />
       <MockBrokerLoop />
       <ChartContextMenu />
       <BuySellContextMenu />

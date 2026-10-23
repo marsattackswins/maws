@@ -16,72 +16,21 @@
 import { useEffect, useRef } from "react";
 import { getChart } from "@/lib/chart-registry";
 import { useAppStore } from "@/lib/store";
-import type { DrawingStyle, DrawingTypeKey, SerializedDrawing } from "@/lib/charting";
-import type { ChartPaneState, Drawing, DrawingLineStyle, DrawingTool } from "@/types";
+import type { SerializedDrawing } from "@/lib/charting";
+import type { ChartPaneState, Drawing } from "@/types";
+import {
+  DRAWING_TOOL_TO_VELA as TOOL_MAP,
+  drawingToolFromVela,
+  drawingMapping,
+  mawsLineStyle,
+  storeDrawingFromDoc,
+  storeIdsFor,
+  toStorePoints,
+  toVelaAnchors as toAnchors,
+  toVelaStyle,
+} from "@/lib/vela-drawings";
 // Registers the longposition/shortposition aliases TOOL_MAP arms below.
 import "@/lib/vela-drawing-aliases";
-
-// MAWS tool → Vela drawing type
-const TOOL_MAP: Record<string, DrawingTypeKey | null> = {
-  cursor: null,
-  zoom: null,
-  trend: "trendline",
-  hray: "hray",
-  channel: "parallelchannel",
-  fib: "fibretracement",
-  path: "polyline",
-  dcurve: "curve",
-  long: "longposition",
-  short: "shortposition",
-  rect: "box",
-  circle: "ellipse",
-  arrowUp: "arrowmarkup",
-  arrowDown: "arrowmarkdown",
-  text: "text",
-};
-
-// Vela drawing type → MAWS tool (for drawings created in-chart)
-const REVERSE_TOOL: Partial<Record<DrawingTypeKey, DrawingTool>> = {
-  trendline: "trend",
-  hray: "hray",
-  parallelchannel: "channel",
-  fibretracement: "fib",
-  polyline: "path",
-  curve: "dcurve",
-  longposition: "long",
-  shortposition: "short",
-  // Legacy drawings persisted before the long/short aliases existed.
-  position: "long",
-  box: "rect",
-  ellipse: "circle",
-  arrowmarkup: "arrowUp",
-  arrowmarkdown: "arrowDown",
-  text: "text",
-};
-
-function toVelaStyle(d: Drawing): DrawingStyle {
-  const lineStyle: DrawingStyle["lineStyle"] =
-    d.lineStyle === "dashed" ? "dashed" : d.lineStyle === "dotted" ? "dotted" : "solid";
-  return {
-    lineColor: d.color,
-    lineWidth: d.lineWidth ?? 1,
-    lineStyle,
-    // Rect/circle fill migration (MAWS fillVisible defaults true for rect).
-    ...(d.fillColor && (d.fillVisible ?? d.tool === "rect")
-      ? { fillColor: d.fillColor }
-      : {}),
-  };
-}
-
-function mawsLineStyle(style: DrawingStyle["lineStyle"]): DrawingLineStyle {
-  if (style === "dashed") return "dashed";
-  if (style === "dotted") return "dotted";
-  return "solid";
-}
-
-function toAnchors(d: Drawing) {
-  return d.points.map((p) => ({ time: p.time * 1000, price: p.price }));
-}
 
 export function DrawingOverlay({ pane }: { pane: ChartPaneState }) {
   const paneDrawings = useAppStore(
@@ -98,10 +47,21 @@ export function DrawingOverlay({ pane }: { pane: ChartPaneState }) {
 
   const replaying = replay?.paneId === pane.id;
 
-  /** MAWS drawing id → Vela drawing id */
-  const idsRef = useRef<Map<string, string>>(new Map());
+  /** MAWS drawing id → Vela drawing id. Shared with the settle step in
+   *  `lib/vela-drawings.ts` so both directions agree on what mirrors what. */
+  const idsRef = useRef<Map<string, string>>(drawingMapping(pane.id));
   /** Vela drawing ids being written by THIS component (suppress echo). */
   const syncingRef = useRef<Set<string>>(new Set());
+  /** True while the store→Vela write batch below runs: a create emits
+   *  `drawing:created` SYNCHRONOUSLY, before the new id can be marked in
+   *  `syncingRef`, and mirroring it back filed a second store drawing under
+   *  Vela's id — the leftover that resurrected a deleted drawing. */
+  const applyingRef = useRef(false);
+  // Re-point the mapping when the pane changes. Declared FIRST so the effects
+  // below (same commit, declaration order) already see the new pane's map.
+  useEffect(() => {
+    idsRef.current = drawingMapping(pane.id);
+  }, [pane.id]);
   /** Live event handlers re-read current state through refs. */
   const drawingsRef = useRef(paneDrawings);
   drawingsRef.current = paneDrawings;
@@ -133,7 +93,8 @@ export function DrawingOverlay({ pane }: { pane: ChartPaneState }) {
       for (const [key, id] of [...ids]) {
         if (!byId.has(id)) ids.delete(key);
       }
-      // Remove drawings whose slice entry disappeared.
+      // Remove drawings whose slice entry disappeared. Vela's own removal event is
+      // what usually does this; this is the store-first path (clear, object tree).
       const wanted = new Set(paneDrawings.map((d) => d.id));
       for (const [key, id] of [...ids]) {
         if (wanted.has(key)) continue;
@@ -145,48 +106,60 @@ export function DrawingOverlay({ pane }: { pane: ChartPaneState }) {
         }
       }
 
-      for (const d of paneDrawings) {
-        const type = TOOL_MAP[d.tool];
-        if (!type || d.points.length === 0) continue;
-        const existingId = ids.get(d.id);
-        const existing = existingId ? byId.get(existingId) : undefined;
+      applyingRef.current = true;
+      try {
+        for (const d of paneDrawings) {
+          const type = TOOL_MAP[d.tool];
+          if (!type || d.points.length === 0) continue;
+          const existingId = ids.get(d.id);
+          // A drawing this pane already holds under the STORE id (a document
+          // restored before this instance mounted) is adopted, never duplicated:
+          // an adopted-but-unmapped twin kept painting after a delete and came
+          // back from the cell document on the next refresh.
+          const adopted = existingId == null && byId.has(d.id) ? d.id : null;
+          if (adopted != null) ids.set(d.id, adopted);
+          const mapped = existingId ?? adopted ?? undefined;
+          const existing = mapped != null ? byId.get(mapped) : undefined;
 
-        if (existing) {
-          syncingRef.current.add(existing.id);
+          if (existing) {
+            syncingRef.current.add(existing.id);
+            try {
+              vela.drawings.update(existing.id, {
+                anchors: toAnchors(d),
+                style: toVelaStyle(d),
+                ...(d.text != null
+                  ? { text: { value: d.text, size: "normal", hAlign: "left", vAlign: "top" } }
+                  : {}),
+              });
+              const shouldShow = !replayingRef.current && !hiddenRef.current;
+              if (existing.visible !== shouldShow) vela.drawings.show(existing.id, shouldShow);
+            } catch {
+              /* ignore */
+            }
+            continue;
+          }
+
           try {
-            vela.drawings.update(existing.id, {
+            const created = vela.drawings.add(type, {
+              paneId: "price",
               anchors: toAnchors(d),
               style: toVelaStyle(d),
               ...(d.text != null
                 ? { text: { value: d.text, size: "normal", hAlign: "left", vAlign: "top" } }
                 : {}),
             });
-            const shouldShow = !replayingRef.current && !hiddenRef.current;
-            if (existing.visible !== shouldShow) vela.drawings.show(existing.id, shouldShow);
+            if (created) {
+              ids.set(d.id, created.id);
+              if (replayingRef.current || hiddenRef.current) vela.drawings.show(created.id, false);
+            }
           } catch {
-            /* ignore */
+            /* renderer not ready — retried on the next change */
           }
-          continue;
         }
-
-        try {
-          const created = vela.drawings.add(type, {
-            paneId: "price",
-            anchors: toAnchors(d),
-            style: toVelaStyle(d),
-            ...(d.text != null
-              ? { text: { value: d.text, size: "normal", hAlign: "left", vAlign: "top" } }
-              : {}),
-          });
-          if (created) {
-            ids.set(d.id, created.id);
-            if (replayingRef.current || hiddenRef.current) vela.drawings.show(created.id, false);
-          }
-        } catch {
-          /* renderer not ready — retried on the next change */
-        }
+      } finally {
+        applyingRef.current = false;
+        syncingRef.current.clear();
       }
-      syncingRef.current.clear();
     };
 
     apply();
@@ -263,11 +236,8 @@ export function DrawingOverlay({ pane }: { pane: ChartPaneState }) {
       const st = () => useAppStore.getState();
       offs = [
         vela.on("drawing:tool", ({ type }) => {
-          const mapped = type == null ? "cursor" : REVERSE_TOOL[type];
-          if (mapped && st().drawingTool !== mapped) st().setDrawingTool(mapped);
-          else if (type != null && !mapped && st().drawingTool !== "cursor") {
-            st().setDrawingTool("cursor");
-          }
+          const mapped = drawingToolFromVela(type);
+          if (st().drawingTool !== mapped) st().setDrawingTool(mapped);
         }),
         vela.on("drawing:snap", ({ mode }) => {
           const on = mode !== "off";
@@ -307,22 +277,21 @@ export function DrawingOverlay({ pane }: { pane: ChartPaneState }) {
         vela.drawings.all().find((d) => d.id === id);
 
       const onCreated = ({ id }: { id: string }) => {
-        if (syncingRef.current.has(id)) return;
+        // Our own write batch: the store already carries this drawing, and the
+        // create event fires before its new Vela id could be marked above.
+        if (applyingRef.current || syncingRef.current.has(id)) return;
         // A drawing placed with Vela's own toolbar → mirror into the MAWS slice.
         const doc = docById(id);
         if (!doc) return;
-        const tool = REVERSE_TOOL[doc.type];
-        if (!tool) return;
+        const mirrored = storeDrawingFromDoc(doc);
+        if (!mirrored) return;
         ids.set(id, id);
-        addDrawing(pane.id, {
-          id,
-          tool: tool as Drawing["tool"],
-          points: doc.anchors.map((a) => ({ time: Math.round(a.time / 1000), price: a.price })),
-          color: doc.style.lineColor,
-          lineWidth: (doc.style.lineWidth ?? 1) as Drawing["lineWidth"],
-          lineStyle: mawsLineStyle(doc.style.lineStyle),
-          hidden: replayingRef.current,
-        });
+        const stored = useAppStore.getState().panes.find((p) => p.id === pane.id)?.drawings;
+        if (stored?.some((d) => d.id === id)) {
+          updateDrawing(pane.id, id, { ...mirrored, id });
+        } else {
+          addDrawing(pane.id, { ...mirrored, id, hidden: replayingRef.current });
+        }
         if (replayingRef.current || hiddenRef.current) {
           try {
             vela.drawings.show(id, false);
@@ -333,13 +302,13 @@ export function DrawingOverlay({ pane }: { pane: ChartPaneState }) {
       };
 
       const onEdited = ({ id }: { id: string }) => {
-        if (syncingRef.current.has(id)) return;
+        if (applyingRef.current || syncingRef.current.has(id)) return;
         const doc = docById(id);
         if (!doc) return;
         const drawingId = findStoreId(ids, id);
         if (!drawingId) return;
         updateDrawing(pane.id, drawingId, {
-          points: doc.anchors.map((a) => ({ time: Math.round(a.time / 1000), price: a.price })),
+          points: toStorePoints(doc),
           color: doc.style.lineColor,
           lineWidth: (doc.style.lineWidth ?? 1) as Drawing["lineWidth"],
           lineStyle: mawsLineStyle(doc.style.lineStyle),
@@ -347,11 +316,12 @@ export function DrawingOverlay({ pane }: { pane: ChartPaneState }) {
       };
 
       const onRemoved = ({ id }: { id: string }) => {
-        const drawingId = findStoreId(ids, id);
-        if (!drawingId) return;
-        ids.delete(drawingId);
-        if (syncingRef.current.has(id)) return;
-        removeDrawing(pane.id, drawingId);
+        // EVERY store entry that mirrored this drawing goes — a leftover entry
+        // re-created the drawing (and the delete looked undone) on the next mount.
+        const drawingIds = storeIdsFor(pane.id, id);
+        for (const drawingId of drawingIds) ids.delete(drawingId);
+        if (syncingRef.current.has(id) || applyingRef.current) return;
+        for (const drawingId of drawingIds) removeDrawing(pane.id, drawingId);
       };
 
       offs = [

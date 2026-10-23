@@ -104,6 +104,14 @@ export interface NativeIndicatorDescriptor {
      * Absent ⇒ {@link title}. The picker keeps the full title either way.
      */
     readonly shortTitle?: string;
+    /**
+     * Inputs-aware legend name: what the on-chart chip (and the settings header) says for a
+     * GIVEN instance. Wins over {@link shortTitle}. This is how a study that stacks at
+     * several settings stays tellable apart — a Stochastic reads `Stoch 14`, `Stoch 40`,
+     * `Stoch 60` instead of three identical `Stoch` chips. Re-derived on every input edit
+     * (the structural remount re-upserts the row), so it follows the settings live.
+     */
+    readonly titleFor?: (inputs: Record<string, InputValue>) => string;
     readonly paneHint: 'price' | 'new';
     readonly overlay: boolean;
     /** Whether instances react to viewport changes (drives the orchestrator's viewport poke). */

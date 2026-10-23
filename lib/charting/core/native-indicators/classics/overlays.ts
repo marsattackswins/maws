@@ -330,6 +330,8 @@ const zigzag: ClassicIndicatorSpec = {
     type: 'zigzag',
     title: 'ZigZag',
     overlay: true,
+    // Segments only — no value line, so no "Labels on price scale" switch.
+    scaleLabels: false,
     inputs: [
         floatInput('deviation', 'Deviation (%)', 5, 0.01, 100, 0.1, 'Minimum reversal from the leg extreme, as a percentage of that extreme, required to confirm a new pivot.'),
         { ...intInput('depth', 'Depth', 10, 2, 500, 'Minimum number of bars required between two consecutive pivots.') },
@@ -398,6 +400,8 @@ const williamsFractal: ClassicIndicatorSpec = {
     title: 'Williams Fractal',
     shortTitle: 'Fractals',
     overlay: true,
+    // Markers only — no value line, so no "Labels on price scale" switch.
+    scaleLabels: false,
     inputs: [
         intInput('periods', 'Periods', 2, 2, 50, "Bars required on each side of the candidate bar. 2 is Bill Williams' classic 5-bar fractal; a fractal is confirmed only once this many later bars have closed."),
         colorInput(BEARISH, 'Up Fractal', 'upColor', 'Color of the up fractal marker (swing high), drawn above the fractal bar.'),

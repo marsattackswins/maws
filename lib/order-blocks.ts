@@ -59,6 +59,9 @@ export type ObConfig = {
   showLastBear: number;
   useBody: boolean;
   showLabels: boolean;
+  requireVolumePivot?: boolean;
+  volumePivotLength?: number;
+  mitigationMethod?: "Wick" | "Close";
 };
 
 export type ObHistoryCache = { key: string; state: ObState } | null;
@@ -238,8 +241,83 @@ export function selectDisplayed(state: ObState, cfg: ObConfig): OrderBlock[] {
   return out;
 }
 
+/** The volume-pivot Order Block Detector mode, matching its Pine trigger and zones. */
+export function computeVolumePivotOrderBlocks(candles: Candle[], cfg: ObConfig): ObResult {
+  const length = Math.max(1, Math.trunc(cfg.volumePivotLength ?? 5));
+  const bull: OrderBlock[] = [];
+  const bear: OrderBlock[] = [];
+  let os = 0;
+
+  for (let n = 0; n < candles.length; n++) {
+    const start = Math.max(0, n - length + 1);
+    let upper = -Infinity;
+    let lower = Infinity;
+    for (let i = start; i <= n; i++) {
+      upper = Math.max(upper, candles[i].high);
+      lower = Math.min(lower, candles[i].low);
+    }
+
+    const pivotIndex = n - length;
+    if (pivotIndex >= 0) {
+      const pivot = candles[pivotIndex];
+      if (pivot.high > upper) os = 0;
+      else if (pivot.low < lower) os = 1;
+
+      let volumePivot = pivotIndex >= length && Number.isFinite(pivot.volume);
+      for (let i = pivotIndex - length; volumePivot && i < pivotIndex; i++) {
+        if (!(pivot.volume > candles[i].volume)) volumePivot = false;
+      }
+      for (let i = pivotIndex + 1; volumePivot && i <= n; i++) {
+        if (!(pivot.volume >= candles[i].volume)) volumePivot = false;
+      }
+
+      if (volumePivot && os === 1) {
+        bull.unshift({
+          side: "bull",
+          top: (pivot.high + pivot.low) / 2,
+          btm: pivot.low,
+          loc: pivot.time,
+          breaker: false,
+          breakLoc: null,
+        });
+      } else if (volumePivot && os === 0) {
+        bear.unshift({
+          side: "bear",
+          top: pivot.high,
+          btm: (pivot.high + pivot.low) / 2,
+          loc: pivot.time,
+          breaker: false,
+          breakLoc: null,
+        });
+      }
+    }
+
+    const mitigationStart = Math.max(0, n - length + 1);
+    let bullTarget = Infinity;
+    let bearTarget = -Infinity;
+    for (let i = mitigationStart; i <= n; i++) {
+      const bar = candles[i];
+      bullTarget = Math.min(bullTarget, cfg.mitigationMethod === "Close" ? bar.close : bar.low);
+      bearTarget = Math.max(bearTarget, cfg.mitigationMethod === "Close" ? bar.close : bar.high);
+    }
+    for (let i = bull.length - 1; i >= 0; i--) {
+      if (bullTarget < bull[i].btm) bull.splice(i, 1);
+    }
+    for (let i = bear.length - 1; i >= 0; i--) {
+      if (bearTarget > bear[i].top) bear.splice(i, 1);
+    }
+  }
+
+  const displayed = [
+    ...(cfg.showLastBull > 0 ? bull.slice(0, cfg.showLastBull) : []),
+    ...(cfg.showLastBear > 0 ? bear.slice(0, cfg.showLastBear) : []),
+  ];
+  return { bull, bear, labels: [], displayed };
+}
+
 /** Full recompute over every bar. Used by tests and as the fallback when the cache misses. */
 export function computeOrderBlocks(candles: Candle[], cfg: ObConfig): ObResult {
+  if (cfg.requireVolumePivot) return computeVolumePivotOrderBlocks(candles, cfg);
   const state = createObState();
   for (let n = 0; n < candles.length; n++) stepObBar(state, candles, n, cfg);
   return {
@@ -260,6 +338,9 @@ export function computeOrderBlocksLive(
   cfg: ObConfig,
   cache: ObHistoryCache,
 ): { result: ObResult; cache: ObHistoryCache } {
+  if (cfg.requireVolumePivot) {
+    return { result: computeVolumePivotOrderBlocks(candles, cfg), cache: null };
+  }
   const n = candles.length;
   const cfgSig = `${cfg.swingLookback}|${cfg.useBody ? 1 : 0}|${cfg.showLastBull}|${cfg.showLastBear}|${cfg.showLabels ? 1 : 0}`;
   const histEnd = Math.max(0, n - 1);

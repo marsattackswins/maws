@@ -19,6 +19,7 @@
 
 import { useAppStore } from "@/lib/store";
 import { getChart } from "@/lib/chart-registry";
+import { syncPaneDrawingsFromVela } from "@/lib/vela-drawings";
 import { velaThemeNameFromAppSettings } from "@/lib/app-theme";
 import type { VelaTheme } from "@/lib/charting";
 import { useEffect, useRef } from "react";
@@ -364,8 +365,19 @@ function mountMoreButton(root: HTMLElement, host: HTMLElement, sections: MoreSec
  *  crosshair, where they sit relative to the bar). The hide toggles and the
  *  drawing removal belong to the chart's right-click menu, not to this row. */
 function mountAppButtons(root: HTMLElement): void {
-  const undo = makeBarButton("app:undo", "Undo drawing", UNDO_ICON, () => activeChart()?.drawings.undo());
-  const redo = makeBarButton("app:redo", "Redo drawing", REDO_ICON, () => activeChart()?.drawings.redo());
+  /** Undo/redo replace the drawings document INSIDE the controller, which emits no
+   *  drawing events — the store is settled right after, or an undone drawing stays
+   *  in the slice and is re-created on the next mount. */
+  const step = (dir: "undo" | "redo") => {
+    const paneId = useAppStore.getState().activePaneId;
+    const chart = getChart(paneId)?.vela;
+    if (!chart) return;
+    if (dir === "undo") chart.drawings.undo();
+    else chart.drawings.redo();
+    syncPaneDrawingsFromVela(paneId);
+  };
+  const undo = makeBarButton("app:undo", "Undo drawing", UNDO_ICON, () => step("undo"));
+  const redo = makeBarButton("app:redo", "Redo drawing", REDO_ICON, () => step("redo"));
 
   const anchor = root.firstChild; // the crosshair (cursor) button
   root.insertBefore(undo, anchor);

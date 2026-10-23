@@ -49,8 +49,8 @@ export const LIGHT_THEME: VelaTheme = {
     textColor: '#1e293b',
     gridColor: '#e0e3eb',
     borderColor: '#d4dae3',
-    upColor: '#089981',
-    downColor: '#f23645',
+    upColor: '#a7be94',  // BULLISH
+    downColor: '#af6870',  // BEARISH
     fontFamily: 'sans-serif',
     bgPanel: '#f8f9fa',
     bgCard: '#ffffff',

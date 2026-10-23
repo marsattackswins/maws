@@ -617,10 +617,14 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         this.resolveHistoryComplete();
         this.historyCompleted = false;
         this.historyState = 'complete';
+        this.pendingSessionRelease = false; // a new load owns the release again
         this.historyCompletePromise = new Promise<void>((resolve) => {
             this.resolveHistoryComplete = resolve;
         });
     }
+
+    /** A withheld 'complete' (see notifySessionsBars) waiting for the first real bar. */
+    private pendingSessionRelease = false;
 
     /** The current market identity — a snapshot of the REQUESTED market, so it reflects
      *  an in-flight `setMarket` immediately (the config mutates before the load). */
@@ -1668,14 +1672,25 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
      */
     private notifySessionsBars(reason?: BarsChangeReason): void {
         if (this.switchingMarket) return; // old sessions must not run over the incoming market's bars
+        // A session's FIRST run must never execute against an empty history: real runtimes
+        // (PineTS) read `bars[0]` unguarded and the session dies. A 'complete' announced
+        // while the chart still has ZERO bars (a failed/paused load) is WITHHELD here and
+        // re-delivered as 'complete' on the first real bar — the reason is the only thing
+        // the engines read, so the release is indistinguishable from the original.
+        if (this.bars.length === 0) {
+            if (reason === 'complete') this.pendingSessionRelease = true;
+            return;
+        }
+        const releaseAsComplete = this.pendingSessionRelease;
+        this.pendingSessionRelease = false;
         // A backfill chunk (or the run released by its completion) is still the script's
         // FIRST look at the history, whichever bar arrived last.
-        const cause: ScriptRunCause = reason ? 'history' : this.barCause;
+        const cause: ScriptRunCause = releaseAsComplete || reason ? 'history' : this.barCause;
         for (const record of this.registry.all()) {
             if (!record.renderHandle || record.hidden) continue;
             if (record.session) {
                 record.pendingCause = cause;
-                record.session.notifyBars(reason);
+                record.session.notifyBars(releaseAsComplete ? 'complete' : reason);
             } else if (record.native) record.native.instance.onBars();
         }
         if (this.activeEngineStyle) this.typeEngines.get(this.activeEngineStyle)?.onBars?.();
@@ -2196,7 +2211,12 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
                 mode,
                 // Mid-backfill session starts (add / re-show / price-style re-execute) let the
                 // ENGINE decide whether to run now or hold for the 'complete' notification.
-                historyState: this.historyState,
+                // A session must ALSO never start over ZERO loaded bars: real runtimes (PineTS)
+                // read bars[0] unguarded (`Cannot read properties of undefined (reading 'openTime')`),
+                // the session dies unrecoverably — the legend row stays but no model ever mounts,
+                // and every re-add repeats the crash. Flagging 'backfill' holds the first run;
+                // it is released as 'complete' on the first real bar (see notifySessionsBars).
+                historyState: this.bars.length === 0 ? 'backfill' : this.historyState,
             },
             {
                 onModel: (model) => {
@@ -2281,10 +2301,13 @@ export class EngineOrchestrator implements IndicatorController, PaneController, 
         const d = record.native!.descriptor;
         const type = record.native!.type;
         const channel = this.nativeChannel(record);
+        // Inputs-aware chip name (`Stoch 14`) — recomputed per emit, so an edit to the
+        // setting the name carries lands on the legend with the next model.
+        const shorttitle = d.titleFor?.(record.inputValues) ?? d.shortTitle;
         return {
             id: record.id,
             title: record.title,
-            ...(d.shortTitle ? { shorttitle: d.shortTitle } : {}),
+            ...(shorttitle ? { shorttitle } : {}),
             overlay: d.overlay,
             paneHint: d.paneHint,
             native: { type, ...(channel !== type ? { channel } : {}) },

@@ -59,8 +59,9 @@ function ensureStyles(): void {
 /**
  * Per-pane hover button cluster, pinned to the top-right of each pane's data area (just
  * left of the axis columns). Shown while the cursor is inside that pane; a collapsed pane
- * additionally keeps a standalone expand chip visible so it can always be re-expanded. Study panes
- * get move-up / move-down / collapse / maximize / remove; the price pane gets maximize only.
+ *  additionally keeps a standalone expand chip visible so it can always be re-expanded.
+ *  Study panes get move-up / move-down / collapse / maximize / remove; the main price pane
+ *  has no maximize control because its top-right slot is reserved for the workspace's chart control.
  * A DOM overlay in the plot, matching the settings-button + legend pattern.
  */
 export class PaneControls {
@@ -146,9 +147,9 @@ export class PaneControls {
                 }),
             );
         }
-        // Maximize only makes sense when there's more than one pane to trade space between —
-        // a lone price pane can't be "expanded", so it gets no button (and thus no cluster).
-        if (p.count > 1) {
+        // The main price pane's maximize control would overlap the workspace's chart control.
+        // Study panes retain their own maximize action when there is another pane to trade space.
+        if (p.kind === 'study' && p.count > 1) {
             cluster.appendChild(
                 this.button(p.maximized ? ICONS.restore : ICONS.maximize, p.maximized ? 'Restore pane' : 'Maximize pane', false, () => this.deps.onToggleMaximize(p.id), {
                     role: 'maximize',

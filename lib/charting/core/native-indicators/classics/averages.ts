@@ -96,6 +96,8 @@ function slopeColoredPlot(key: string, title: string, values: number[], inputs: 
     };
 }
 
+// No `legend: true`: a displacement is how the line is drawn, not what the study IS —
+// the name stays `EMA 20 Close` rather than carrying a trailing `0`.
 const offsetInput: InputSchema = { key: 'offset', title: 'Offset', type: 'int', defval: 0, min: -500, max: 500, step: 1, group: SETTINGS, tooltip: 'Bars the plotted line is displaced by. Positive values push it to the right.' };
 
 /** A single-kind average: the same inputs as the generic study minus the type picker. */

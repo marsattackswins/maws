@@ -2,6 +2,7 @@
 
 import { AssetLogo } from "@/components/brand/AssetLogo";
 import { TechnicalsGauge } from "@/components/details/TechnicalsGauge";
+import { MarketSessions } from "@/components/maws/MarketSessions";
 import { formatPrice } from "@/lib/maws/feed";
 import { formatTicker, getSymbol } from "@/lib/maws/universe";
 import { fetchNews, formatNewsAge, type NewsItem } from "@/lib/news";
@@ -62,11 +63,11 @@ export function StrategySymbolPanel({
             ? `${up ? "+" : ""}${formatPrice(symbol, quote.change)}  ${up ? "+" : ""}${quote.changePct.toFixed(2)}%`
             : "—"}
         </div>
-        <div className="mt-1 flex items-center gap-1.5 text-[12px] text-[#089981]">
-          <span className="h-1.5 w-1.5 rounded-full bg-[#089981]" />
-          Market open
-        </div>
       </div>
+
+      {/* Trade-session clock — the same card Vela's own client shows under its
+          watchlist, above the symbol's own dial. */}
+      <MarketSessions />
 
       {latestNews ? (
         <div className="px-3 py-3">

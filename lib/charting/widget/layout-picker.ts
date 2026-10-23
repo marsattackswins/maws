@@ -11,7 +11,7 @@
 import { injectStyles } from '../ui/styles';
 import { Tooltip } from '../ui/components/tooltip';
 
-const STYLE_ID = 'vela-widget-layout-picker-v14';
+const STYLE_ID = 'vela-widget-layout-picker-v15';
 // One monochrome selection language across the panel: lit cells and sync ON
 // switches both speak --vela-selected-*.
 const CSS = `
@@ -77,6 +77,9 @@ const CSS = `
     transition: background var(--vela-dur-fast) var(--vela-ease), border-color var(--vela-dur-fast) var(--vela-ease);
 }
 .vela-lp-sq:hover { background: var(--vela-hover-strong); border-color: var(--vela-border-strong); }
+/* Outside the host's cell budget (the maxCells option): visible but unpickable. */
+.vela-lp-sq[data-blocked='1'] { opacity: 0.28; cursor: default; }
+.vela-lp-sq[data-blocked='1']:hover { background: var(--vela-hover); border-color: var(--vela-border-faint); }
 /* Selected/previewed squares — the shared monochrome selection chip. */
 .vela-lp-sq[data-on='1'] {
     background: var(--vela-selected-bg);
@@ -120,23 +123,38 @@ const CSS = `
 /** The picker canvas is a fixed 4×4 — 16 cells, the workspace pool capacity. */
 const GRID = 4;
 
+/**
+ * Local (MAWS) fix: hosts may budget fewer cells than the canvas can express.
+ * Squares whose rectangle would exceed `maxCells` are dimmed and inert, so the
+ * host can cap layouts (MAWS allows 4 panes) without forking the panel.
+ */
+const DEFAULT_MAX_CELLS = GRID * GRID;
+
 /** The current layout's footprint on the canvas (mirrors the workspace's LayoutShape). */
 export type LayoutPickerShape = { rows: number; cols: number };
 
 /** Build the bare 4×4 canvas (16 squares, row-major). Interaction wiring stays with the
- *  caller — the desktop popover adds hover previews, the mobile drawer taps to apply. */
-export function layoutGridCanvas(doc: Document): { el: HTMLElement; squares: HTMLButtonElement[] } {
+ *  caller — the desktop popover adds hover previews, the mobile drawer taps to apply.
+ *  `maxCells` marks every square whose rectangle would exceed the host's budget. */
+export function layoutGridCanvas(doc: Document, maxCells = DEFAULT_MAX_CELLS, size = GRID): { el: HTMLElement; squares: HTMLButtonElement[] } {
     injectStyles(STYLE_ID, CSS, doc);
+    const n = Math.max(1, Math.min(GRID, Math.round(size) || GRID));
     const el = doc.createElement('div');
     el.className = 'vela-lp-grid';
+    // The stylesheet pins 4 columns; a host that budgets fewer zones overrides it.
+    if (n !== GRID) el.style.gridTemplateColumns = `repeat(${n}, 24px)`;
     const squares: HTMLButtonElement[] = [];
-    for (let r = 0; r < GRID; r += 1) {
-        for (let c = 0; c < GRID; c += 1) {
+    for (let r = 0; r < n; r += 1) {
+        for (let c = 0; c < n; c += 1) {
             const sq = doc.createElement('button');
             sq.className = 'vela-lp-sq';
             sq.dataset.r = String(r);
             sq.dataset.c = String(c);
             sq.setAttribute('aria-label', `${c + 1} × ${r + 1}`);
+            if ((r + 1) * (c + 1) > maxCells) {
+                sq.dataset.blocked = '1';
+                sq.disabled = true;
+            }
             squares.push(sq);
             el.appendChild(sq);
         }
@@ -164,6 +182,10 @@ export interface LayoutPickerOptions {
     presets: () => Array<{ id: string; label: string; checked: boolean }>;
     onSelectGrid: (rows: number, cols: number) => void;
     onSelectPreset: (id: string) => void;
+    /** Cell budget for the canvas (default: the full 4×4 = 16). MAWS passes 4. */
+    maxCells?: number;
+    /** Canvas is size×size (default 4). MAWS passes 2 for its four-zone picker. */
+    gridSize?: number;
     /** SYNC switch rows (re-read on every open and after every toggle). */
     syncs: () => Array<{ id: string; label: string; checked: boolean }>;
     onToggleSync: (id: string) => void;
@@ -227,9 +249,9 @@ export class LayoutPicker {
             content: () => this.tipNode(),
         });
 
-        const { el: grid, squares } = layoutGridCanvas(doc);
-        this.squares.push(...squares);
-        layoutCol.appendChild(grid);
+        const gridEl = layoutGridCanvas(doc, opts.maxCells, opts.gridSize);
+        this.squares.push(...gridEl.squares);
+        layoutCol.appendChild(gridEl.el);
 
         this.presetsEl = doc.createElement('div');
         this.presetsEl.className = 'vela-lp-presets';
@@ -252,9 +274,10 @@ export class LayoutPicker {
         cols.appendChild(syncCol);
 
         // ── canvas interactions: hover previews the rectangle, click applies it ──
+        const grid = gridEl.el;
         grid.addEventListener('pointerdown', (e) => {
             const sq = this.squareAt(e);
-            if (!sq) return;
+            if (!sq || sq.dataset.blocked === '1') return;
             e.preventDefault();
             const { r, c } = this.squarePos(sq);
             this.close();
@@ -262,7 +285,7 @@ export class LayoutPicker {
         });
         grid.addEventListener('pointermove', (e) => {
             const sq = this.squareAt(e);
-            if (!sq) return;
+            if (!sq || sq.dataset.blocked === '1') return;
             const { r, c } = this.squarePos(sq);
             if (this.hover?.rows !== r + 1 || this.hover?.cols !== c + 1) {
                 this.hover = { rows: r + 1, cols: c + 1 };
@@ -339,6 +362,10 @@ export class LayoutPicker {
         const tip = this.doc.createElement('div');
         tip.className = 'vela-lp-tip';
         tip.textContent = 'Click a square to apply that columns × rows layout.';
+        const max = this.opts.maxCells;
+        if (max !== undefined && max < GRID * GRID) {
+            tip.textContent += ` Dimmed squares exceed this workspace's ${max}-pane limit.`;
+        }
         return tip;
     }
 

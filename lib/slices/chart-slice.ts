@@ -5,7 +5,7 @@ import {
   velaThemeNameFromAppSettings,
   THEME_OWNED_CHART_KEYS,
 } from "@/lib/app-theme";
-import { layoutKey } from "@/lib/layouts";
+import { clampLayoutCount, layoutKey } from "@/lib/layouts";
 import {
   createStudy,
   defaultStudies,
@@ -33,6 +33,7 @@ import type {
   ChartPaneState,
   ChartSettings,
   ChartTemplate,
+  Drawing,
   IndicatorId,
   IndicatorInstance,
   IndicatorSettingsMap,
@@ -119,6 +120,10 @@ export type ChartSliceActions = {
   ) => void;
   /** Bridges the Vela cell's dehydrated state doc into the persisted store. */
   setPaneVelaState: (paneId: string, velaState: Record<string, unknown> | undefined) => void;
+  /** Replaces a pane's drawings WHOLESALE — the drawings bridge's settle step
+   *  (`lib/vela-drawings.ts`), which must mirror Vela's live set without the undo
+   *  history entries the per-drawing actions record. */
+  setPaneDrawings: (paneId: string, drawings: Drawing[]) => void;
   /** Clears every study on the pane. */
   clearIndicators: (paneId?: string) => void;
   setIndicatorsHidden: (value: boolean) => void;
@@ -257,7 +262,8 @@ export function createChartSlice(set: RootSet, get: RootGet): ChartSlice {
     indicatorTemplates: [],
     activeIndicatorTemplateId: null,
 
-    setLayout: (count) => {
+    setLayout: (rawCount) => {
+      const count = clampLayoutCount(rawCount);
       const state = get();
       if (state.layoutCount === count) {
         // Re-selecting the active layout resets resized pane tracks to defaults.
@@ -270,7 +276,8 @@ export function createChartSlice(set: RootSet, get: RootGet): ChartSlice {
       }
       set({ layoutCount: count });
     },
-    applyLayout: (count, orientation) => {
+    applyLayout: (rawCount, orientation) => {
+      const count = clampLayoutCount(rawCount);
       const state = get();
       // Re-picking the current target is a no-op (Vela's picker shows it checked).
       if (state.layoutCount === count && state.orientation === orientation) return;
@@ -384,6 +391,12 @@ export function createChartSlice(set: RootSet, get: RootGet): ChartSlice {
       set({
         panes: get().panes.map((p) =>
           p.id === paneId && p.velaState !== velaState ? { ...p, velaState } : p,
+        ),
+      }),
+    setPaneDrawings: (paneId, drawings) =>
+      set({
+        panes: get().panes.map((p) =>
+          p.id === paneId && p.drawings !== drawings ? { ...p, drawings } : p,
         ),
       }),
     clearIndicators: (paneId) => {
@@ -767,6 +780,8 @@ export function normalizeChartRehydrate(state: Store): void {
     };
   }
   state.layoutSync = { ...DEFAULT_LAYOUT_SYNC, ...state.layoutSync };
+  // A workspace saved before the pane cap (or by a plugin) must open inside it.
+  state.layoutCount = clampLayoutCount(state.layoutCount ?? 1);
   state.layoutTracks = state.layoutTracks ?? {};
   state.autoScaleByPane = state.autoScaleByPane ?? {};
   state.paneStretchFactors = state.paneStretchFactors ?? {};
@@ -774,6 +789,12 @@ export function normalizeChartRehydrate(state: Store): void {
   state.panes = (state.panes ?? [])
     .map((p) => ({ ...p, symbol: rename(p.symbol) }))
     .map((p) => (/^EURUSD$/i.test(p.symbol) ? { ...p, symbol: "BTCUSDT" } : p));
+  // A workspace saved by an older layout (or a plugin) can point `activePaneId` at a
+  // pane that no longer exists — every active-pane edit then targets nothing, so the
+  // chart never changes. Re-seat it on the first pane.
+  if (!state.panes.some((p) => p.id === state.activePaneId)) {
+    state.activePaneId = state.panes[0]?.id ?? "pane-0";
+  }
   state.indicatorsHidden = state.indicatorsHidden === true;
   state.indicatorSettings = {
     vwap: normalizeVwapSettings(state.indicatorSettings?.vwap),

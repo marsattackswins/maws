@@ -77,6 +77,17 @@ export class RendererControl {
         return this;
     }
 
+    /**
+     * Push data to a renderer-native layer registered through
+     * `registerRendererLayer` (the host's custom layers, e.g. MAWS's session/event
+     * break overlays). Silent no-op on a renderer without native layers, matching
+     * the same graceful degradation as the other optional seams here.
+     */
+    setNativeData(type: string, data: unknown): this {
+        this.renderer.setNativeData?.(type, data);
+        return this;
+    }
+
     /** Whether the active renderer can open a per-indicator settings dialog. */
     get supportsIndicatorSettings(): boolean {
         return typeof this.renderer.openIndicatorSettings === 'function';

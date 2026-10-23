@@ -9,6 +9,17 @@ export type LayoutTemplate = {
   rowFr: number[];
 };
 
+/** Hard cap on simultaneous chart panes. The layout picker offers no shape above
+ *  this, the store clamps every layout write, and hydrate clamps a persisted
+ *  `layoutCount` (so an old workspace saved with 6 panes opens with 4). */
+export const MAX_LAYOUT_PANES = 4;
+
+/** Clamp any count (persisted, plugin-supplied, or programmatic) to the cap. */
+export function clampLayoutCount(count: number): LayoutCount {
+  const n = Math.round(Number.isFinite(count) ? count : 1);
+  return Math.max(1, Math.min(MAX_LAYOUT_PANES, n)) as LayoutCount;
+}
+
 export function frToTemplate(tracks: number[]): string {
   return tracks.map((t) => `${Math.max(0.08, t)}fr`).join(" ");
 }
@@ -208,6 +219,7 @@ export function layoutTemplate(
   };
 }
 
-export const LAYOUT_COUNTS: LayoutCount[] = [
-  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
-];
+export const LAYOUT_COUNTS: LayoutCount[] = Array.from(
+  { length: MAX_LAYOUT_PANES },
+  (_, i) => (i + 1) as LayoutCount,
+);

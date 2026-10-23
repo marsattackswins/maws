@@ -928,6 +928,7 @@ registerDrawingType({
     label: 'Long/Short Position',
     icon: POSITION_ICON,
     defaultStyle: { lineColor: DEFAULT_DRAWING_COLOR, lineWidth: 1, lineStyle: 'solid' },
+    placementHint: 'Drag from the entry to set the target',
     create: (init) => new PositionTool(init),
 });
 

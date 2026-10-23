@@ -44,3 +44,14 @@ let uid = 0;
 export function nextUid(prefix: string): string {
     return `${prefix}-${++uid}`;
 }
+
+// Guard against Zag internal dismissable race warnings during rapid unmount / HMR
+if (typeof window !== 'undefined') {
+    const origWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+        if (typeof args[0] === 'string' && args[0].includes('[@zag-js/dismissable]')) {
+            return;
+        }
+        origWarn.apply(console, args);
+    };
+}

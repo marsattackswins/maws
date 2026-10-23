@@ -8,5 +8,13 @@ module.exports = {
     this.info = jest.fn(() => ({ name: "binance" }));
     this.getBars = jest.fn(() => Promise.resolve([]));
     this.subscribe = jest.fn(() => () => undefined);
+    // Enumerable index: lib/vela-feed-adapter.ts narrows it to futures at import time.
+    // One Spot + one perpetual mirror the real provider's mixed catalogue.
+    this.listSymbols = jest.fn(() =>
+      Promise.resolve([
+        { ticker: "BTCUSDT", description: "BTC / USDT", type: "crypto" },
+        { ticker: "BTCUSDT.P", description: "BTC / USDT Perpetual", type: "futures" },
+      ]),
+    );
   }),
 };
