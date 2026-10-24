@@ -12,7 +12,10 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import type { MarketDataFeed, OHLCV } from '../core/ports/MarketDataFeed';
+import type { MarketDataFeed } from '../core/ports/MarketDataFeed';
+import type { OHLCV } from '../core/model/ohlcv';
+import type { MarketConfig } from '../core/options';
+import type { Unsubscribe } from '../core/util/types';
 
 /** Minimal mock market data feed for testing - no orchestrator dependency */
 class MockMarketDataFeed implements MarketDataFeed {
@@ -23,8 +26,8 @@ class MockMarketDataFeed implements MarketDataFeed {
         return [];
     }
     
-    subscribe(_symbol: string, _timeframe: string, _callback: (bars: OHLCV[]) => void): () => void {
-        const key = `${_symbol}/${_timeframe}`;
+    subscribe(_cfg: MarketConfig, onBar: (bar: OHLCV) => void): Unsubscribe {
+        const key = `${_cfg.symbol}/${_cfg.timeframe}`;
         const current = this.subscriptionCount.get(key) || 0;
         this.subscriptionCount.set(key, current + 1);
         
@@ -71,8 +74,11 @@ describe('Multi-chart subscription independence', () => {
     
     it('two charts subscribe to same symbol/timeframe, both receive updates', () => {
         // Both charts subscribe to same symbol
-        const unsubA = mockFeed.subscribe('BTCUSDT', '60', () => {});
-        const unsubB = mockFeed.subscribe('BTCUSDT', '60', () => {});
+        const cfgA: MarketConfig = { symbol: 'BTCUSDT', timeframe: '60' };
+        const cfgB: MarketConfig = { symbol: 'BTCUSDT', timeframe: '60' };
+        
+        const unsubA = mockFeed.subscribe(cfgA, () => {});
+        const unsubB = mockFeed.subscribe(cfgB, () => {});
         
         // Verify feed sees two independent subscriptions (same key, two callbacks)
         expect(mockFeed.activeSubscriptions).toBe(1); // One key in map
@@ -87,8 +93,11 @@ describe('Multi-chart subscription independence', () => {
     
     it('destroying chart A does not interrupt chart B', () => {
         // Subscribe both to same symbol
-        const unsubA = mockFeed.subscribe('ETHUSDT', '300', () => {});
-        const unsubB = mockFeed.subscribe('ETHUSDT', '300', () => {});
+        const cfgA: MarketConfig = { symbol: 'ETHUSDT', timeframe: '300' };
+        const cfgB: MarketConfig = { symbol: 'ETHUSDT', timeframe: '300' };
+        
+        const unsubA = mockFeed.subscribe(cfgA, () => {});
+        const unsubB = mockFeed.subscribe(cfgB, () => {});
         
         expect(mockFeed.activeSubscriptions).toBe(1); // One key
         
@@ -102,14 +111,14 @@ describe('Multi-chart subscription independence', () => {
     });
     
     it('removing final subscriber releases underlying feed', () => {
-        const symbolId = 'SOLUSDT';
-        const timeframe = '60';
+        const cfg1: MarketConfig = { symbol: 'SOLUSDT', timeframe: '60' };
+        const cfg2: MarketConfig = { symbol: 'SOLUSDT', timeframe: '60' };
         
         // Initial state - no subscriptions
         expect(mockFeed.activeSubscriptions).toBe(0);
         
         // First subscribes
-        const unsub1 = mockFeed.subscribe(symbolId, timeframe, () => {});
+        const unsub1 = mockFeed.subscribe(cfg1, () => {});
         expect(mockFeed.activeSubscriptions).toBe(1);
         
         // Remove first
@@ -117,7 +126,7 @@ describe('Multi-chart subscription independence', () => {
         expect(mockFeed.activeSubscriptions).toBe(0);
         
         // Second subscribes
-        const unsub2 = mockFeed.subscribe(symbolId, timeframe, () => {});
+        const unsub2 = mockFeed.subscribe(cfg2, () => {});
         expect(mockFeed.activeSubscriptions).toBe(1);
         
         // Remove all
@@ -129,7 +138,9 @@ describe('Multi-chart subscription independence', () => {
         const cycles = 10;
         
         for (let i = 0; i < cycles; i++) {
-            const unsub = mockFeed.subscribe('ADAUSDT', '60', () => {});
+            const cfg: MarketConfig = { symbol: 'ADAUSDT', timeframe: '60' };
+            
+            const unsub = mockFeed.subscribe(cfg, () => {});
             
             await new Promise(resolve => setTimeout(resolve, 5));
             
